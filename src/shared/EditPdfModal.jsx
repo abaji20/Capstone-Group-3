@@ -1,120 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Dialog, DialogTitle, DialogContent, TextField, 
-  DialogActions, Button, CircularProgress, Stack, MenuItem 
-} from '@mui/material';
-import { supabase } from '../supabaseClient'; 
+import React, { useState } from 'react';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Stack, Typography } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import TitleIcon from '@mui/icons-material/Title';
+import PersonIcon from '@mui/icons-material/Person';
+import CategoryIcon from '@mui/icons-material/Category';
+import DateRangeIcon from '@mui/icons-material/DateRange';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
-  const [formData, setFormData] = useState({
-    title: '', 
-    author: '', 
-    genre: '', 
-    category: '', // Added category
-    published_date: '', 
-    description: ''
-  });
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (pdf) {
-      setFormData({
-        title: pdf.title || '',
-        author: pdf.author || '',
-        genre: pdf.genre || '',
-        category: pdf.category || 'book', // Default to 'book' if null
-        published_date: pdf.published_date || '',
-        description: pdf.description || ''
-      });
-    }
-  }, [pdf]);
-
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const changes = [];
-      const fields = [
-        { key: 'title', label: 'title' },
-        { key: 'author', label: 'author' },
-        { key: 'genre', label: 'genre' },
-        { key: 'category', label: 'category' }, // Added to change tracker
-        { key: 'published_date', label: 'date' },
-        { key: 'description', label: 'description' }
-      ];
-
-      fields.forEach(({ key, label }) => {
-        if (String(formData[key]) !== String(pdf[key])) {
-          changes.push(`Updated ${label}`);
-        }
-      });
-
-      if (changes.length === 0) {
-        alert("No changes detected.");
-        setLoading(false);
-        return;
-      }
-
-      const { error: updateError } = await supabase
-        .from('pdfs')
-        .update(formData)
-        .eq('id', pdf.id);
-
-      if (updateError) throw updateError;
-
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (user) {
-        await supabase.from('audit_logs').insert([{
-          user_id: user.id,
-          pdf_id: pdf.id,
-          action_type: 'Edit',
-          description: changes.join(', ')
-        }]);
-      }
-      
-      alert("Document updated successfully!");
-      onUpdate();
-      onClose();
-    } catch (error) {
-      alert("Error saving: " + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [formData, setFormData] = useState({ ...pdf });
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Edit Document Details</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          <TextField label="Title" fullWidth value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} />
-          <TextField label="Author" fullWidth value={formData.author} onChange={(e) => setFormData({...formData, author: e.target.value})} />
-          <TextField label="Genre" fullWidth value={formData.genre} onChange={(e) => setFormData({...formData, genre: e.target.value})} />
-          
-          {/* New Category Dropdown */}
-          <TextField
-            select
-            fullWidth
-            label="Category"
-            value={formData.category}
-            onChange={(e) => setFormData({...formData, category: e.target.value})}
-          >
-            <MenuItem value="book">Book</MenuItem>
-            <MenuItem value="academic paper">Academic Paper</MenuItem>
-          </TextField>
-
-          <TextField label="Published Year" type="number" fullWidth value={formData.published_date} onChange={(e) => setFormData({...formData, published_date: e.target.value})} />
-          <TextField label="Description" fullWidth multiline rows={3} value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, bgcolor: '#e0f7fa', color: '#1e3a8a' }}>
+        <EditIcon /> <Typography variant="h6" sx={{ fontWeight: 800 }}>Edit Document</Typography>
+      </DialogTitle>
+      <DialogContent sx={{ mt: 2 }}>
+        <Stack spacing={3}>
+          <TextField fullWidth label="Title" name="title" value={formData.title} onChange={handleChange} InputProps={{ startAdornment: <TitleIcon sx={{ mr: 1, color: '#64748b' }} /> }} />
+          <TextField fullWidth label="Author" name="author" value={formData.author} onChange={handleChange} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, color: '#64748b' }} /> }} />
+          <Stack direction="row" spacing={2}>
+            <TextField fullWidth label="Genre" name="genre" value={formData.genre} onChange={handleChange} InputProps={{ startAdornment: <CategoryIcon sx={{ mr: 1, color: '#64748b' }} /> }} />
+            <TextField fullWidth label="Year" name="published_date" value={formData.published_date} onChange={handleChange} InputProps={{ startAdornment: <DateRangeIcon sx={{ mr: 1, color: '#64748b' }} /> }} />
+          </Stack>
+          <TextField fullWidth label="Description" name="description" multiline rows={3} value={formData.description} onChange={handleChange} InputProps={{ startAdornment: <DescriptionIcon sx={{ mr: 1, color: '#64748b', alignSelf: 'flex-start', mt: 1 }} /> }} />
         </Stack>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained" disabled={loading}>
-          {loading ? <CircularProgress size={24} /> : "Save Changes"}
-        </Button>
+      <DialogActions sx={{ p: 2 }}>
+        <Button onClick={onClose} sx={{ color: '#64748b' }}>Cancel</Button>
+        <Button onClick={onUpdate} variant="contained" sx={{ bgcolor: '#1e3a8a', fontWeight: 800, px: 4 }}>Save Changes</Button>
       </DialogActions>
     </Dialog>
   );
 };
-
 export default EditPdfModal;

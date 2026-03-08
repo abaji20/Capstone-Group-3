@@ -1,140 +1,129 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Box, 
-  Paper, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  Typography, 
-  CircularProgress 
+  Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
+  TableRow, Typography, CircularProgress, Stack, IconButton, Tooltip, Avatar
 } from '@mui/material';
-import { PageHeader, PrimaryButton, DeleteButton } from '../../shared';
+import { PageHeader } from '../../shared';
 import { supabase } from '../../supabaseClient';
+
+// Icons
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import HighlightOffIcon from '@mui/icons-material/HighlightOff';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import DateRangeIcon from '@mui/icons-material/DateRange';
 
 const DeleteRequests = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchRequests();
-  }, []);
+  useEffect(() => { fetchRequests(); }, []);
 
   const fetchRequests = async () => {
     setLoading(true);
-    // Fetching join data for clear identification of PDF and user
+    // Updated to select image_url from your 'pdfs' table
     const { data, error } = await supabase
       .from('delete_requests')
       .select(`
         id, 
-        pdf_id,
+        pdf_id, 
         reason, 
-        created_at,
-        pdfs(id, title),
+        created_at, 
+        pdfs(id, title, image_url), 
         profiles(full_name)
       `)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error("Error fetching requests:", error);
-    } else {
-      setRequests(data || []);
-    }
+    if (error) console.error("Error fetching:", error);
+    else setRequests(data || []);
     setLoading(false);
   };
 
   const handleApprove = async (requestId, pdfId) => {
-    // 1. Move PDF to Archive by setting is_archived to true
-    const { error: archiveError } = await supabase
-      .from('pdfs')
-      .update({ is_archived: true }) 
-      .eq('id', pdfId);
-
-    // 2. Mark the request as approved so it disappears from this view
-    const { error: requestError } = await supabase
-      .from('delete_requests')
-      .update({ status: 'approved' })
-      .eq('id', requestId);
-
-    if (!archiveError && !requestError) {
-      alert("File successfully moved to Archive.");
-      fetchRequests();
-    } else {
-      console.error("Approval error:", archiveError || requestError);
-      alert("Error processing approval.");
-    }
+    await supabase.from('pdfs').update({ is_archived: true }).eq('id', pdfId);
+    await supabase.from('delete_requests').update({ status: 'approved' }).eq('id', requestId);
+    fetchRequests();
   };
 
   const handleReject = async (requestId) => {
-    // Mark request as rejected without moving the PDF
-    const { error } = await supabase
-      .from('delete_requests')
-      .update({ status: 'rejected' })
-      .eq('id', requestId);
+    await supabase.from('delete_requests').update({ status: 'rejected' }).eq('id', requestId);
+    fetchRequests();
+  };
 
-    if (!error) {
-      alert("Deletion request rejected.");
-      fetchRequests();
-    } else {
-      alert("Error rejecting request.");
-    }
+  // Helper to build the image URL
+  const getImageUrl = (path) => {
+    if (!path) return null;
+    return `https://yktwxeyxmzfkxqhlesly.supabase.co/storage/v1/object/public/pdfs/${path}`;
   };
 
   return (
-    <Box>
-      <PageHeader 
-        title="Delete Requests" 
-        subtitle="Review and approve permanent deletion requests from Admins." 
-      />
+    <Box sx={{ p: { xs: 2, md: 4 }, background: 'linear-gradient(135deg, #e0f7fa 0%, #80deea 100%)', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
+      <PageHeader title="Delete Requests" subtitle="Authorizing permanent removal of documents." />
 
-      <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(15px)', boxShadow: '0 10px 40px rgba(0,0,0,0.08)' }}>
         {loading ? (
-          <Box sx={{ p: 5, textAlign: 'center' }}><CircularProgress /></Box>
+          <Box sx={{ p: 8, textAlign: 'center' }}><CircularProgress /></Box>
         ) : (
-          <Table>
-            <TableHead sx={{ bgcolor: '#2c3e50' }}>
+          <Table sx={{ minWidth: 650 }}>
+            <TableHead sx={{ bgcolor: '#1e3a8a' }}>
               <TableRow>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>File Title</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Requested By</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Reason</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Actions</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800, py: 2 }}>DOCUMENT</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }}>REQUESTED BY</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTION</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {requests.length > 0 ? (
-                requests.map((req) => (
-                  <TableRow key={req.id} hover>
-                    <TableCell sx={{ fontWeight: 500 }}>{req.pdfs?.title || 'Unknown'}</TableCell>
-                    <TableCell>{req.profiles?.full_name || 'Unknown'}</TableCell>
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-                        "{req.reason}"
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{new Date(req.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell align="right">
-                      <PrimaryButton 
-                        size="small" 
-                        onClick={() => handleApprove(req.id, req.pdfs.id)}
-                        sx={{ mr: 1, bgcolor: '#2e7d32' }}
+              {requests.map((req) => (
+                <TableRow key={req.id} hover sx={{ '&:hover': { bgcolor: 'rgba(230, 245, 255, 0.5)' } }}>
+                  <TableCell>
+                    <Stack direction="row" alignItems="center" spacing={2}>
+                      <Avatar 
+                        variant="rounded" 
+                        src={getImageUrl(req.pdfs?.image_url)} 
+                        sx={{ width: 45, height: 55, border: '1px solid #e2e8f0', bgcolor: '#f1f5f9' }}
                       >
-                        Approve
-                      </PrimaryButton>
-                      <DeleteButton onClick={() => handleReject(req.id)} />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
-                    <Typography color="textSecondary">No pending deletion requests.</Typography>
+                        <DescriptionOutlinedIcon fontSize="small" sx={{ color: '#94a3b8' }} />
+                      </Avatar>
+                      <Typography sx={{ fontWeight: 700, color: '#1e293b' }}>
+                        {req.pdfs?.title || 'Unknown File'}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <PersonOutlineIcon sx={{ color: '#64748b', fontSize: 18 }} />
+                      {req.profiles?.full_name || 'N/A'}
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ color: '#475569', fontSize: '0.9rem'}}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      {req.reason}
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ color: '#64748b' }}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <DateRangeIcon sx={{ color: '#94a3b8', fontSize: 16 }} />
+                      {new Date(req.created_at).toLocaleDateString()}
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="center">
+                    <Tooltip title="Approve Request">
+                      <IconButton onClick={() => handleApprove(req.id, req.pdfs.id)} sx={{ color: '#16a34a' }}>
+                        <CheckCircleOutlineIcon sx={{ fontSize: 40 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Reject Request">
+                      <IconButton onClick={() => handleReject(req.id)} sx={{ color: '#dc2626' }}>
+                        <HighlightOffIcon sx={{ fontSize: 40 }} />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
-              )}
+              ))}
             </TableBody>
           </Table>
         )}

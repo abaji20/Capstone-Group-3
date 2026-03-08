@@ -1,8 +1,17 @@
-// src/pages/Client/Browse.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { Grid, Box, Stack, Typography, CircularProgress, TextField, MenuItem } from '@mui/material';
+import { 
+  Grid, Box, Stack, Typography, CircularProgress, 
+  TextField, MenuItem, Paper, InputAdornment 
+} from '@mui/material';
+
+// Icons
+import SearchIcon from '@mui/icons-material/Search';
+import CategoryIcon from '@mui/icons-material/Category';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import DateRangeIcon from '@mui/icons-material/DateRange';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import PersonIcon from '@mui/icons-material/Person';
+
 import { SearchBar, PdfCard } from '../../shared';
 import { fetchPdfs } from '../../services/pdfService'; 
 import { supabase } from '../../supabaseClient';
@@ -20,7 +29,6 @@ const Browse = () => {
     const loadData = async () => {
       try {
         setLoading(true);
-        // This now calls the filtered fetchPdfs service
         const data = await fetchPdfs();
         setDocuments(data || []);
 
@@ -52,10 +60,7 @@ const Browse = () => {
           action_type: 'Download',
           description: `Downloaded file: "${pdf.title}"`
         }]);
-        await supabase.from('downloads').insert([{
-          user_id: user.id,
-          pdf_id: pdf.id
-        }]);
+        await supabase.from('downloads').insert([{ user_id: user.id, pdf_id: pdf.id }]);
       }
       window.open(pdf.file_url, '_blank');
     } catch (error) {
@@ -67,7 +72,7 @@ const Browse = () => {
     return documents.filter((doc) => {
       const matchSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (doc.author && doc.author.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchGenre = genreFilter === '' || (doc.genre && doc.genre.toLowerCase().includes(genreFilter.toLowerCase()));
+      const matchGenre = genreFilter === '' || (doc.genre && doc.genre.toLowerCase() === genreFilter.toLowerCase());
       const matchYear = yearFilter === '' || String(doc.published_date) === yearFilter;
       const matchCategory = categoryFilter === '' || doc.category === categoryFilter;
       return matchSearch && matchGenre && matchYear && matchCategory;
@@ -75,44 +80,44 @@ const Browse = () => {
   }, [documents, searchQuery, genreFilter, yearFilter, categoryFilter]);
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 8, mt: 2 }}>
-        {userName ? <PersonIcon sx={{ fontSize: 70, color: '#301b3f' }} /> : <LibraryBooksIcon sx={{ fontSize: 50, color: '#d32f2f' }} />}
+    <Box sx={{ p: { xs: 2, md: 4 }, background: 'linear-gradient(135deg, #e0f7fa 0%, #80deea 100%)', minHeight: '100vh', fontFamily: "'Inter', sans-serif"}}>
+      {/* Header Section */}
+      <Stack direction="row" alignItems="center" spacing={3} sx={{ mb: 2, mt: 5} }>
+        <Box sx={{  p: 2, borderRadius: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          {userName ? <PersonIcon sx={{ fontSize: 50, color: '#1e3a8a' }} /> : <LibraryBooksIcon sx={{ fontSize: 40, color: '#1e3a8a' }} />}
+        </Box>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-            {userName ? `Welcome, ${userName}!` : "Browse Library"}
+          <Typography variant="h4" sx={{ fontWeight: 900, color: '#0f172a' }}>
+            {userName ? `Welcome back, ${userName}!` : "Browse Library"}
           </Typography>
-          <Typography variant="subtitle1" color="text.secondary">
+          <Typography variant="subtitle1" sx={{ color: '#1e3a8a', fontWeight: 600 }}>
             “Your digital library of research and discovery”
           </Typography>
         </Box>
-      </Box>
+      </Stack>
       
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 6 }} alignItems="center">
-        <Box sx={{ width: '100%', maxWidth: 400 }}>
-          <SearchBar 
-            placeholder="Search by title or author..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </Box>
+      {/* Filters Section */}
+      <Paper sx={{ p: 3, mb: 2, borderRadius: 4, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: 'center', background: 'linear-gradient(135deg, #f0f7ff 0%, #e1effe 100%)', backdropFilter: 'blur(10px)' }}>
+        <Box sx={{ flexGrow: 1, width: '100%', }}>
+          <SearchBar placeholder="Search title or author..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        </Box>  
         
-        <TextField select label="Genre" value={genreFilter} onChange={(e) => setGenreFilter(e.target.value)} sx={{ minWidth: 150 }}>
+        <TextField select label="Genre" value={genreFilter} onChange={(e) => setGenreFilter(e.target.value)} sx={{ minWidth: 150 }} InputProps={{ startAdornment: <FilterListIcon sx={{ mr: 1, color: 'text.secondary' }} /> }}>
           <MenuItem value="">All Genres</MenuItem>
           <MenuItem value="Fantasy">Fantasy</MenuItem>
-          <MenuItem value="Education">Education</MenuItem>
-          <MenuItem value="Science Fiction">Science Fiction</MenuItem>
+          <MenuItem value="Education">Education</MenuItem> 
         </TextField>
 
-        <TextField select label="Category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} sx={{ minWidth: 150 }}>
+        <TextField select label="Category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} sx={{ minWidth: 150 }} InputProps={{ startAdornment: <CategoryIcon sx={{ mr: 1, color: 'text.secondary' }} /> }}>
           <MenuItem value="">All Categories</MenuItem>
           <MenuItem value="book">Book</MenuItem>
           <MenuItem value="academic paper">Academic Paper</MenuItem>
         </TextField>
 
-        <TextField label="Year Published" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} sx={{ minWidth: 150 }} />
-      </Stack>
+        <TextField label="Year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} sx={{ minWidth: 120 }} InputProps={{ startAdornment: <DateRangeIcon sx={{ mr: 1, color: 'text.secondary' }} /> }} />
+      </Paper>
 
+      {/* Grid Display */}
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
       ) : filteredDocuments.length > 0 ? (

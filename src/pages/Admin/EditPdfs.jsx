@@ -2,10 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, IconButton, CircularProgress, Typography, Dialog, 
-  DialogTitle, DialogContent, TextField, DialogActions, Button, Chip 
+  DialogTitle, DialogContent, TextField, DialogActions, Button, Chip, Stack, Avatar 
 } from '@mui/material';
+
+// Icons
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+
 import { fetchPdfs, submitDeleteRequest } from '../../services/pdfService';
 import EditPdfModal from '../../shared/EditPdfModal';
 import { supabase } from '../../supabaseClient'; 
@@ -32,59 +37,49 @@ const EditPDFs = () => {
 
   useEffect(() => { loadPdfs(); }, []);
 
-  const handleConfirmDeleteRequest = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      await submitDeleteRequest(selectedPdf.id, deleteReason, user.id);
-      
-      await supabase.from('audit_logs').insert([{
-        user_id: user.id,
-        pdf_id: selectedPdf.id,
-        action_type: 'Delete Request',
-        description: `Requested deletion of: ${selectedPdf.title}`
-      }]);
-      
-      setDeleteOpen(false);
-      setDeleteReason("");
-      alert("Request submitted. File will remain until Super Admin approval.");
-      loadPdfs(); // This will now refresh and remove the item if you filter it
-    } catch (error) {
-      alert("Error: " + error.message);
-    }
+  const getImageUrl = (path) => {
+    if (!path) return null;
+    const { data } = supabase.storage.from('pdfs').getPublicUrl(path);
+    return data.publicUrl;
   };
 
   return (
-    <Box sx={{ p: 5, maxWidth: '1500px', mx: 'auto' }}>
-      <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>Manage Repository</Typography>
+    <Box sx={{ p: 4, background: 'linear-gradient(135deg, #e0f7fa 0%, #80deea 100%)', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
+      {/* Header Section */}
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4, pb: 2, borderBottom: '2px solid rgba(255,255,255,0.3)' }}>
+        <Box sx={{ bgcolor: '#1e3a8a', p: 1.5, borderRadius: 3, color: 'white', display: 'flex' }}>
+          <InventoryIcon sx={{ fontSize: 32 }} />
+        </Box>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 900, color: '#0f172a' }}>Repository Management</Typography>
+          <Typography variant="body2" sx={{ color: '#1e3a8a', fontWeight: 600 }}>Manage, edit, or remove your academic documents.</Typography>
+        </Box>
+      </Stack>
       
-      <TableContainer component={Paper} elevation={3} sx={{ borderRadius: 2 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 4, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', backdropFilter: 'blur(10px)', backgroundColor: 'rgba(255, 255, 255, 0.8)' }}>
         {loading ? (
-          <Box sx={{ p: 5, textAlign: 'center' }}><CircularProgress /></Box>
+          <Box sx={{ p: 8, textAlign: 'center' }}><CircularProgress /></Box>
         ) : (
           <Table>
-            <TableHead sx={{ bgcolor: '#76D2DB' }}>
+            <TableHead sx={{ bgcolor: '#1e3a8a' }}>
               <TableRow>
-                <TableCell sx={{ fontWeight: 'bold' }}>Title</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Author</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Genre</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>PREVIEW</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>TITLE</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>AUTHOR</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700 }}>GENRE</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 700, textAlign: 'center' }}>ACTIONS</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {pdfs.map((pdf) => (
-                <TableRow key={pdf.id} hover>
-                  <TableCell>{pdf.title}</TableCell>
+                <TableRow key={pdf.id} hover sx={{ '&:hover': { backgroundColor: 'rgba(255,255,255,0.5)' } }}>
+                  <TableCell><Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 45, height: 55, bgcolor: '#fee2e2' }}>{!pdf.image_url && <PictureAsPdfIcon color="error" />}</Avatar></TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{pdf.title}</TableCell>
                   <TableCell>{pdf.author}</TableCell>
-                  <TableCell><Chip label={pdf.genre || 'N/A'} color="primary" variant="outlined" /></TableCell>
+                  <TableCell><Chip label={pdf.genre || 'N/A'} color="primary" variant="outlined" sx={{ fontWeight: 600 }} /></TableCell>
                   <TableCell sx={{ textAlign: 'center' }}>
-                    <IconButton color="primary" onClick={() => { setSelectedPdf(pdf); setEditOpen(true); }}>
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton color="error" onClick={() => { setSelectedPdf(pdf); setDeleteOpen(true); }}>
-                      <DeleteIcon />
-                    </IconButton>
+                    <IconButton color="primary" onClick={() => { setSelectedPdf(pdf); setEditOpen(true); }}><EditIcon /></IconButton>
+                    <IconButton color="error" onClick={() => { setSelectedPdf(pdf); setDeleteOpen(true); }}><DeleteIcon /></IconButton>
                   </TableCell>
                 </TableRow>
               ))}
@@ -93,23 +88,8 @@ const EditPDFs = () => {
         )}
       </TableContainer>
 
-      {selectedPdf && (
-        <EditPdfModal open={editOpen} onClose={() => setEditOpen(false)} pdf={selectedPdf} onUpdate={loadPdfs} />
-      )}
-
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ bgcolor: '#f44336', color: 'white' }}>Request Deletion</DialogTitle>
-        <DialogContent sx={{ mt: 2 }}>
-          <Typography variant="body2" sx={{ mb: 2 }}>Confirm request for <strong>{selectedPdf?.title}</strong>?</Typography>
-          <TextField fullWidth label="Reason" multiline rows={3} onChange={(e) => setDeleteReason(e.target.value)} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
-          <Button onClick={handleConfirmDeleteRequest} variant="contained" color="error">Submit Request</Button>
-        </DialogActions>
-      </Dialog>
+      {selectedPdf && <EditPdfModal open={editOpen} onClose={() => setEditOpen(false)} pdf={selectedPdf} onUpdate={loadPdfs} />}
     </Box>
   );
 };
-  
 export default EditPDFs;

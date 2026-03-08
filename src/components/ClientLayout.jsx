@@ -15,7 +15,7 @@ const ClientLayout = () => {
         sx={{ 
           flexGrow: 1, 
           p: 3, 
-          backgroundColor: '#E3F2FD', // Sky Blue background
+          background: 'linear-gradient(135deg, #e0f7fa 0%, #80deea 100%)', // Sky Blue background
           mt: '0' // Space for the topbar
         }}
       >

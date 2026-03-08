@@ -1,38 +1,50 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
-  TableRow, Typography, CircularProgress, Chip 
+  TableRow, Typography, CircularProgress, Chip, Stack, InputAdornment, TextField
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
+import HistoryIcon from '@mui/icons-material/History';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import CategoryIcon from '@mui/icons-material/Category';
+import DescriptionIcon from '@mui/icons-material/Description';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import SearchIcon from '@mui/icons-material/Search';
 
 const Logs = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    fetchLogs();
-  }, []);
+  useEffect(() => { fetchLogs(); }, []);
 
   const fetchLogs = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('audit_logs')
-      .select(`
-        id, 
-        action_type, 
-        created_at, 
-        description,
-        pdfs!fk_audit_logs_pdf_id(title),
-        profiles!fk_audit_logs_user_id(full_name)
-      `)
-      .order('created_at', { ascending: false });
+  setLoading(true);
+  // Specify the exact constraint name 'audit_logs_pdf_id_fkey'
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select(`
+      id, 
+      action_type, 
+      created_at, 
+      description,
+      pdfs!audit_logs_pdf_id_fkey(title),
+      profiles!fk_audit_logs_user_id(full_name)
+    `)
+    .order('created_at', { ascending: false });
 
-    if (error) console.error("Error fetching logs:", error);
-    else setLogs(data || []);
-    setLoading(false);
-  };
+  if (error) console.error("Error fetching logs:", error);
+  else setLogs(data || []);
+  setLoading(false);
+};
 
-  // Helper to determine color based on action
+  // Updated safe filter logic
+  const filteredLogs = logs.filter((log) => {
+    const userName = log.profiles?.full_name?.toLowerCase() || '';
+    const pdfTitle = log.pdfs?.title?.toLowerCase() || 'deleted pdf';
+    return userName.includes(searchTerm.toLowerCase()) || pdfTitle.includes(searchTerm.toLowerCase());
+  });
+
   const getActionColor = (action) => {
     switch (action) {
       case 'Upload': return 'success';
@@ -43,56 +55,51 @@ const Logs = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>Activity History</Typography>
+    <Box sx={{ p: { xs: 2, md: 4 }, background: 'linear-gradient(160deg, #e0f7fa 0%, #b2ebf2 100%)', minHeight: '100vh' }}>
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+        <HistoryIcon sx={{ fontSize: 35, color: '#1e3a8a' }} />
+        <Typography variant="h4" sx={{ fontWeight: 900, color: '#0f172a' }}>Activity History</Typography>
+      </Stack>
+
+      <Paper sx={{ p: 2, mb: 3, borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.7)', backdropFilter: 'blur(8px)' }}>
+        <TextField 
+          placeholder="Search logs..." 
+          size="small"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{ width: 350, bgcolor: 'white', borderRadius: 2 }}
+          InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
+        />
+      </Paper>
       
-      <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 4, backgroundColor: 'rgba(255, 255, 255, 0.8)' }}>
         {loading ? (
           <Box sx={{ p: 5, textAlign: 'center' }}><CircularProgress /></Box>
         ) : (
           <Table>
-            <TableHead sx={{ bgcolor: '#213C51' }}>
+            <TableHead sx={{ bgcolor: '#1e3a8a' }}>
               <TableRow>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Performed By</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Action</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Target PDF</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Details</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
+                <TableCell sx={{ color: 'white' }}>PERFORMED BY</TableCell>
+                <TableCell sx={{ color: 'white' }}>ACTION</TableCell>
+                <TableCell sx={{ color: 'white' }}>TARGET PDF</TableCell>
+                <TableCell sx={{ color: 'white' }}>DETAILS</TableCell>
+                <TableCell sx={{ color: 'white' }}>DATE</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {logs.length > 0 ? (
-                logs.map((log) => (
-                  <TableRow key={log.id} hover>
-                    <TableCell>{log.profiles?.full_name || 'Unknown'}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        // Label mapping for "Edit PDF"
-                        label={log.action_type === 'Edit' ? 'Edit PDF' : (log.action_type || 'N/A')} 
-                        color={getActionColor(log.action_type)} 
-                        variant="outlined"
-                        sx={{ 
-                          fontWeight: 'bold',
-                          px: 1,           // Large horizontal padding
-                          py: 2,           // Large vertical padding
-                          fontSize: '0.75rem',
-                          borderRadius: '20px', // Perfect pill/capsule shape
-                          height: '30px'   // Fixed height for consistency
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell>{log.pdfs?.title || '—'}</TableCell>
-                    <TableCell sx={{ fontSize: '0.75rem', color: '#555' }}>
-                      {log.description || '—'}
-                    </TableCell>
-                    <TableCell>{new Date(log.created_at).toLocaleDateString()}</TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} align="center">No activity logs found.</TableCell>
+              {filteredLogs.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell sx={{ fontWeight: 600 }}>{log.profiles?.full_name || 'System'}</TableCell>
+                  <TableCell>
+                    <Chip label={log.action_type} color={getActionColor(log.action_type)} size="small" />
+                  </TableCell>
+                  <TableCell sx={{ fontStyle: 'italic' }}>
+                    {log.pdfs?.title || <span style={{ color: '#999' }}>Deleted PDF</span>}
+                  </TableCell>
+                  <TableCell>{log.description || '—'}</TableCell>
+                  <TableCell>{new Date(log.created_at).toLocaleDateString()}</TableCell>
                 </TableRow>
-              )}
+              ))}
             </TableBody>
           </Table>
         )}

@@ -29,6 +29,7 @@ const AdminLayout = () => {
           flexGrow: 1, 
           p: 3, 
           mt: { xs: 8, md: 0 }, 
+          background: 'linear-gradient(135deg, #e0f7fa 0%, #80deea 100%)',
           width: { md: `calc(100% - ${drawerWidth}px)` } 
         }}
       >
