@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
+
 // Layouts
 import SuperAdminLayout from './components/SuperAdminLayout';
 import AdminLayout from './components/AdminLayout';
@@ -30,7 +31,6 @@ function App() {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Updated to ensure loading is set to false only after the query finishes
   const fetchUserRole = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -43,25 +43,29 @@ function App() {
     } catch (err) {
       console.error("Error fetching role:", err);
     } finally {
-      setLoading(false); // Stop loading after attempt
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    // 1. Get current session
+    // 1. Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+      const isCreatingAccount = sessionStorage.getItem('isCreatingAccount') === 'true';
+      if (session && !isCreatingAccount) {
         fetchUserRole(session.user.id);
       } else {
-        setLoading(false); // No session, stop loading immediately
+        setLoading(false);
       }
     });
 
     // 2. Listen for Auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
+      const isCreatingAccount = sessionStorage.getItem('isCreatingAccount') === 'true';
+      
+      // Only update the app's role state if we are NOT in the middle of creating an account
+      if (session && !isCreatingAccount) {
         fetchUserRole(session.user.id);
-      } else {
+      } else if (!session) {
         setRole(null);
         setLoading(false);
       }
@@ -70,16 +74,13 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Show a loading state so the app doesn't push to login while checking session
   if (loading) return <div>Loading...</div>;
 
   return (
     <Router>
       <Routes>
-        {/* Entry Point */}
         <Route path="/login" element={role ? <Navigate to="/" /> : <Login />} />
 
-        {/* 1. SUPER ADMIN ROUTES */}
         {role === 'superadmin' && (
           <Route element={<SuperAdminLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
@@ -91,7 +92,6 @@ function App() {
           </Route>
         )}
 
-        {/* 2. ADMIN ROUTES */}
         {role === 'admin' && (
           <Route element={<AdminLayout />}>
             <Route path="/upload" element={<PdfUploads />} />
@@ -102,7 +102,6 @@ function App() {
           </Route>
         )}
 
-        {/* 3. CLIENT ROUTES */}
         {role === 'client' && (
           <Route element={<ClientLayout />}>
             <Route path="/browse" element={<Browse />} />
@@ -111,7 +110,6 @@ function App() {
           </Route>
         )}
 
-        {/* CATCH-ALL: Redirects correctly based on auth status */}
         <Route path="*" element={role ? <Navigate to="/" /> : <Navigate to="/login" replace />} />
       </Routes>
     </Router>

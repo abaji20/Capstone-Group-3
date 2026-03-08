@@ -6,8 +6,6 @@ import { supabase } from '../../supabaseClient';
 const ManageAccount = () => {
   const [open, setOpen] = useState(false);
   const [users, setUsers] = useState([]);
-  
-  // New state to capture form data
   const [formData, setFormData] = useState({ fullName: '', email: '', role: 'client' });
 
   useEffect(() => {
@@ -20,29 +18,48 @@ const ManageAccount = () => {
     else setUsers(data || []);
   };
 
-// Inside ManageAccount.jsx
-const handleCreateAccount = async () => {
-  const { data, error } = await supabase.auth.signUp({
-    email: formData.email,
-    password: 'TemporaryPassword123!', // This is required, but the user will reset it via email
-    options: {
-      data: { 
-        full_name: formData.fullName, 
-        role: formData.role 
-      },
-      // This sends the confirmation email to the user
-      emailRedirectTo: 'https://your-app-url.com/login' 
+ const handleCreateAccount = async () => {
+    try {
+      // 1. SET THE FLAG: Tell App.jsx "Don't redirect me!"
+      sessionStorage.setItem('isCreatingAccount', 'true');
+
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: 'password123',
+        options: {
+          data: { 
+            full_name: formData.fullName, 
+            role: formData.role 
+          }
+        }
+      });
+
+      if (authError) throw authError;
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([{
+          id: data.user.id,
+          email: formData.email,
+          full_name: formData.fullName,
+          role: formData.role
+        }]);
+
+      if (profileError) throw profileError;
+
+      alert("Account created successfully!");
+      setOpen(false);
+      fetchUsers();
+
+    } catch (err) {
+      console.error("Account Creation Failed:", err);
+      alert("Error: " + err.message);
+    } finally {
+      // 2. CLEAR THE FLAG: Allow normal behavior again
+      sessionStorage.removeItem('isCreatingAccount');
     }
-  });
-
-  if (error) {
-    alert("Error: " + error.message);
-  } else {
-    alert("Account created! Please ask the user to check their email to confirm and set their password.");
-    setOpen(false);
-  }
-};
-
+  };
+  
   const updateUserRole = async (userId, newRole) => {
     const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
     if (error) alert("Error updating role");
@@ -60,14 +77,12 @@ const handleCreateAccount = async () => {
   return (
     <Box>
       <PageHeader title="Account Management" subtitle="Review system users, modify permissions, and manage account statuses." />
-
       <Paper sx={{ p: 2, mb: 3, borderRadius: 2 }}>
         <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
           <SearchBar placeholder="Search name or email..." />
           <PrimaryButton onClick={() => setOpen(true)}>+ New Account</PrimaryButton>
         </Stack>
       </Paper>
-
       <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
         <Table>
           <TableHead sx={{ bgcolor: '#2c3e50' }}>
@@ -86,46 +101,24 @@ const handleCreateAccount = async () => {
                   <Typography variant="caption" color="textSecondary">{user.email}</Typography>
                 </TableCell>
                 <TableCell>
-                  <TextField
-                    select
-                    size="small"
-                    value={user.role || 'client'}
-                    onChange={(e) => updateUserRole(user.id, e.target.value)}
-                    sx={{ width: 120 }}
-                  >
-                    {/* Ensure values match your database lowercase strings */}
+                  <TextField select size="small" value={user.role || 'client'} onChange={(e) => updateUserRole(user.id, e.target.value)} sx={{ width: 120 }}>
                     <MenuItem value="superadmin">Super Admin</MenuItem>
                     <MenuItem value="admin">Admin</MenuItem>
                     <MenuItem value="client">Client</MenuItem>
                   </TextField>
                 </TableCell>
                 <TableCell><StatusChip status={user.status} /></TableCell>
-                <TableCell align="right">
-                  <DeleteButton onClick={() => handleDelete(user.id)} />
-                </TableCell>
+                <TableCell align="right"><DeleteButton onClick={() => handleDelete(user.id)} /></TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </TableContainer>
-
-      {/* CREATE ACCOUNT MODAL */}
-      <ActionModal 
-        open={open} 
-        onClose={() => setOpen(false)} 
-        title="Create User Account"
-        onConfirm={handleCreateAccount} // Ensure your ActionModal uses this prop
-      >
+      <ActionModal open={open} onClose={() => setOpen(false)} title="Create User Account" onConfirm={handleCreateAccount}>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <FormInput label="Full Name" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} />
           <FormInput label="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
-          <TextField
-            select
-            label="Role"
-            value={formData.role}
-            onChange={(e) => setFormData({...formData, role: e.target.value})}
-            fullWidth
-          >
+          <TextField select label="Role" value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})} fullWidth>
             <MenuItem value="superadmin">Super Admin</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
             <MenuItem value="client">Client</MenuItem>
