@@ -1,10 +1,12 @@
 import { supabase } from '../supabaseClient';
 
-export const uploadPdfWithFiles = async (pdfFile, imageFile, metadata) => {
+export const uploadPdfWithFiles = async (pdfFile, imageFile, metadata, userId) => {
+  // 1. Upload PDF to storage
   const pdfPath = `pdfs/${Date.now()}_${pdfFile.name}`;
   const { error: pdfError } = await supabase.storage.from('pdfs').upload(pdfPath, pdfFile);
   if (pdfError) throw pdfError;
 
+  // 2. Upload Cover Image to storage
   let imgPath = null;
   if (imageFile) {
     imgPath = `covers/${Date.now()}_${imageFile.name}`;
@@ -12,17 +14,30 @@ export const uploadPdfWithFiles = async (pdfFile, imageFile, metadata) => {
     if (imgError) throw imgError;
   }
 
-  const { error: dbError } = await supabase.from('pdfs').insert([{
+  // 3. Insert into PDFs table and capture the new ID
+  const { data: newPdf, error: dbError } = await supabase.from('pdfs').insert([{
     title: metadata.title,
     author: metadata.author,
     genre: metadata.genre,
     published_date: metadata.published_date,
+    category: metadata.category,
     description: metadata.description,
     image_url: imgPath,
     file_url: pdfPath 
-  }]);
+  }]).select('id').single();
 
   if (dbError) throw dbError;
+
+  // 4. Log the Upload action in audit_logs
+  const { error: logError } = await supabase.from('audit_logs').insert([{
+    user_id: userId,
+    pdf_id: newPdf.id,
+    action_type: 'Upload',
+    description: `Uploaded new PDF: "${metadata.title}"`
+  }]);
+
+  if (logError) throw logError;
+
   return { success: true };
 };
 
@@ -63,13 +78,13 @@ export const fetchPdfs = async () => {
   const { data, error } = await supabase
     .from('pdfs')
     .select('*')
+    .eq('is_archived', false)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
   return data;
 };
 
-// Added this function and ensured it is exported so EditPDFs.jsx can see it
 export const submitDeleteRequest = async (pdfId, reason, userId) => {
   const { error } = await supabase
     .from('delete_requests')
@@ -77,7 +92,7 @@ export const submitDeleteRequest = async (pdfId, reason, userId) => {
       pdf_id: pdfId, 
       reason: reason, 
       status: 'pending',
-      requested_by: userId // The service now captures the user's ID
+      requested_by: userId 
     }]);
   
   if (error) throw error;

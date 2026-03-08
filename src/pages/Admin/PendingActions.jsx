@@ -46,7 +46,7 @@ const PendingActions = () => {
       />
       <TableContainer component={Paper} sx={{ mt: 3, borderRadius: 2 }}>
         {loading ? (
-          <Box sx={{ p: 5, textAlign: 'center' }}><CircularProgress /></Box>
+          <Box sx={{ p: 1, textAlign: 'center' }}><CircularProgress /></Box>
         ) : (
           <Table>
             <TableHead sx={{ bgcolor: '#f5f5f5' }}>

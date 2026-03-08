@@ -12,7 +12,6 @@ const AdminLogs = () => {
 
   const fetchLogs = async () => {
     setLoading(true);
-    // Added 'description' to the select query
     const { data, error } = await supabase
       .from('audit_logs')
       .select(`
@@ -33,11 +32,21 @@ const AdminLogs = () => {
     setLoading(false);
   };
 
+  // Helper to color-code actions
+  const getActionColor = (action) => {
+    switch (action) {
+      case 'Upload': return 'success';
+      case 'Edit': return 'warning';
+      case 'Delete Request': return 'error';
+      default: return 'primary';
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>Activity History</Typography>
       
-      <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
         {loading ? (
           <Box sx={{ p: 5, textAlign: 'center' }}><CircularProgress /></Box>
         ) : (
@@ -47,7 +56,6 @@ const AdminLogs = () => {
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Performed By</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Action</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Target PDF</TableCell>
-                {/* New Header for Details */}
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Details</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
               </TableRow>
@@ -56,17 +64,18 @@ const AdminLogs = () => {
               {logs.length > 0 ? (
                 logs.map((log) => (
                   <TableRow key={log.id} hover>
-                    <TableCell>{log.profiles?.full_name || 'Unknown'}</TableCell>
+                    <TableCell>{log.profiles?.full_name || 'System'}</TableCell>
                     <TableCell>
                       <Chip 
-                        label={log.action_type === 'Edit' ? 'Edit PDF' : log.action_type || 'N/A'} 
+                        // Label dynamically changed to "Edit PDF" for better clarity
+                        label={log.action_type === 'Edit' ? 'Edit PDF' : log.action_type} 
                         size="large" 
-                        color="primary" 
+                        color={getActionColor(log.action_type)} 
                         variant="outlined" 
+                        sx={{ fontWeight: 'bold' }}
                       />
                     </TableCell>
-                    <TableCell>{log.pdfs?.title || 'Deleted PDF'}</TableCell>
-                    {/* Displaying the description data here */}
+                    <TableCell>{log.pdfs?.title || 'N/A'}</TableCell>
                     <TableCell sx={{ fontSize: '0.85rem', color: '#555' }}>
                       {log.description || '-'}
                     </TableCell>
@@ -75,8 +84,7 @@ const AdminLogs = () => {
                 ))
               ) : (
                 <TableRow>
-                  {/* Updated colSpan to 5 to account for the new column */}
-                  <TableCell colSpan={5} align="center">No logs found.</TableCell>
+                  <TableCell colSpan={5} align="center" sx={{ py: 3 }}>No activity logs found.</TableCell>
                 </TableRow>
               )}
             </TableBody>

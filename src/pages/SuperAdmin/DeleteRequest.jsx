@@ -1,13 +1,87 @@
-import React from 'react';
-import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
-import { PageHeader, StatusChip, PrimaryButton, DeleteButton } from '../../shared';
+import React, { useState, useEffect } from 'react';
+import { 
+  Box, 
+  Paper, 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableContainer, 
+  TableHead, 
+  TableRow, 
+  Typography, 
+  CircularProgress 
+} from '@mui/material';
+import { PageHeader, PrimaryButton, DeleteButton } from '../../shared';
+import { supabase } from '../../supabaseClient';
 
 const DeleteRequests = () => {
-  // Mock data: Documents pending Super Admin approval for deletion
-  const pendingDeletions = [
-    { id: 1, title: 'Old_Curriculum_v1.pdf', requestedBy: 'Admin_Mark', reason: 'Outdated Content', date: '2024-03-05' },
-    { id: 2, title: 'Test_Upload_123.pdf', requestedBy: 'Admin_Sarah', reason: 'Duplicate Upload', date: '2024-03-04' },
-  ];
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
+  const fetchRequests = async () => {
+    setLoading(true);
+    // Fetching join data for clear identification of PDF and user
+    const { data, error } = await supabase
+      .from('delete_requests')
+      .select(`
+        id, 
+        pdf_id,
+        reason, 
+        created_at,
+        pdfs(id, title),
+        profiles(full_name)
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching requests:", error);
+    } else {
+      setRequests(data || []);
+    }
+    setLoading(false);
+  };
+
+  const handleApprove = async (requestId, pdfId) => {
+    // 1. Move PDF to Archive by setting is_archived to true
+    const { error: archiveError } = await supabase
+      .from('pdfs')
+      .update({ is_archived: true }) 
+      .eq('id', pdfId);
+
+    // 2. Mark the request as approved so it disappears from this view
+    const { error: requestError } = await supabase
+      .from('delete_requests')
+      .update({ status: 'approved' })
+      .eq('id', requestId);
+
+    if (!archiveError && !requestError) {
+      alert("File successfully moved to Archive.");
+      fetchRequests();
+    } else {
+      console.error("Approval error:", archiveError || requestError);
+      alert("Error processing approval.");
+    }
+  };
+
+  const handleReject = async (requestId) => {
+    // Mark request as rejected without moving the PDF
+    const { error } = await supabase
+      .from('delete_requests')
+      .update({ status: 'rejected' })
+      .eq('id', requestId);
+
+    if (!error) {
+      alert("Deletion request rejected.");
+      fetchRequests();
+    } else {
+      alert("Error rejecting request.");
+    }
+  };
 
   return (
     <Box>
@@ -17,54 +91,53 @@ const DeleteRequests = () => {
       />
 
       <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-        <Table>
-          <TableHead sx={{ bgcolor: '#2c3e50' }}>
-            <TableRow>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>File Title</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Requested By</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Reason</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date Requested</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {pendingDeletions.length > 0 ? (
-              pendingDeletions.map((req) => (
-                <TableRow key={req.id} hover>
-                  <TableCell sx={{ fontWeight: 500 }}>{req.title}</TableCell>
-                  <TableCell>{req.requestedBy}</TableCell>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-                      "{req.reason}"
-                    </Typography>
-                  </TableCell>
-                  <TableCell>{req.date}</TableCell>
-                  <TableCell align="right">
-                    {/* Approve button moves it to "Archived" */}
-                    <PrimaryButton 
-                      size="small" 
-                      onClick={() => alert("Deletion Approved: Moved to Archive")}
-                      sx={{ mr: 1, bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}
-                    >
-                      Approve
-                    </PrimaryButton>
-                    {/* Reject button keeps it in the library */}
-                    <DeleteButton 
-                      title="Reject" 
-                      onClick={() => alert("Deletion Rejected: File stays in Library")} 
-                    />
+        {loading ? (
+          <Box sx={{ p: 5, textAlign: 'center' }}><CircularProgress /></Box>
+        ) : (
+          <Table>
+            <TableHead sx={{ bgcolor: '#2c3e50' }}>
+              <TableRow>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>File Title</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Requested By</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Reason</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {requests.length > 0 ? (
+                requests.map((req) => (
+                  <TableRow key={req.id} hover>
+                    <TableCell sx={{ fontWeight: 500 }}>{req.pdfs?.title || 'Unknown'}</TableCell>
+                    <TableCell>{req.profiles?.full_name || 'Unknown'}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                        "{req.reason}"
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{new Date(req.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell align="right">
+                      <PrimaryButton 
+                        size="small" 
+                        onClick={() => handleApprove(req.id, req.pdfs.id)}
+                        sx={{ mr: 1, bgcolor: '#2e7d32' }}
+                      >
+                        Approve
+                      </PrimaryButton>
+                      <DeleteButton onClick={() => handleReject(req.id)} />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} align="center" sx={{ py: 5 }}>
+                    <Typography color="textSecondary">No pending deletion requests.</Typography>
                   </TableCell>
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 10 }}>
-                  <Typography color="textSecondary">No pending deletion requests found.</Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+              )}
+            </TableBody>
+          </Table>
+        )}
       </TableContainer>
     </Box>
   );

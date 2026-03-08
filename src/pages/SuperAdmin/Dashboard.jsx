@@ -1,65 +1,123 @@
-import React from 'react';
-import { Box, Grid, Paper, Typography, Stack } from '@mui/material';
-import { PageHeader, StatusChip } from '../../shared';
-import PeopleIcon from '@mui/icons-material/People';
-import DescriptionIcon from '@mui/icons-material/Description';
-import StorageIcon from '@mui/icons-material/Storage';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import React, { useState, useEffect } from 'react';
+import { Box, Typography, Grid, Paper, List, ListItem, ListItemAvatar, Avatar, ListItemText, Divider } from '@mui/material';
+import { PieChart } from '@mui/x-charts/PieChart';
+import { LineChart } from '@mui/x-charts/LineChart';
+import { Calendar as CalendarIcon } from 'lucide-react';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
+import { supabase } from '../../supabaseClient';
 
-// Small Card Component for Stats
-const StatCard = ({ title, value, icon, color }) => (
-  <Paper sx={{ p: 3, borderRadius: 2, borderLeft: `5px solid ${color}` }}>
-    <Stack direction="row" justifyContent="space-between" alignItems="center">
-      <Box>
-        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>{value}</Typography>
-        <Typography variant="body2" color="textSecondary">{title}</Typography>
-      </Box>
-      <Box sx={{ color: color }}>{icon}</Box>
-    </Stack>
-  </Paper>
-);
+// Importing MUI Icons
+import DescriptionIcon from '@mui/icons-material/Description';
+import GroupIcon from '@mui/icons-material/Group';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import DownloadIcon from '@mui/icons-material/Download';
+import HistoryIcon from '@mui/icons-material/History';
+import SchoolIcon from '@mui/icons-material/School';
 
 const Dashboard = () => {
-  return (
-    <Box>
-      <PageHeader 
-        title="Super Admin Dashboard" 
-        subtitle="Welcome back! Here is what's happening across the entire library system today." 
-      />
+  const [stats, setStats] = useState({ books: 0, papers: 0, clients: 0, admins: 0, total: 0, downloads: 0 });
+  const [activities, setActivities] = useState([]);
+  const [monthlyDownloads, setMonthlyDownloads] = useState(new Array(12).fill(0));
 
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard title="Total Users" value="152" icon={<PeopleIcon />} color="#1976d2" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard title="Active PDFs" value="1,240" icon={<DescriptionIcon />} color="#2e7d32" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard title="Storage Used" value="85%" icon={<StorageIcon />} color="#ed6c02" />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard title="Pending Deletes" value="8" icon={<ErrorOutlineIcon />} color="#d32f2f" />
-        </Grid>
+  useEffect(() => {
+    const fetchData = async () => {
+      const { count: books } = await supabase.from('pdfs').select('*', { count: 'exact', head: true }).eq('category', 'book');
+      const { count: papers } = await supabase.from('pdfs').select('*', { count: 'exact', head: true }).eq('category', 'academic paper');
+      const { count: clients } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'client');
+      const { count: admins } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
+      const { data: downloadList } = await supabase.from('downloads').select('downloaded_at');
+      
+      setStats({ books, papers, clients, admins, total: (books + papers), downloads: downloadList?.length || 0 });
+
+      if (downloadList) {
+        const trends = new Array(12).fill(0);
+        downloadList.forEach((item) => {
+          const month = new Date(item.downloaded_at).getMonth();
+          trends[month]++;
+        });
+        setMonthlyDownloads(trends);
+      }
+
+      const { data: logs } = await supabase.from('audit_logs').select('*, profiles(full_name)').order('created_at', { ascending: false }).limit(5);
+      setActivities(logs || []);
+    };
+    fetchData();
+  }, []);
+
+  // Updated Stat Data with 6 items
+  const statItems = [
+    { title: 'Total PDF', val: stats.total, icon: <DescriptionIcon />, color: '#1e3a8a' },
+    { title: 'Clients', val: stats.clients, icon: <GroupIcon />, color: '#059669' },
+    { title: 'Admins', val: stats.admins, icon: <AdminPanelSettingsIcon />, color: '#7c3aed' },
+    { title: 'Books', val: stats.books, icon: <MenuBookIcon />, color: '#db2777' },
+    { title: 'Academic', val: stats.papers, icon: <SchoolIcon />, color: '#0284c7' },
+    { title: 'Downloads', val: stats.downloads, icon: <DownloadIcon />, color: '#d97706' }
+  ];
+
+  return (
+    <Box sx={{ p: 2, bgcolor: '#f8fafc', minHeight: '100vh' }}>
+      <Typography variant="h4" fontWeight="900" sx={{ mb: 4, color: '#0f172a', mt: 1 }}>Dashboard Overview</Typography>
+
+      
+
+      {/* Row 1: Stat Cards - 6 items */}
+      <Grid container spacing={2} sx={{ mb: 4 }}>
+        {statItems.map((item, i) => (
+          <Grid item xs={12} sm={6} md={2} key={i}>
+            <Paper sx={{ p: 2, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar sx={{ bgcolor: `${item.color}15`, color: item.color }}>{item.icon}</Avatar>
+              <Box>
+                <Typography variant="caption" color="textSecondary" fontWeight="700">{item.title.toUpperCase()}</Typography>
+                <Typography variant="h5" fontWeight="800">{item.val}</Typography>
+              </Box>
+            </Paper>
+          </Grid>
+        ))}
       </Grid>
 
-      <Paper sx={{ mt: 4, p: 3, borderRadius: 2 }}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-          Recent System Alerts
-        </Typography>
-        <Stack spacing={2}>
-          <Box sx={{ p: 2, bgcolor: '#fff4e5', borderRadius: 1, border: '1px solid #ffe2b7' }}>
-            <Typography variant="body2">
-              <strong>Security Alert:</strong> Admin "Mark_Admin" requested deletion of 5 sensitive documents. 
-              <span style={{ color: '#ed6c02', marginLeft: '10px', fontWeight: 'bold' }}>Check Delete Requests</span>
-            </Typography>
-          </Box>
-          <Box sx={{ p: 2, bgcolor: '#e8f5e9', borderRadius: 1, border: '1px solid #c8e6c9' }}>
-            <Typography variant="body2">
-              <strong>User Growth:</strong> 12 new Student accounts were registered in the last 24 hours.
-            </Typography>
-          </Box>
-        </Stack>
+          
+      {/* Row 2: Monthly Download Trends */}
+      <Paper sx={{ p: 3, mb: 4, borderRadius: 3 }}>
+        <Typography variant="h6" fontWeight="800" sx={{ mb: 2 }}>Client Download Trends</Typography>
+        <LineChart
+          xAxis={[{ scaleType: 'point', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] }]}
+          series={[{ curve: "linear", data: monthlyDownloads, label: 'Total Downloads', color: '#1e3a8a' }]}
+          height={300}
+        />
       </Paper>
+
+      {/* Row 3: 3-Column Bottom */}
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, borderRadius: 3, height: 400 }}>
+            <Typography variant="h6" fontWeight="800" sx={{ mb: 2 }}>Resources Ratio</Typography>
+            <PieChart series={[{ innerRadius: 50, outerRadius: 100, data: [{id: 0, value: stats.books, label: 'Books'}, {id: 1, value: stats.papers, label: 'Papers'}], arcLabel: 'value' }]} height={300} />
+          </Paper>
+        </Grid>
+        
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, borderRadius: 3, height: 400 }}>
+            <Typography variant="h6" fontWeight="800" sx={{ mb: 2 }}>Recent Activities</Typography>
+            <List>
+               {activities.map((act, i) => (
+                 <ListItem key={i}>
+                   <ListItemAvatar><Avatar><HistoryIcon /></Avatar></ListItemAvatar>
+                   <ListItemText primary={act.action_type} secondary={act.description} />
+                 </ListItem>
+               ))}
+            </List>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, borderRadius: 3, height: 400 }}>
+            <Typography variant="h6" fontWeight="800" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}><CalendarIcon size={20}/> Mini Calendar</Typography>
+            <Calendar />
+          </Paper>
+        </Grid>
+      </Grid>
     </Box>
   );
 };

@@ -8,6 +8,7 @@ import CategoryIcon from '@mui/icons-material/Category';
 import InfoIcon from '@mui/icons-material/Info';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import DownloadIcon from '@mui/icons-material/Download';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'; // New Import
 import { supabase } from '../supabaseClient';
 
 // Font Awesome components
@@ -28,7 +29,6 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
-        // 1. STATS: Update the 'downloads' table for counting purposes
         const { data: existing } = await supabase
           .from('downloads')
           .select('id')
@@ -40,7 +40,6 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
           await supabase.from('downloads').insert([{ user_id: user.id, pdf_id: pdf.id }]);
         }
 
-        // 2. AUDIT LOG: Insert into 'audit_logs' so it shows in AdminLogs.jsx
         await supabase.from('audit_logs').insert([{
           user_id: user.id,
           pdf_id: pdf.id,
@@ -49,7 +48,6 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
         }]);
       }
 
-      // 3. FILE RETRIEVAL & DOWNLOAD LOGIC
       const { data } = supabase.storage.from('pdfs').getPublicUrl(pdf.file_url);
       
       const response = await fetch(data.publicUrl);
@@ -65,7 +63,6 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
 
     } catch (error) {
       console.error("Download failed:", error);
-      // Fallback if blob download fails
       const { data } = supabase.storage.from('pdfs').getPublicUrl(pdf.file_url);
       window.open(data.publicUrl, '_blank');
     } finally {
@@ -148,6 +145,10 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
             <Stack spacing={1.5}>
               <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <PersonIcon sx={{ color: iconColor }} /> <strong>Author:</strong> {pdf.author}
+              </Typography>
+              {/* NEW CATEGORY ROW */}
+              <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <LibraryBooksIcon sx={{ color: iconColor }} /> <strong>Type:</strong> {pdf.category || 'N/A'}
               </Typography>
               <Typography variant="body1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <DateRangeIcon sx={{ color: iconColor }} /> <strong>Published:</strong> {pdf.published_date}

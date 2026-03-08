@@ -22,7 +22,7 @@ const StatusChip = ({ status }) => {
     <Chip 
       label={status} 
       color={getColor(status)} 
-      size="small" 
+      size="large" 
       variant="outlined" 
       sx={{ fontWeight: 'bold', textTransform: 'capitalize' }}
     />

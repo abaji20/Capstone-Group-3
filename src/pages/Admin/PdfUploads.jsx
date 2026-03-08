@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Paper, Grid, Typography, Stack, CircularProgress, Container } from '@mui/material';
+import { Box, Paper, Grid, Typography, Stack, CircularProgress, Container, MenuItem, TextField } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFilePdf, faImage, faCloudUploadAlt, faCheckCircle } from '@fortawesome/free-solid-svg-icons';
 import { FormInput, PrimaryButton } from '../../shared';
@@ -10,12 +10,11 @@ const PdfUploads = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ 
-    title: '', author: '', genre: '', published_date: '', description: '' 
+    title: '', author: '', genre: '', category: 'book', published_date: '', description: '' 
   });
 
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  // Glassbox Style for Dropzones
   const uploadBoxStyle = (isSelected, activeColor) => ({
     p: 4,
     border: '2px dashed',
@@ -38,15 +37,12 @@ const PdfUploads = () => {
     
     setLoading(true);
     try {
-      // 1. Check for Duplicate (Title + Author + File Name)
       const existingRecord = await checkDuplicate(formData.title, formData.author, selectedFile.name);
       
       if (existingRecord) {
         const confirmReplace = window.confirm("A document with this title, author, and file name already exists. Do you want to replace it?");
         if (confirmReplace) {
-          // 2. Delete old record + associated files
           await deletePdf(existingRecord.id);
-          // 3. Upload new record
           await uploadNewPdf(selectedFile, selectedImage, formData);
           alert("Resource replaced successfully!");
         } else {
@@ -54,15 +50,13 @@ const PdfUploads = () => {
           return;
         }
       } else {
-        // Normal Upload
         await uploadPdfWithFiles(selectedFile, selectedImage, formData);
         alert("Upload successful!");
       }
       
-      // Reset form
       setSelectedFile(null);
       setSelectedImage(null);
-      setFormData({ title: '', author: '', genre: '', published_date: '', description: '' });
+      setFormData({ title: '', author: '', genre: '', category: 'book', published_date: '', description: '' });
     } catch (error) {
       console.error("Upload error:", error);
       alert('Upload failed: ' + error.message);
@@ -72,12 +66,12 @@ const PdfUploads = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 5, mb: 5 }}>
-      <Paper sx={{ p: { xs: 3, md: 5 }, borderRadius: 4, boxShadow: '0 8px 30px rgba(0,0,0,0.08)', background: 'rgba(255,255,255,0.8)' }}>
+    <Container maxWidth="md" sx={{ mt: 1, mb: 1, p: 5 }}>
+      <Paper sx={{ p: { xs: 1 , md: 5 }, borderRadius: 4, boxShadow: '0 8px 30px rgba(0,0,0,0.08)', background: 'rgba(255,255,255,0.8)', maxWidth: '900px' }}>
         <Typography variant="h4" fontWeight="800" sx={{ color: '#213C51', mb: 1 }}>Upload Document</Typography>
         <Typography color="text.secondary" sx={{ mb: 4 }}>Add academic resources to your repository.</Typography>
 
-        <Grid container spacing={7} alignItems="flex-start">
+        <Grid container spacing={7} alignItems="flex-start" sx={{ ml: 9 }}>
           <Grid item xs={12} md={4}>
             <Stack spacing={4}>
               <Paper sx={uploadBoxStyle(!!selectedFile, '#2196f3')} component="label">
@@ -98,10 +92,38 @@ const PdfUploads = () => {
             <Stack spacing={2.5}>
               <FormInput name="title" label="Document Title" value={formData.title} onChange={handleInputChange} />
               <FormInput name="author" label="Author / Publisher" value={formData.author} onChange={handleInputChange} />
+              
               <Grid container spacing={2}>
-                <Grid item xs={6}><FormInput name="genre" label="Genre" value={formData.genre} onChange={handleInputChange} /></Grid>
-                <Grid item xs={6}><FormInput name="published_date" label="Year" value={formData.published_date} onChange={handleInputChange} /></Grid>
-              </Grid>
+  {/* Genre Field: Explicitly set xs={6} and fullWidth */}
+  <Grid item xs={6}>
+    <FormInput 
+      fullWidth
+      name="genre" 
+      label="Genre" 
+      value={formData.genre} 
+      onChange={handleInputChange} 
+    />
+  </Grid>
+  
+  {/* Category Field: Explicitly set xs={6} and fullWidth */}
+  <Grid item xs={6}>
+    <TextField 
+      select 
+      fullWidth
+      label="Category" 
+      name="category" 
+      value={formData.category} 
+      onChange={handleInputChange}
+      // This sx ensures the dropdown height matches your custom FormInput height
+      sx={{ '& .MuiInputBase-root': { height: '80px' } }} 
+    >
+      <MenuItem value="book">Book</MenuItem>
+      <MenuItem value="academic paper">Academic Paper</MenuItem>
+    </TextField>
+  </Grid>
+</Grid>
+              
+              <FormInput name="published_date" label="Year" value={formData.published_date} onChange={handleInputChange} />
               <FormInput name="description" label="Brief Description" multiline rows={4} value={formData.description} onChange={handleInputChange} />
               
               <PrimaryButton onClick={handleUpload} disabled={!selectedFile || loading} sx={{ py: 2, borderRadius: 2 }}>
