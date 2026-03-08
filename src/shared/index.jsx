@@ -7,3 +7,5 @@ export { default as PrimaryButton } from './PrimaryButton';
 export { default as DeleteButton } from './DeleteButton';
 export { default as SearchBar } from './SearchBar';
 export { default as StatusChip } from './StatusChip';
+export { default as LogoutButton } from './LogoutButton';
+export { default as EditPdfModal } from './EditPdfModal';

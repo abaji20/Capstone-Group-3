@@ -18,7 +18,7 @@ const SuperAdminSidebar = () => {
         [`& .MuiDrawer-paper`]: { 
           width: drawerWidth, 
           boxSizing: 'border-box',
-          backgroundColor: '#0D47A1', // Deep Navy Blue
+          backgroundColor: '#213C51', // Deep Navy Blue
           color: '#ffffff'
         },
       }}

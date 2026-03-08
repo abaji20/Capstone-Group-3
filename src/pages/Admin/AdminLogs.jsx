@@ -1,63 +1,87 @@
-import React from 'react';
-import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, Stack } from '@mui/material';
-import { PageHeader, StatusChip, SearchBar } from '../../shared';
-import HistoryIcon from '@mui/icons-material/History';
+import React, { useState, useEffect } from 'react';
+import { Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography, CircularProgress, Chip } from '@mui/material';
+import { supabase } from '../../supabaseClient';
 
 const AdminLogs = () => {
-  // Mock data: History of actions taken by this specific Admin
-  const myLogs = [
-    { id: 1, action: 'Uploaded "Machine Learning Essentials"', type: 'Upload', date: '2026-03-05', time: '02:30 PM' },
-    { id: 2, action: 'Requested deletion of "Old_Python_Guide.pdf"', type: 'Delete Request', date: '2026-03-05', time: '11:15 AM' },
-    { id: 3, action: 'Updated metadata for "Discrete Math v2"', type: 'Edit', date: '2026-03-04', time: '04:45 PM' },
-    { id: 4, action: 'Fulfilled Student Request: "React Native Docs"', type: 'Request Fulfillment', date: '2026-03-04', time: '09:00 AM' },
-  ];
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    // Added 'description' to the select query
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select(`
+        id, 
+        action_type, 
+        created_at, 
+        description,
+        pdfs!fk_audit_logs_pdf_id(title),
+        profiles!fk_audit_logs_user_id(full_name)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching logs:", error);
+    } else {
+      setLogs(data || []);
+    }
+    setLoading(false);
+  };
 
   return (
-    <Box>
-      <PageHeader 
-        title="Activity History" 
-        subtitle="Track your contributions, document uploads, and management actions." 
-      />
-
-      <Box sx={{ mb: 3, maxWidth: 450 }}>
-        <SearchBar placeholder="Search your history..." />
-      </Box>
-
-      <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
-        <Table>
-          <TableHead sx={{ bgcolor: '#1976d2' }}>
-            <TableRow>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Action Performed</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Category</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Time</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {myLogs.map((log) => (
-              <TableRow key={log.id} hover>
-                <TableCell sx={{ fontWeight: 500 }}>{log.action}</TableCell>
-                <TableCell>
-                  <Typography 
-                    variant="caption" 
-                    sx={{ 
-                      px: 1.5, 
-                      py: 0.5, 
-                      bgcolor: '#e3f2fd', 
-                      color: '#1976d2', 
-                      borderRadius: 1,
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    {log.type}
-                  </Typography>
-                </TableCell>
-                <TableCell>{log.date}</TableCell>
-                <TableCell color="textSecondary">{log.time}</TableCell>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h5" sx={{ mb: 2, fontWeight: 'bold' }}>Activity History</Typography>
+      
+      <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+        {loading ? (
+          <Box sx={{ p: 5, textAlign: 'center' }}><CircularProgress /></Box>
+        ) : (
+          <Table>
+            <TableHead sx={{ bgcolor: '#213C51' }}>
+              <TableRow>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Performed By</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Action</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Target PDF</TableCell>
+                {/* New Header for Details */}
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Details</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {logs.length > 0 ? (
+                logs.map((log) => (
+                  <TableRow key={log.id} hover>
+                    <TableCell>{log.profiles?.full_name || 'Unknown'}</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={log.action_type === 'Edit' ? 'Edit PDF' : log.action_type || 'N/A'} 
+                        size="large" 
+                        color="primary" 
+                        variant="outlined" 
+                      />
+                    </TableCell>
+                    <TableCell>{log.pdfs?.title || 'Deleted PDF'}</TableCell>
+                    {/* Displaying the description data here */}
+                    <TableCell sx={{ fontSize: '0.85rem', color: '#555' }}>
+                      {log.description || '-'}
+                    </TableCell>
+                    <TableCell>{new Date(log.created_at).toLocaleDateString()}</TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  {/* Updated colSpan to 5 to account for the new column */}
+                  <TableCell colSpan={5} align="center">No logs found.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        )}
       </TableContainer>
     </Box>
   );

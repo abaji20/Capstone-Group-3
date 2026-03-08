@@ -1,21 +1,35 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { Box } from '@mui/material';
-import AdminSidebar from './AdminSidebar'; // We will build this next
+import { Box, AppBar, Toolbar, IconButton, Typography } from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
+import AdminSidebar from './AdminSidebar';
 
 const AdminLayout = () => {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const drawerWidth = 260;
+
+  const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* SIDEBAR: Stays fixed on the left */}
-      <AdminSidebar />
+      <AppBar position="fixed" sx={{ display: { md: 'none' }, bgcolor: '#213C51' }}>
+        <Toolbar>
+          <IconButton color="inherit" onClick={handleDrawerToggle} edge="start" sx={{ mr: 2 }}>
+            <MenuIcon />
+          </IconButton>
+          <Typography variant="h6">ADMIN PANEL</Typography>
+        </Toolbar>
+      </AppBar>
 
-      {/* CONTENT: Changes based on what you click */}
+      <AdminSidebar mobileOpen={mobileOpen} handleDrawerToggle={handleDrawerToggle} />
+
       <Box 
         component="main" 
         sx={{ 
           flexGrow: 1, 
           p: 3, 
-          backgroundColor: '#F0F4F8' // Very light blue background
+          mt: { xs: 8, md: 0 }, 
+          width: { md: `calc(100% - ${drawerWidth}px)` } 
         }}
       >
         <Outlet /> 

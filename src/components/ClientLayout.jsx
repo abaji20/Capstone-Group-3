@@ -16,7 +16,7 @@ const ClientLayout = () => {
           flexGrow: 1, 
           p: 3, 
           backgroundColor: '#E3F2FD', // Sky Blue background
-          mt: '64px' // Space for the topbar
+          mt: '0' // Space for the topbar
         }}
       >
         <Outlet /> 

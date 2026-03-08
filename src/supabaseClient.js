@@ -1,18 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-let supabase;
+// Ensure your .env file has VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const initSupabase = async () => {
-  try {
-    const response = await fetch('http://localhost:5000/api/config');
-    const config = await response.json();
-    
-    supabase = createClient(config.url, config.key);
-    console.log("✅ Supabase Connected via Backend Config");
-    return supabase;
-  } catch (err) {
-    console.error("❌ Failed to fetch config from backend", err);
-  }
-};
-
-export { supabase };
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

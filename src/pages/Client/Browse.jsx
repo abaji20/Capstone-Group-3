@@ -1,71 +1,145 @@
-import React from 'react';
-import { Grid, Box, Stack, Typography } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
-import { PageHeader, SearchBar, PdfCard, PrimaryButton } from '../../shared';
+// src/pages/Client/Browse.jsx
+import React, { useState, useEffect, useMemo } from 'react';
+import { Grid, Box, Stack, Typography, CircularProgress, TextField, MenuItem } from '@mui/material';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
+import PersonIcon from '@mui/icons-material/Person';
+import { PageHeader, SearchBar, PdfCard } from '../../shared';
+import { fetchPdfs } from '../../services/pdfService'; 
+import { supabase } from '../../supabaseClient';
 
 const Browse = () => {
-  const navigate = useNavigate();
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState(''); 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [genreFilter, setGenreFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
 
-  // Mock data
-  const documents = [
-    { id: 1, title: 'Network Security Fundamentals', category: 'IT' },
-    { id: 2, title: 'Advanced Calculus Vol 1', category: 'Math' },
-    { id: 3, title: 'Machine Learning Basics', category: 'Computer Science' },
-    { id: 4, title: 'English Composition II', category: 'General' },
-    { id: 5, title: 'Database Management Systems', category: 'IT' },
-    { id: 6, title: 'Discrete Mathematics', category: 'Math' },
-  ];
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const data = await fetchPdfs();
+        setDocuments(data || []);
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single();
+          if (profile) setUserName(profile.full_name);
+        }
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  // --- NEW LOGGING LOGIC START ---
+  const handleDownloadLog = async (pdf) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        // 1. Insert into audit_logs for Activity History
+        await supabase.from('audit_logs').insert([{
+          user_id: user.id,
+          pdf_id: pdf.id,
+          action_type: 'Download',
+          description: `Downloaded file: "${pdf.title}"`
+        }]);
+
+        // 2. Insert into downloads table for general stats
+        await supabase.from('downloads').insert([{
+          user_id: user.id,
+          pdf_id: pdf.id
+        }]);
+      }
+      
+      // 3. Open the file
+      window.open(pdf.file_url, '_blank');
+    } catch (error) {
+      console.error("Error logging download:", error);
+    }
+  };
+  // --- NEW LOGGING LOGIC END ---
+
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((doc) => {
+      const matchSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (doc.author && doc.author.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchGenre = genreFilter === '' || (doc.genre && doc.genre.toLowerCase().includes(genreFilter.toLowerCase()));
+      const matchYear = yearFilter === '' || String(doc.published_date) === yearFilter;
+      return matchSearch && matchGenre && matchYear;
+    });
+  }, [documents, searchQuery, genreFilter, yearFilter]);
 
   return (
     <Box>
-      <PageHeader 
-        title="Browse Library" 
-        subtitle="Search and download academic documents from the repository." 
-      />
-      
-      {/* Action Bar: Search and Request Button */}
-      <Stack 
-        direction={{ xs: 'column', sm: 'row' }} 
-        spacing={2} 
-        sx={{ mb: 4 }} 
-        alignItems="center" 
-        justifyContent="space-between"
-      >
-        <Box sx={{ width: '100%', maxWidth: 600 }}>
-          <SearchBar placeholder="Search by document title or subject..." />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 8, mt: 2 }}>
+        {userName ? (
+          <PersonIcon sx={{ fontSize: 70, color: '#301b3f' }} />
+        ) : (
+          <LibraryBooksIcon sx={{ fontSize: 50, color: '#d32f2f' }} />
+        )}
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+            {userName ? `Welcome, ${userName}!` : "Browse Library"}
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            “Your digital library of research and discovery”
+          </Typography>
         </Box>
-
-        <PrimaryButton 
-          variant="outlined" 
-          onClick={() => navigate('/request-pdf')}
-          sx={{ whiteSpace: 'nowrap', height: 'fit-content' }}
+      </Box>
+      
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 6 }} alignItems="center">
+        <Box sx={{ width: '100%', maxWidth: 400 }}>
+          <SearchBar 
+            placeholder="Search by title or author..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </Box>
+        
+        <TextField 
+          select label="Genre" value={genreFilter} 
+          onChange={(e) => setGenreFilter(e.target.value)}
+          sx={{ minWidth: 150 }}
         >
-          Request a PDF
-        </PrimaryButton>
+          <MenuItem value="">All Genres</MenuItem>
+          <MenuItem value="Fantasy">Fantasy</MenuItem>
+          <MenuItem value="Education">Education</MenuItem>
+          <MenuItem value="Science Fiction">Science Fiction</MenuItem>
+        </TextField>
+
+        <TextField 
+          label="Year Published" value={yearFilter} 
+          onChange={(e) => setYearFilter(e.target.value)}
+          sx={{ minWidth: 150 }}
+        />
       </Stack>
 
-      {/* Grid of PDF Cards */}
-      {documents.length > 0 ? (
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8}}><CircularProgress /></Box>
+      ) : filteredDocuments.length > 0 ? (
         <Grid container spacing={3}>
-          {documents.map((doc) => (
+          {filteredDocuments.map((doc) => (
             <Grid item xs={12} sm={6} md={4} lg={3} key={doc.id}>
-              <PdfCard 
-                title={doc.title} 
-                category={doc.category} 
-                onDownload={() => alert(`Downloading: ${doc.title}`)} 
-              />
+              {/* Pass the download handler to the PdfCard */}
+              <PdfCard pdf={doc} onDownload={() => handleDownloadLog(doc)} />
             </Grid>
           ))}
         </Grid>
       ) : (
-        /* Empty State logic if search returns nothing */
         <Box sx={{ textAlign: 'center', mt: 8 }}>
-          <Typography variant="h6" color="textSecondary" gutterBottom>
-            Can't find the document you're looking for?
+          <Typography variant="h6" color="textSecondary">
+            No documents found matching these filters.
           </Typography>
-          <PrimaryButton onClick={() => navigate('/request-pdf')}>
-            Submit a Request
-          </PrimaryButton>
         </Box>
       )}
     </Box>

@@ -20,13 +20,11 @@ export const navLinks = {
   admin: [
     { name: 'Upload PDFs', path: '/upload', icon: <UploadFileIcon /> },
     { name: 'Edit PDFs', path: '/edit', icon: <EditNoteIcon /> },
-    { name: 'Users Request', path: '/requests', icon: <QuestionAnswerIcon /> },
     { name: 'Activity Logs', path: '/admin-logs', icon: <HistoryIcon /> },
     { name: 'Pending Request', path: '/pending', icon: <PendingActionsIcon /> },
   ],
   client: [
     { name: 'Browse PDFs', path: '/browse', icon: <LibraryBooksIcon /> },
     { name: 'My Downloads', path: '/my-downloads', icon: <HistoryIcon /> },
-    { name: 'Pending Requests', path: '/pending-request', icon: <PendingActionsIcon /> },
   ]
 };
