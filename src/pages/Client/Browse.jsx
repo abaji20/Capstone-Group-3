@@ -106,6 +106,15 @@ const Browse = () => {
           <MenuItem value="">All Genres</MenuItem>
           <MenuItem value="Fantasy">Fantasy</MenuItem>
           <MenuItem value="Education">Education</MenuItem> 
+          <MenuItem value="Science Fiction">Science Fiction</MenuItem> 
+          <MenuItem value="Comedy">Comedy</MenuItem> 
+          <MenuItem value="Historical Fiction">Historical Fiction</MenuItem> 
+          <MenuItem value="Mystery">Mystery</MenuItem> 
+          <MenuItem value="Romance">Romance</MenuItem> 
+          <MenuItem value="Thriller">Thriller</MenuItem> 
+          <MenuItem value="Horror">Horror</MenuItem> 
+          <MenuItem value="Adventure">Adventure</MenuItem> 
+          <MenuItem value="Biography">Biography</MenuItem>
         </TextField>
 
         <TextField select label="Category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} sx={{ minWidth: 150 }} InputProps={{ startAdornment: <CategoryIcon sx={{ mr: 1, color: 'text.secondary' }} /> }}>

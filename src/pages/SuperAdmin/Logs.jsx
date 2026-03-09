@@ -91,7 +91,7 @@ const Logs = () => {
                 <TableRow key={log.id}>
                   <TableCell sx={{ fontWeight: 600 }}>{log.profiles?.full_name || 'System'}</TableCell>
                   <TableCell>
-                    <Chip label={log.action_type} color={getActionColor(log.action_type)} size="small" />
+                    <Chip label={log.action_type} color={getActionColor(log.action_type)} size="large"/>
                   </TableCell>
                   <TableCell sx={{ fontStyle: 'italic' }}>
                     {log.pdfs?.title || <span style={{ color: '#999' }}>Deleted PDF</span>}
