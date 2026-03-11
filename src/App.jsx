@@ -93,14 +93,14 @@
             </Route>
           )}
 
-          {role === 'admin' && (
-            <Route element={<AdminLayout />}>
-              <Route path="/upload" element={<PdfUploads />} />
-              <Route path="/edit" element={<EditPDFs />} />
-              <Route path="/admin-logs" element={<AdminLogs />} />
-              <Route path="/pending" element={<PendingActions />} />
-              <Route path="/" element={<Navigate to="/upload" />} />
-            </Route>
+          {(role === 'admin' || role === 'superadmin') && (
+          <Route element={<AdminLayout />}>
+            <Route path="/upload" element={<PdfUploads />} />
+            <Route path="/edit" element={<EditPDFs />} />
+            <Route path="/admin-logs" element={<AdminLogs />} />
+            <Route path="/pending" element={<PendingActions />} />
+            <Route path="/" element={<Navigate to="/upload" />} />
+          </Route>
           )}
 
           {role === 'client' && (
