@@ -101,7 +101,7 @@ const Logs = () => {
           InputProps={{ 
             startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>
           }} 
-          sx={{ width: 700, bgcolor: 'white', borderRadius: 1 }}
+          sx={{ width: 500, bgcolor: 'white', borderRadius: 1 }}
         />
 
         <TextField 

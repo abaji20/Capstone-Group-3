@@ -7,6 +7,7 @@ import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import ArchiveIcon from '@mui/icons-material/Archive';
+import PublishIcon from '@mui/icons-material/Publish'; // New Icon for Request
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 
 export const navLinks = {
@@ -24,7 +25,8 @@ export const navLinks = {
     { name: 'Pending Request', path: '/pending', icon: <PendingActionsIcon /> },  
   ],
   client: [ 
-    { name: 'BROWSE PDFS', path: '/browse' },
+    { name: 'BROWSE', path: '/browse' },
+    { name: 'UPLOAD', path: '/request-upload', icon: <PublishIcon /> }, // Added this
     { name: 'My Downloads', path: '/my-downloads', icon: <HistoryIcon /> },
   ]
 };

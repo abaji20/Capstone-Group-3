@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Grid, Box, Stack, Typography, CircularProgress, 
-  TextField, MenuItem, Paper, InputAdornment 
+  TextField, MenuItem, Paper 
 } from '@mui/material';
 
 // Icons
-import SearchIcon from '@mui/icons-material/Search';
 import CategoryIcon from '@mui/icons-material/Category';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import DateRangeIcon from '@mui/icons-material/DateRange';
@@ -53,7 +52,7 @@ const Browse = () => {
   const handleDownloadLog = async (pdf) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      if (user) { 
         await supabase.from('audit_logs').insert([{
           user_id: user.id,
           pdf_id: pdf.id,
@@ -97,8 +96,8 @@ const Browse = () => {
       </Stack>
       
       {/* Filters Section */}
-      <Paper sx={{ p: 3, mb: 2, borderRadius: 4, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: 'center', background: 'linear-gradient(135deg, #f0f7ff 0%, #e1effe 100%)', backdropFilter: 'blur(10px)' }}>
-        <Box sx={{ flexGrow: 1, width: '100%', }}>
+      <Paper sx={{ p: 3, mb: 4, borderRadius: 4, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: 'center', background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(10px)' }}>
+        <Box sx={{ flexGrow: 1, width: '100%' }}>
           <SearchBar placeholder="Search title or author..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </Box>  
         
@@ -126,13 +125,13 @@ const Browse = () => {
         <TextField label="Year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} sx={{ minWidth: 120 }} InputProps={{ startAdornment: <DateRangeIcon sx={{ mr: 1, color: 'text.secondary' }} /> }} />
       </Paper>
 
-      {/* Grid Display */}
+      {/* Grid Display - Fixed with justifyContent="center" */}
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
       ) : filteredDocuments.length > 0 ? (
-        <Grid container spacing={3}>
+        <Grid container spacing={3} justifyContent="center" alignItems="stretch">
           {filteredDocuments.map((doc) => (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={doc.id}>
+            <Grid item key={doc.id} xs={12} sm={6} md={4} lg={3} display="flex" justifyContent="center">
               <PdfCard pdf={doc} onDownload={() => handleDownloadLog(doc)} />
             </Grid>
           ))}

@@ -64,15 +64,15 @@ const Dashboard = () => {
       <Typography variant="h4" fontWeight="900" sx={{ mb: 4, color: '#0f172a', mt: 1 }}>Dashboard Overview</Typography>
 
       {/* Row 1: Stat Cards with Unique Colors */}
-      <Grid container spacing={2} sx={{ mb: 6 }}>
+      <Grid container spacing={1} sx={{ mb: 6 }}>
         {statItems.map((item, i) => (
           <Grid item xs={12} sm={6} md={4} lg={2} key={i}>
             <Paper sx={{ 
-              p: 2, 
+              p: 1 , 
               borderRadius: 3, 
               display: 'flex', 
               alignItems: 'center', 
-              gap: 2, 
+              gap: 1, 
               height: '100%',
               backgroundColor: 'rgba(255, 255, 255, 0.7)',
               backdropFilter: 'blur(5px)',
