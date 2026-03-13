@@ -4,10 +4,13 @@ import {
   InputAdornment, IconButton, Avatar, Alert, Collapse 
 } from '@mui/material';
 import { 
-  Visibility, VisibilityOff, Email, Lock, PersonOutline 
+  Visibility, VisibilityOff, Email, Lock 
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
+
+// Import your logo from the correct path
+import logo from '../../assets/logo.png'; 
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -20,11 +23,9 @@ const Login = () => {
     e.preventDefault();
     setError(null);
     
-    // Attempting login
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     
     if (error) {
-      // Providing user-friendly feedback
       setError(error.message === "Invalid login credentials" ? "Incorrect email or password." : error.message);
       return;
     }
@@ -35,13 +36,18 @@ const Login = () => {
     <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, background: 'linear-gradient(135deg, #e0f7fa 0%, #80deea 100%)' }}>
       <Container maxWidth="xs" sx={{ p: 0 }}>
         <Paper elevation={8} sx={{ p: { xs: 3, sm: 5 }, width: '100%', borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#ffffff' }}>
-          <Avatar sx={{ mb: 2, bgcolor: '#1976d2', width: 90, height: 90 }}>
-            <PersonOutline sx={{ fontSize: 60 }} />
-          </Avatar>
           
-          <Typography variant="h5" sx={{ mb: 1, fontWeight: 700, color: '#333' }}>User Login</Typography>
+          {/* Logo Avatar */}
+          <Avatar 
+            src={logo} 
+            variant="square" 
+            sx={{ mb: 1, width: 90, height: 90, bgcolor: 'transparent' }} 
+          />
           
-          {/* Error area placed on the spot requested */}
+          <Typography variant="h6" sx={{ mb: 1, fontWeight: 900, color: '#333' }}>
+            Library Repository
+          </Typography>
+          
           <Collapse in={!!error} sx={{ width: '100%', mb: 2 }}>
             <Alert severity="error" variant="outlined" onClose={() => setError(null)}>
               {error}
@@ -68,7 +74,6 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)} 
               InputProps={{ 
                 startAdornment: <InputAdornment position="start"><Lock color="action" /></InputAdornment>, 
-                // Single source of truth for the toggle icon
                 endAdornment: (
                   <InputAdornment position="end">
                     <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">

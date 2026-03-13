@@ -7,8 +7,7 @@ import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import ArchiveIcon from '@mui/icons-material/Archive';
-import PublishIcon from '@mui/icons-material/Publish'; // New Icon for Request
-import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
+import PublishIcon from '@mui/icons-material/Publish'; 
 
 export const navLinks = {
   superadmin: [
@@ -16,17 +15,19 @@ export const navLinks = {
     { name: 'Manage Accounts', path: '/manage-accounts', icon: <PeopleIcon /> },
     { name: 'Activity Logs', path: '/logs', icon: <HistoryIcon /> },
     { name: 'Delete Requests', path: '/delete-requests', icon: <DeleteSweepIcon /> },
+    { name: 'Client Requests', path: '/pending-upload', icon: <PendingActionsIcon /> },
     { name: 'Archived/Restore', path: '/archived', icon: <ArchiveIcon /> },
   ],
   admin: [
     { name: 'Upload PDFs', path: '/upload', icon: <UploadFileIcon /> },
     { name: 'Edit PDFs', path: '/edit', icon: <EditNoteIcon /> },
     { name: 'Activity Logs', path: '/admin-logs', icon: <HistoryIcon /> },
+    { name: 'Client Requests', path: '/pending-upload', icon: <PendingActionsIcon /> },
     { name: 'Pending Request', path: '/pending', icon: <PendingActionsIcon /> },  
   ],
   client: [ 
-    { name: 'BROWSE', path: '/browse' },
-    { name: 'UPLOAD', path: '/request-upload', icon: <PublishIcon /> }, // Added this
+    { name: 'BROWSE', path: '/browse', icon: <LibraryBooksIcon /> },
+    { name: 'UPLOAD', path: '/request-upload', icon: <PublishIcon /> },
     { name: 'My Downloads', path: '/my-downloads', icon: <HistoryIcon /> },
   ]
 };

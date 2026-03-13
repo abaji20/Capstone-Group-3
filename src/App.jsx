@@ -28,6 +28,7 @@ import PdfUploads from './pages/Admin/PdfUploads';
 import EditPDFs from './pages/Admin/EditPdfs';
 import PendingActions from './pages/Admin/PendingActions';
 import AdminLogs from './pages/Admin/AdminLogs';
+import PendingUpload from './pages/Admin/PendingUpload';
 
 function App() {
   const [role, setRole] = useState(null);
@@ -93,6 +94,7 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/manage-accounts" element={<ManageAccount />} />
             <Route path="/logs" element={<Logs />} />
+            <Route path="/pending-upload"element={<PendingUpload />} />
             <Route path="/delete-requests" element={<DeleteRequests />} />
             <Route path="/archived" element={<Archived />} />
             <Route path="/" element={<Navigate to="/dashboard" />} />
@@ -105,6 +107,7 @@ function App() {
             <Route path="/upload" element={<PdfUploads />} />
             <Route path="/edit" element={<EditPDFs />} />
             <Route path="/admin-logs" element={<AdminLogs />} />
+            <Route path="/pending-upload"element={<PendingUpload />} />
             <Route path="/pending" element={<PendingActions />} />
             <Route path="/" element={<Navigate to="/upload" />} />
           </Route>
