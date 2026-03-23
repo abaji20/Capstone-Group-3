@@ -1,5 +1,7 @@
 import { supabase } from '../supabaseClient';
 
+// --- EXISTING FEATURES ---
+
 export const uploadPdfWithFiles = async (pdfFile, imageFile, metadata, userId) => {
   // 1. Upload PDF to storage
   const pdfPath = `pdfs/${Date.now()}_${pdfFile.name}`;
@@ -72,8 +74,6 @@ export const deletePdf = async (id) => {
   return { success: true };
 };
 
-export const uploadNewPdf = uploadPdfWithFiles;
-
 export const fetchPdfs = async () => {
   const { data, error } = await supabase
     .from('pdfs')
@@ -97,4 +97,22 @@ export const submitDeleteRequest = async (pdfId, reason, userId) => {
   
   if (error) throw error;
   return { success: true };
+};
+
+export const uploadNewPdf = uploadPdfWithFiles;
+
+// --- NEW FEATURE: DYNAMIC RANKING ---
+
+/**
+ * Fetches the top 5 most downloaded PDFs using a Supabase RPC.
+ * This requires the 'get_most_downloaded_pdfs' function to be 
+ * created in your Supabase SQL Editor.
+ */
+export const fetchFeaturedPdfs = async () => {
+  const { data, error } = await supabase.rpc('get_most_downloaded_pdfs');
+  if (error) {
+    console.error("Error fetching spotlight PDFs:", error);
+    return [];
+  }
+  return data || [];
 };

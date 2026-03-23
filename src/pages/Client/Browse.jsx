@@ -3,13 +3,13 @@ import { Grid, Box, Typography, TextField, MenuItem, Stack } from '@mui/material
 import FilterListIcon from '@mui/icons-material/FilterList';
 import DateRangeIcon from '@mui/icons-material/DateRange';
 import { PdfCard } from '../../shared';
-import { fetchPdfs } from '../../services/pdfService'; 
+import { fetchPdfs, fetchFeaturedPdfs } from '../../services/pdfService'; 
 import { supabase } from '../../supabaseClient';
 import FeaturedBanner from '../../components/FeaturedBanner';
 
 const SectionLabel = ({ title }) => (
-  <Box sx={{ mt: 10, mb: 4 }}>
-    <Typography variant="h4" sx={{ fontWeight: 800, color: '#0f172a', borderLeft: '6px solid #1e3a8a', pl: 2, textTransform: 'uppercase', letterSpacing: '1px' }}>
+  <Box sx={{ mt: 2, mb: 4 }}>
+    <Typography variant="h5" sx={{ fontWeight: 800, color: '#0f172a', borderLeft: '6px solid #1e3a8a', pl: 2, textTransform: 'uppercase', letterSpacing: '1px' }}>
       {title}
     </Typography>
   </Box>
@@ -17,6 +17,7 @@ const SectionLabel = ({ title }) => (
 
 const Browse = () => {
   const [documents, setDocuments] = useState([]);
+  const [spotlightDocs, setSpotlightDocs] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,9 +26,8 @@ const Browse = () => {
 
   useEffect(() => {
     fetchPdfs().then(data => setDocuments(data || []));
+    fetchFeaturedPdfs().then(data => setSpotlightDocs(data || []));
   }, []);
-
-  const spotlightDocs = useMemo(() => documents.slice(0, 5), [documents]);
 
   const filteredDocs = useMemo(() => {
     return documents.filter(doc => {
@@ -62,24 +62,24 @@ const Browse = () => {
         />
       )}
 
-      {/* Unboxed Filter Area */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ my: 5, alignItems: 'center' }}>
         <TextField fullWidth label="Search title or author..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} sx={{ bgcolor: 'white', borderRadius: 2 }} />
-        
         <TextField select label="Genre" value={genreFilter} onChange={(e) => setGenreFilter(e.target.value)} sx={{ minWidth: 200, bgcolor: 'white', borderRadius: 2 }} InputProps={{ startAdornment: <FilterListIcon sx={{ mr: 1, color: 'text.secondary' }} /> }}>
           <MenuItem value="">All Genres</MenuItem>
           {['Fantasy', 'Education', 'Science Fiction', 'Romance', 'Adventure'].map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
         </TextField>
-
         <TextField label="Year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} sx={{ minWidth: 150, bgcolor: 'white', borderRadius: 2 }} InputProps={{ startAdornment: <DateRangeIcon sx={{ mr: 1, color: 'text.secondary' }} /> }} />
       </Stack>
 
+      {/* Library Section */}
       <SectionLabel title="Library" />
       <Grid container spacing={3}>{filteredDocs.map(d => <Grid item key={d.id} xs={3}><PdfCard pdf={d} onDownload={() => handleDownload(d)} /></Grid>)}</Grid>
 
+      {/* Books Section */}
       <SectionLabel title="Books" />
       <Grid container spacing={3}>{filteredDocs.filter(d => d.category?.toLowerCase() === 'book').map(d => <Grid item key={d.id} xs={3}><PdfCard pdf={d} onDownload={() => handleDownload(d)} /></Grid>)}</Grid>
 
+      {/* Academic Papers Section */}
       <SectionLabel title="Academic Papers" />
       <Grid container spacing={3}>{filteredDocs.filter(d => d.category?.toLowerCase() === 'academic paper').map(d => <Grid item key={d.id} xs={3}><PdfCard pdf={d} onDownload={() => handleDownload(d)} /></Grid>)}</Grid>
     </Box>

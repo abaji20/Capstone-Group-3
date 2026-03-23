@@ -72,12 +72,11 @@ const RequestUpload = () => {
       width: '100%', 
       background: '#f1f5f9', 
       display: 'flex', 
-      alignItems: 'center', 
       justifyContent: 'center', 
       py: 4 
     }}>
       <Container maxWidth="sm">
-        <Paper elevation={0} sx={{ p: 5, borderRadius: 6, border: '1px solid #e2e8f0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+        <Paper elevation={0} sx={{ p: 5,maxWidth: '100', Height: '100', borderRadius: 6, border: '2px solid #e2e8f0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
           <Typography variant="h4" sx={{ mb: 1, fontWeight: 800, color: '#0f172a' }}>Request Upload</Typography>
           <Typography variant="body2" sx={{ mb: 4, color: '#64748b' }}>Fill in the details to submit your new book or paper.</Typography>
           
