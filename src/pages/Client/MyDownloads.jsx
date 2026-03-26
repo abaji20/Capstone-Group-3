@@ -25,11 +25,27 @@ const MyDownloads = () => {
             .from('downloads')
             .select('pdfs(*)') 
             .eq('user_id', user.id);
+          
           if (error) throw error;
-          setDownloads(data?.map(item => item.pdfs) || []);
+
+          // --- UNIQUE FILTER LOGIC ---
+          // Use a Map to ensure each PDF ID only appears once
+          const uniquePdfsMap = new Map();
+          
+          data?.forEach(item => {
+            if (item.pdfs && !uniquePdfsMap.has(item.pdfs.id)) {
+              uniquePdfsMap.set(item.pdfs.id, item.pdfs);
+            }
+          });
+
+          setDownloads(Array.from(uniquePdfsMap.values()));
+          // ---------------------------
         }
-      } catch (error) { console.error("Error:", error); } 
-      finally { setLoading(false); }
+      } catch (error) { 
+        console.error("Error:", error); 
+      } finally { 
+        setLoading(false); 
+      }
     };
     fetchMyDownloads();
   }, []);
@@ -54,7 +70,7 @@ const MyDownloads = () => {
         <Typography variant="h4" sx={{ fontWeight: 800 }}>Download History</Typography>
       </Stack>
 
-      {/* FILTER SECTION: Fixed layout to prevent label clipping */}
+      {/* FILTER SECTION */}
       <Grid container spacing={1} sx={{ mb: 3 }}>
         <Grid item xs={12} md={6}>
           <TextField 
@@ -67,28 +83,25 @@ const MyDownloads = () => {
             sx={{ '& .MuiOutlinedInput-root': { borderRadius: '12px' } }}
           />
         </Grid>
-       <Grid item xs={6} md={3}>
-  <TextField 
-    select 
-    fullWidth 
-    label="Genre" // Standard label will now render fully
-    value={genreFilter} 
-    onChange={(e) => setGenreFilter(e.target.value)} 
-    // Removed 'size="medium"' to let it size naturally, 
-    // or keep it if you want it larger
-    sx={{ 
-      '& .MuiOutlinedInput-root': { 
-        borderRadius: '12px',
-        // Ensure there is no hardcoded minWidth that truncates the label
-        minWidth: 'unset' 
-      } 
-    }}
-  >
-    <MenuItem value="">All Genres</MenuItem>
-    <MenuItem value="Fantasy">Fantasy</MenuItem>
-    <MenuItem value="Education">Education</MenuItem>
-  </TextField>
-</Grid>
+        <Grid item xs={6} md={3}>
+          <TextField 
+            select 
+            fullWidth 
+            label="Genre" 
+            value={genreFilter} 
+            onChange={(e) => setGenreFilter(e.target.value)} 
+            sx={{ 
+              '& .MuiOutlinedInput-root': { 
+                borderRadius: '12px',
+                minWidth: 'unset' 
+              } 
+            }}
+          >
+            <MenuItem value="">All Genres</MenuItem>
+            <MenuItem value="Fantasy">Fantasy</MenuItem>
+            <MenuItem value="Education">Education</MenuItem>
+          </TextField>
+        </Grid>
         <Grid item xs={6} md={3}>
           <TextField 
             fullWidth size="medium" label="Year" 
@@ -110,7 +123,9 @@ const MyDownloads = () => {
       {/* Results Grid - Centered */}
       <Grid container spacing={3} justifyContent="left">
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}><CircularProgress /></Box>
+          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mt: 8 }}>
+            <CircularProgress />
+          </Box>
         ) : filteredDownloads.length > 0 ? (
           filteredDownloads.map((doc) => (
             <Grid item xs={12} sm={6} md={4} lg={3} key={doc.id} display="flex" justifyContent="center">
@@ -118,7 +133,9 @@ const MyDownloads = () => {
             </Grid>
           ))
         ) : (
-          <Typography sx={{ textAlign: 'center', mt: 8, color: '#94a3b8' }}>No matches found.</Typography>
+          <Box sx={{ width: '100%', textAlign: 'center', mt: 8 }}>
+            <Typography sx={{ color: '#94a3b8' }}>No matches found.</Typography>
+          </Box>
         )}
       </Grid>
     </Container>
