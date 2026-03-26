@@ -124,7 +124,7 @@ const AdminLogs = () => {
       </Box>
       
       
-      <TableContainer component={Paper} sx={{ borderRadius: 4, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', backgroundColor: 'rgba(255, 255, 255, 0.8)' }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 1.5, boxShadow: '0 8px 32px rgba(0,0,0,0.1)', backgroundColor: 'rgba(255, 255, 255, 0.8)' }}>
         {loading ? <Box sx={{ p: 8, textAlign: 'center' }}><CircularProgress /></Box> : (
           <Table>
             <TableHead sx={{ bgcolor: '#1e3a8a' }}>

@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { 
   Box, Paper, TextField, Button, Typography, Stack, 
-  Container, Divider, MenuItem, InputAdornment, LinearProgress, Alert 
+  Container, MenuItem, InputAdornment, LinearProgress, Alert, useTheme 
 } from '@mui/material';
 import { 
-  CloudUpload, Title, Person, Book, PictureAsPdf, 
+  CloudUpload, Title, Person, PictureAsPdf, 
   Image as ImageIcon, Send, DateRange 
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 
 const RequestUpload = () => {
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
+  
   const [formData, setFormData] = useState({ 
     title: '', author: '', description: '', genre: '', category: 'book', published_date: '' 
   });
@@ -20,10 +23,11 @@ const RequestUpload = () => {
 
   const inputStyle = { 
     '& .MuiOutlinedInput-root': { 
-      borderRadius: '12px',
-      backgroundColor: '#f8fafc',
-      '&:hover fieldset': { borderColor: '#4f46e5' }
-    } 
+      borderRadius: '8px', // Slightly smaller radius for a tighter look
+      backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#ffffff',
+      '&:hover fieldset': { borderColor: theme.palette.primary.main }
+    },
+    '& .MuiInputBase-input': { py: 1.2 } // Reduced vertical padding in text fields
   };
 
   const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -70,63 +74,118 @@ const RequestUpload = () => {
     <Box sx={{ 
       minHeight: '100vh', 
       width: '100%', 
-      background: '#f1f5f9', 
+      bgcolor: 'background.default', 
       display: 'flex', 
       justifyContent: 'center', 
-      py: 4 
+      alignItems: 'center', // Centers vertically to reduce "largeness"
+      py: 3,
+      transition: 'background 0.3s ease'
     }}>
-      <Container maxWidth="sm">
-        <Paper elevation={0} sx={{ p: 5,maxWidth: '100', Height: '100', borderRadius: 6, border: '2px solid #e2e8f0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-          <Typography variant="h4" sx={{ mb: 1, fontWeight: 800, color: '#0f172a' }}>Request Upload</Typography>
-          <Typography variant="body2" sx={{ mb: 4, color: '#64748b' }}>Fill in the details to submit your new book or paper.</Typography>
+      <Container maxWidth="sm"> {/* Reduced from md to sm for a narrower profile */}
+        <Paper elevation={0} sx={{ 
+          p: { xs: 2, md: 4 }, // Reduced padding
+          borderRadius: 3 , 
+          bgcolor: 'background.paper',
+          border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0',
+          boxShadow: isDarkMode ? '0 10px 15px -3px rgba(0,0,0,0.5)' : '0 10px 15px -3px rgba(0,0,0,0.1)'
+        }}>
           
-          {message.text && <Alert severity={message.severity} sx={{ mb: 3 }}>{message.text}</Alert>}
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 0.5 }}>
+             <CloudUpload sx={{ fontSize: 32, color: 'primary.main' }} />
+             <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary' }}>Upload Document</Typography>
+          </Stack>
+          <Typography variant="caption" sx={{ mb: 3, display: 'block', color: 'text.secondary' }}>
+            Enhance your repository by adding new academic materials.
+          </Typography>
+          
+          {message.text && <Alert severity={message.severity} sx={{ mb: 2, py: 0, borderRadius: 2 }}>{message.text}</Alert>}
 
           <form onSubmit={handleSubmit}>
-            <Stack spacing={2.5}>
-              <TextField fullWidth label="Book Title" name="title" value={formData.title} onChange={handleInputChange} sx={inputStyle} InputProps={{ startAdornment: (<InputAdornment position="start"><Title color="action" /></InputAdornment>) }} />
-              <TextField fullWidth label="Author" name="author" value={formData.author} onChange={handleInputChange} sx={inputStyle} InputProps={{ startAdornment: (<InputAdornment position="start"><Person color="action" /></InputAdornment>) }} />
+            <Stack direction="column" spacing={2.5}>
               
+              {/* COMPACT SIDE-BY-SIDE UPLOAD ZONES */}
               <Stack direction="row" spacing={2}>
-                <TextField fullWidth label="Genre" name="genre" value={formData.genre} onChange={handleInputChange} sx={inputStyle} />
-                <TextField select fullWidth label="Category" name="category" value={formData.category} onChange={handleInputChange} sx={inputStyle}>
-                  <MenuItem value="book">Book</MenuItem>
-                  <MenuItem value="academic paper">Academic Paper</MenuItem>
-                </TextField>
-              </Stack>
-
-              {/* Text-based date input */}
-              <TextField 
-                fullWidth 
-                label="Published Date (YYYY-MM-DD)" 
-                name="published_date" 
-                placeholder="2026-03-13"
-                value={formData.published_date} 
-                onChange={handleInputChange} 
-                sx={inputStyle} 
-                InputProps={{ startAdornment: (<InputAdornment position="start"><DateRange color="action" /></InputAdornment>) }}
-              />
-
-              <TextField fullWidth label="Description" name="description" multiline rows={3} value={formData.description} onChange={handleInputChange} sx={inputStyle} />
-
-              <Divider sx={{ my: 2 }}><Typography variant="caption" sx={{ fontWeight: 700, color: '#94a3b8' }}>ATTACHMENTS</Typography></Divider>
-
-              <Stack direction="row" spacing={2}>
-                <Button variant="outlined" component="label" fullWidth startIcon={<PictureAsPdf />} sx={{ borderRadius: 3, py: 1.5, borderColor: '#cbd5e1' }}>
-                  {pdfFile ? pdfFile.name.substring(0, 15) + "..." : "Select PDF"}
+                <Box sx={{
+                  flex: 1,
+                  border: '1.5px dashed',
+                  borderColor: pdfFile ? 'primary.main' : (isDarkMode ? 'rgba(255,255,255,0.2)' : '#cbd5e1'),
+                  borderRadius: 2,
+                  p: 2,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  bgcolor: pdfFile ? (isDarkMode ? 'rgba(144,202,249,0.05)' : 'rgba(30,58,138,0.02)') : 'transparent',
+                  '&:hover': { borderColor: 'primary.main' }
+                }} component="label">
                   <input type="file" hidden accept=".pdf" onChange={(e) => setPdfFile(e.target.files[0])} />
-                </Button>
-                <Button variant="outlined" component="label" fullWidth startIcon={<ImageIcon />} sx={{ borderRadius: 3, py: 1.5, borderColor: '#cbd5e1' }}>
-                  {coverFile ? coverFile.name.substring(0, 15) + "..." : "Select Cover"}
+                  <PictureAsPdf sx={{ fontSize: 32, color: pdfFile ? 'primary.main' : 'text.secondary', mb: 0.5 }} />
+                  <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>
+                    {pdfFile ? pdfFile.name.substring(0, 10) + "..." : "Select PDF"}
+                  </Typography>
+                </Box>
+
+                <Box sx={{
+                  flex: 1,
+                  border: '1.5px dashed',
+                  borderColor: coverFile ? 'primary.main' : (isDarkMode ? 'rgba(255,255,255,0.2)' : '#cbd5e1'),
+                  borderRadius: 2,
+                  p: 2,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  bgcolor: coverFile ? (isDarkMode ? 'rgba(144,202,249,0.05)' : 'rgba(30,58,138,0.02)') : 'transparent',
+                  '&:hover': { borderColor: 'primary.main' }
+                }} component="label">
                   <input type="file" hidden accept="image/*" onChange={(e) => setCoverFile(e.target.files[0])} />
+                  <ImageIcon sx={{ fontSize: 32, color: coverFile ? 'primary.main' : 'text.secondary', mb: 0.5 }} />
+                  <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>
+                    {coverFile ? coverFile.name.substring(0, 10) + "..." : "Select Cover"}
+                  </Typography>
+                </Box>
+              </Stack>
+
+              {/* FORM FIELDS */}
+              <Stack spacing={1.5}>
+                <TextField fullWidth label="Document Title" name="title" value={formData.title} onChange={handleInputChange} sx={inputStyle} size="small" />
+                <TextField fullWidth label="Author / Publisher" name="author" value={formData.author} onChange={handleInputChange} sx={inputStyle} size="small" />
+                
+                <Stack direction="row" spacing={1.5}>
+                  <TextField fullWidth label="Genre" name="genre" value={formData.genre} onChange={handleInputChange} sx={inputStyle} size="small" />
+                  <TextField select fullWidth label="Category" name="category" value={formData.category} onChange={handleInputChange} sx={inputStyle} size="small">
+                    <MenuItem value="book">Book</MenuItem>
+                    <MenuItem value="academic paper">Academic Paper</MenuItem>
+                  </TextField>
+                </Stack>
+
+                <TextField 
+                  fullWidth 
+                  label="Year" 
+                  name="published_date" 
+                  placeholder="YYYY-MM-DD"
+                  value={formData.published_date} 
+                  onChange={handleInputChange} 
+                  sx={inputStyle} 
+                  size="small"
+                />
+
+                <TextField fullWidth label="Brief Description" name="description" multiline rows={2} value={formData.description} onChange={handleInputChange} sx={inputStyle} size="small" />
+                
+                {uploading && <LinearProgress sx={{ borderRadius: 2, height: 4 }} />}
+
+                <Button 
+                  type="submit" 
+                  disabled={uploading} 
+                  variant="contained" 
+                  startIcon={<Send />} 
+                  sx={{ 
+                    mt: 1, 
+                    py: 1.2, 
+                    borderRadius: 3, 
+                    fontWeight: 800, 
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  {uploading ? 'Submitting...' : 'Submit Request'}
                 </Button>
               </Stack>
-              
-              {uploading && <LinearProgress sx={{ mt: 2 }} />}
-
-              <Button type="submit" disabled={uploading} variant="contained" size="large" startIcon={<CloudUpload />} sx={{ mt: 2, bgcolor: '#213C51', py: 1.8, borderRadius: 3, fontWeight: 700, '&:hover': { bgcolor: '#1a2e3d' } }}>
-                Submit Request
-              </Button>
             </Stack>
           </form>
         </Paper>
