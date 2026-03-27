@@ -69,26 +69,16 @@ const Browse = () => {
 
   useEffect(() => {
     fetchPdfs().then(data => setDocuments(data || []));
+    // Assumes fetchFeaturedPdfs returns docs sorted by downloads
     fetchFeaturedPdfs().then(data => setSpotlightDocs(data || []));
   }, []);
 
-  // Updated genres array with common book and academic categories
   const genres = useMemo(() => {
     const commonGenres = [
-      'All', 
-      'Romance', 
-      'Action', 
-      'Drama', 
-      'Science Fiction', 
-      'Research Paper', 
-      'Review Article', 
-      'Case Study', 
-      'Thesis', 
-      'Biography', 
-      'Textbook'
+      'All', 'Romance', 'Action', 'Drama', 'Science Fiction', 
+      'Research Paper', 'Review Article', 'Case Study', 
+      'Thesis', 'Biography', 'Textbook'
     ];
-    
-    // This keeps the common list + any unique ones found in your database
     const dbGenres = documents.map(doc => doc.genre).filter(Boolean);
     return [...new Set([...commonGenres, ...dbGenres])];
   }, [documents]);
@@ -98,7 +88,6 @@ const Browse = () => {
       const matchesSearch = doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             doc.author?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesGenre = selectedGenre === 'All' || doc.genre === selectedGenre;
-      
       return matchesSearch && matchesGenre;
     });
   }, [documents, searchQuery, selectedGenre]);
@@ -114,6 +103,8 @@ const Browse = () => {
           {spotlightDocs.length > 0 && (
             <FeaturedBanner 
               doc={spotlightDocs[currentIndex]} 
+              // FIX: This ensures the rank number changes when you click next/prev
+              rank={currentIndex + 1} 
               onNext={() => setCurrentIndex((prev) => (prev + 1) % spotlightDocs.length)} 
               onPrev={() => setCurrentIndex((prev) => (prev - 1 + spotlightDocs.length) % spotlightDocs.length)} 
             />

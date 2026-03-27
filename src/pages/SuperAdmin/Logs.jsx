@@ -129,7 +129,7 @@ const Logs = () => {
         />
       </Box>
       
-      <TableContainer component={Paper} sx={{ borderRadius: 3, boxShadow: '0 10px 30px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 1, boxShadow: '0 10px 30px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
         <Table>
           <TableHead sx={{ bgcolor: '#1e3a8a' }}>
             <TableRow>
