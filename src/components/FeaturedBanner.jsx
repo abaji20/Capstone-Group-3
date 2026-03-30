@@ -91,15 +91,6 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
             flexShrink: 0,
             position: 'relative'
           }}>
-            <Box sx={{ 
-              position: 'absolute', top: 15, left: 15, 
-              bgcolor: 'primary.main', color: 'white', 
-              px: 1.5, py: 0.5, borderRadius: 1, 
-              display: 'flex', alignItems: 'center', gap: 0.5,
-              fontSize: '0.7rem', fontWeight: 'bold', zIndex: 3
-            }}>
-              <StarIcon sx={{ fontSize: '0.9rem' }} /> SPOTLIGHT
-            </Box>
           </Box>
           
           {/* Content Area */}
