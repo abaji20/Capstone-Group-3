@@ -22,11 +22,8 @@ const AdminLogs = () => {
   // --- DARK MODE COLOR STRATEGY ---
   const pageBg = isDarkMode ? '#141b2d' : '#f8fafc'; 
   const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
-  
-  // FIXED: Consolidated input background to prevent color bleed ("kitang ibang kulay")
   const inputBg = isDarkMode ? '#28334e' : '#ffffff'; 
-  
-  const headerBg = isDarkMode ? '#0f172a' : '#1e3a8a';
+  const headerBg = isDarkMode ? '#0f172a' : '#213C51';
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
 
   const [logs, setLogs] = useState([]);
@@ -63,6 +60,13 @@ const AdminLogs = () => {
 
   const applyFilters = () => {
     let tempLogs = [...logs];
+    
+    // Logic: Admin view only sees Admin and Client actions (Excludes Superadmin)
+    tempLogs = tempLogs.filter(log => 
+        log.profiles?.role?.toLowerCase() === 'admin' || 
+        log.profiles?.role?.toLowerCase() === 'client'
+    );
+
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       tempLogs = tempLogs.filter(log => 
@@ -81,57 +85,69 @@ const AdminLogs = () => {
     setFilteredLogs(tempLogs);
   };
 
-  // 1. UPDATED: Logic for the uniform Action Buttons to match reference colors in light mode
+  // --- INTEGRATED COLOR & DARK MODE LOGIC ---
+  const getRoleStyles = (role, darkMode) => {
+    const r = role?.toLowerCase();
+    if (darkMode) {
+        // Dark Mode Roles: Subtle backgrounds with vibrant text (as seen in your clips)
+        if (r === 'superadmin') return { bg: '#f3e8ff1a', text: '#d8b4fe' }; 
+        if (r === 'admin') return { bg: '#fef3c71a', text: '#fbbf24' }; 
+        if (r === 'client') return { bg: '#dbeafe1a', text: '#60a5fa' }; 
+        return { bg: '#1e293b', text: '#94a3b8' };
+    } else {
+        // Light Mode Roles
+        if (r === 'superadmin') return { bg: '#F3E8FF', text: '#7C3AED' }; 
+        if (r === 'admin') return { bg: '#FEF3C7', text: '#D97706' }; 
+        if (r === 'client') return { bg: '#DBEAFE', text: '#2563EB' }; 
+        return { bg: '#F1F5F9', text: '#475569' };
+    }
+  };
+
   const getActionStyles = (action) => {
     const type = action?.toLowerCase();
-    
-    // Green (from ref img 2)
     if (type?.includes('upload')) return { bg: '#2F6B3F', text: '#FBF6F6', label: 'UPLOAD' };
-    
-    // FIXED: Pastel Yellow/Cream & Maroon Text (matches your 'parang gold' reference)
     if (type?.includes('edit')) return { bg: '#ffd500', text: '#7c6800', label: 'EDIT' }; 
-    
-    // Red (from ref img 2)
     if (type?.includes('delete')) return { bg: '#A82323', text: '#ffffff', label: 'DELETE' };
-    
-    // Blue (from ref img 2)
     if (type?.includes('download')) return { bg: '#261CC1', text: '#adc3ff', label: 'DOWNLOAD' };
-    
     return { bg: '#f1f5f9', text: '#475569', label: action?.toUpperCase() };
   };
 
-  // COMPONENT: UNIFORM ACTION BUTTON
   const ActionButton = ({ action }) => {
     const style = getActionStyles(action);
     return (
-      <Box
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '110px', 
-          py: 0.7,
-          borderRadius: '6px', 
-          fontWeight: 800,
-          fontSize: '0.7rem',
-          letterSpacing: '0.5px',
-          // Adapt background for dark mode (slightly less opaque)
+      <Box sx={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: '120px', py: 0.5, borderRadius: '4px', fontWeight: 800, fontSize: '0.7rem',
           bgcolor: isDarkMode ? 'rgba(255,255,255,0.05)' : style.bg,
           color: isDarkMode ? 'white' : style.text,
-          border: isDarkMode ? `1px solid ${style.text}` : 'none',
-        }}
-      >
+          border: isDarkMode ? `1px solid ${style.text === '#7c6800' ? '#ffd500' : style.text}` : 'none',
+        }}>
         {style.label}
       </Box>
     );
   };
 
-  // FIXED: Styles for the filters to prevent color bleeding
+  const RoleChip = ({ role }) => {
+    const styles = getRoleStyles(role, isDarkMode);
+    return (
+      <Box sx={{ 
+        px: 1.5, py: 0.4, borderRadius: 0.5, fontSize: '0.65rem', fontWeight: 900,
+        bgcolor: styles.bg,
+        color: styles.text,
+        textTransform: 'uppercase',
+        minWidth: '100px', // Uniform width to match Master Logs
+        display: 'inline-flex',
+        justifyContent: 'center'
+      }}>
+        {role || 'CLIENT'}
+      </Box>
+    );
+  };
+
   const filterStyle = {
-    backgroundColor: inputBg, // Unified background color here
+    backgroundColor: inputBg,
     borderRadius: 2,
     '& .MuiOutlinedInput-root': {
-      // Remove any component-level background so it uses the parent bgcolor
       '& input': { backgroundColor: 'transparent' },
       '& .MuiSelect-select': { backgroundColor: 'transparent' },
       '& fieldset': { border: isDarkMode ? 'none' : '1px solid #e2e8f0' },
@@ -141,31 +157,24 @@ const AdminLogs = () => {
   };
 
   return (
-    <Box sx={{ 
-      p: { xs: 2, md: 5 }, 
-      bgcolor: pageBg, 
-      minHeight: '100vh',
-      transition: 'background-color 0.3s ease'
-    }}>
+    <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
       <Container maxWidth="xl">
         {/* HEADER SECTION */}
         <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4, borderBottom: `2px solid ${isDarkMode ? '#3b82f6' : '#1e3a8a'}`, pb: 2 }}>
           <HistoryIcon sx={{ fontSize: 32, color: isDarkMode ? '#3b82f6' : '#1e3a8a' }} />
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary' }}>ACTIVITY HISTORY</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 800 }}>ACTIVITY HISTORY</Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, letterSpacing: 1 }}>SYSTEM AUDIT LOGS</Typography>
           </Box>
         </Stack>
 
-        {/* RESPONSIVE FILTERS */}
+        {/* FILTERS */}
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
           <TextField 
-            fullWidth
-            placeholder="Search name, action, or file..." 
-            value={searchTerm} 
+            fullWidth placeholder="Search name, action, or file..." value={searchTerm} 
             onChange={(e) => setSearchTerm(e.target.value)} 
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment> }} 
-            sx={filterStyle} // Removed fixed bgcolor: white here
+            sx={filterStyle} 
           />
           <Stack direction="row" spacing={2}>
             <TextField select label="Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} sx={{ ...filterStyle, minWidth: 120 }}>
@@ -181,39 +190,34 @@ const AdminLogs = () => {
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress color="primary" /></Box>
         ) : (
           <>
-            {/* DESKTOP VIEW (Table) */}
             {!isMobile && (
-              <TableContainer component={Paper} sx={{ bgcolor: cardBg, borderRadius: 3, overflow: 'hidden', border: `1px solid ${borderCol}` }}>
+              <TableContainer component={Paper} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                 <Table>
                   <TableHead sx={{ bgcolor: headerBg }}>
                     <TableRow>
-                      <TableCell sx={{ color: 'white', fontWeight: 700, py: 2.5 }}><PersonOutlineIcon sx={{ mr: 1, fontSize: 18, verticalAlign: 'middle' }}/>PERFORMED BY</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }}><CategoryIcon sx={{ mr: 1, fontSize: 18, verticalAlign: 'middle' }}/>ACTION</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }}><DescriptionIcon sx={{ mr: 1, fontSize: 18, verticalAlign: 'middle' }}/>TARGET PDF</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700, py: 2.5, width: '200px' }} align="center">PERFORMED BY</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700, width: '150px' }} align="center">ROLE</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="center">ACTION</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }}>TARGET PDF</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }}>DETAILS</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }}><CalendarTodayIcon sx={{ mr: 1, fontSize: 18, verticalAlign: 'middle' }}/>DATE</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700 }}>DATE</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {filteredLogs.map((log) => (
-                      <TableRow key={log.id} hover sx={{ '&:hover': { bgcolor: isDarkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)' } }}>
-                        <TableCell>
-                          <Stack direction="row" spacing={1.5} alignItems="center">
-                            <Box sx={{ 
-                                px: 1, py: 0.5, borderRadius: 1, fontSize: '0.65rem', fontWeight: 900,
-                                bgcolor: log.profiles?.role?.toLowerCase() === 'admin' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)',
-                                color: log.profiles?.role?.toLowerCase() === 'admin' ? '#f87171' : '#60a5fa',
-                                textTransform: 'uppercase'
-                              }}>
-                                {log.profiles?.role || 'CLIENT'}
-                              </Box>
-                              <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: 'text.primary' }}>{log.profiles?.full_name || 'System User'}</Typography>
-                          </Stack>
+                      <TableRow key={log.id} hover>
+                        <TableCell sx={{ width: '200px' }}>
+                          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                            {log.profiles?.full_name || 'System User'}
+                          </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ width: '150px' }} align="center">
+                          <RoleChip role={log.profiles?.role} />
+                        </TableCell>
+                        <TableCell align="center">
                           <ActionButton action={log.action_type} />
                         </TableCell>
-                        <TableCell sx={{ fontWeight: 500, color: 'text.primary' }}>{log.pdfs?.title || '—'}</TableCell>
+                        <TableCell sx={{ fontWeight: 500 }}>{log.pdfs?.title || '—'}</TableCell>
                         <TableCell sx={{ maxWidth: 300, color: 'text.secondary', fontSize: '0.85rem' }}>{log.description || '—'}</TableCell>
                         <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{new Date(log.created_at).toLocaleDateString()}</TableCell>
                       </TableRow>
@@ -223,28 +227,27 @@ const AdminLogs = () => {
               </TableContainer>
             )}
 
-            {/* MOBILE VIEW (Cards) - Uses same styles as desktop */}
             {isMobile && (
               <Stack spacing={2}>
                 {filteredLogs.map((log) => (
-                  <Card key={log.id} sx={{ bgcolor: cardBg, borderRadius: 3, border: `1px solid ${borderCol}` }}>
+                  <Card key={log.id} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                     <CardContent>
                       <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
-                        <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>{log.profiles?.full_name}</Typography>
+                        <Typography sx={{ fontWeight: 700 }}>{log.profiles?.full_name}</Typography>
                         <Typography variant="caption" sx={{ color: 'text.disabled' }}>{new Date(log.created_at).toLocaleDateString()}</Typography>
-                      </Stack>  
+                      </Stack> 
                       <Stack spacing={2}>
                         <Box>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 700, mb: 0.5 }}>ACTION</Typography>
+                          <Typography variant="caption" color="text.secondary" fontWeight={700}>ROLE</Typography><br/>
+                          <RoleChip role={log.profiles?.role} />
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" fontWeight={700}>ACTION</Typography><br/>
                           <ActionButton action={log.action_type} />
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 700 }}>TARGET PDF</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{log.pdfs?.title || '—'}</Typography>
-                        </Box>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 700 }}>DETAILS</Typography>
-                          <Typography variant="body2" sx={{ fontStyle: 'italic', color: 'text.secondary', fontSize: '0.85rem' }}>{log.description || '—'}</Typography>
+                          <Typography variant="caption" color="text.secondary" fontWeight={700}>TARGET PDF</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{log.pdfs?.title || '—'}</Typography>
                         </Box>
                       </Stack>
                     </CardContent>
