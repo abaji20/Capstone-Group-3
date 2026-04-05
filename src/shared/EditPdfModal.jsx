@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Dialog, DialogTitle, DialogContent, DialogActions, 
-  Button, TextField, Stack, useTheme, Box 
+  Button, TextField, Stack, useTheme, MenuItem 
 } from '@mui/material';
 import { supabase } from '../supabaseClient'; 
 
@@ -9,12 +9,20 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
   
+  // Dynamic styles based on theme
   const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
   const inputBg = isDarkMode ? '#28334e' : '#f1f5f9';
 
   const [formData, setFormData] = useState({ ...pdf });
   const [loading, setLoading] = useState(false);
 
+  // Categories match the lowercase strings in your Supabase 'category' column
+  const categories = [
+    { value: 'book', label: 'Book' },
+    { value: 'academic paper', label: 'Academic Paper' }
+  ];
+
+  // Sync internal state when the selected PDF prop changes
   useEffect(() => {
     if (pdf) setFormData({ ...pdf });
   }, [pdf]);
@@ -24,18 +32,18 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
   const handleSave = async () => {
     setLoading(true);
     try {
-      // --- LOGIC TO IDENTIFY OLD VS NEW ---
+      // 1. Logic to track changes for audit logs
       const changeLogs = [];
       const fields = [
         { key: 'title', label: 'Title' },
         { key: 'author', label: 'Author' },
         { key: 'genre', label: 'Genre' },
+        { key: 'category', label: 'Category' },
         { key: 'published_date', label: 'Year' },
         { key: 'description', label: 'Description' }
       ];
 
       fields.forEach(({ key, label }) => {
-        // Compare current formData with original pdf props
         if (formData[key] !== pdf[key]) {
           const oldVal = pdf[key] || "Empty";
           const newVal = formData[key] || "Empty";
@@ -43,18 +51,18 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
         }
       });
 
-      // Join changes with a separator for readability in the table
       const finalAuditDescription = changeLogs.length > 0 
         ? `Edited: ${changeLogs.join(" | ")}` 
         : "Updated document metadata";
 
-      // 1. Update the PDF record
+      // 2. Update the 'pdfs' table in Supabase
       const { error: updateError } = await supabase
         .from('pdfs')
         .update({
           title: formData.title,
           author: formData.author,
           genre: formData.genre,
+          category: formData.category, // Connects to your database category column
           published_date: formData.published_date,
           description: formData.description
         })
@@ -62,7 +70,7 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
 
       if (updateError) throw updateError;
 
-      // 2. Insert the Log Entry with the detailed string
+      // 3. Insert the action into audit_logs
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         await supabase.from('audit_logs').insert([{
@@ -73,8 +81,8 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
         }]);
       }
 
-      onUpdate();
-      onClose();
+      onUpdate(); // Refresh the parent table data
+      onClose();  // Close the modal
     } catch (error) {
       console.error("Update failed:", error.message);
     } finally {
@@ -121,18 +129,38 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
             value={formData.author} onChange={handleChange} 
             sx={inputStyle} InputLabelProps={{ shrink: true }}
           />
+          
           <Stack direction="row" spacing={2}>
             <TextField 
               fullWidth label="Genre" name="genre" 
               value={formData.genre} onChange={handleChange} 
               sx={inputStyle} InputLabelProps={{ shrink: true }}
             />
-            <TextField 
-              fullWidth label="Year" name="published_date" 
-              value={formData.published_date} onChange={handleChange} 
-              sx={inputStyle} InputLabelProps={{ shrink: true }}
-            />
+            {/* Category Select Dropdown */}
+            <TextField
+              select
+              fullWidth
+              label="Category"
+              name="category"
+              value={formData.category || ''}
+              onChange={handleChange}
+              sx={inputStyle}
+              InputLabelProps={{ shrink: true }}
+            >
+              {categories.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
           </Stack>
+
+          <TextField 
+            fullWidth label="Year" name="published_date" 
+            value={formData.published_date} onChange={handleChange} 
+            sx={inputStyle} InputLabelProps={{ shrink: true }}
+          />
+
           <TextField 
             fullWidth label="Description" name="description" 
             multiline rows={3} value={formData.description} 

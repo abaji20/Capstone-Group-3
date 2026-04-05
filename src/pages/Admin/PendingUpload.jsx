@@ -1,22 +1,47 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  Box, Paper, Typography, Button, Stack, CircularProgress, 
-  useTheme, useMediaQuery, Container, Avatar, Collapse, Divider
+  Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
+  TableRow, Typography, CircularProgress, Stack, IconButton, Avatar,
+  useTheme, useMediaQuery, Container, TextField, InputAdornment, MenuItem, 
+  Collapse, Divider, Chip, Button, Card, CardContent
 } from '@mui/material';
-import { CheckCircle, Cancel, PictureAsPdf, ExpandMore, ExpandLess, HourglassEmpty } from '@mui/icons-material';
+import { 
+  CheckCircleOutline as CheckCircleIcon, 
+  HighlightOff as HighlightOffIcon, 
+  PictureAsPdf as PdfIcon,
+  Search as SearchIcon,
+  HourglassEmpty as HourglassIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
+} from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 
 const PendingUpload = () => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  const pageBg = isDarkMode ? '#141b2d' : '#f8fafc'; 
-  const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
+  // --- STYLING ---
+  const pageBg = isDarkMode ? '#0f172a' : '#ffffff'; 
+  const cardBg = isDarkMode ? '#1e293b' : 'rgba(255, 255, 255, 0.9)';
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
+  const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
 
+  const filterStyle = {
+    bgcolor: isDarkMode ? '#28334e' : '#ffffff',
+    borderRadius: '5px',
+    '& .MuiOutlinedInput-root': {
+      height: '55px',
+      borderRadius: '12px',
+      '& fieldset': { borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#e2e8f0' },
+    },
+  };
+
+  // --- STATE ---
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('All Types');
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => { fetchPendingRequests(); }, []);
@@ -33,7 +58,8 @@ const PendingUpload = () => {
     const { data } = await supabase
       .from('upload_requests')
       .select('*')
-      .eq('status', 'pending');
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
     setRequests(data || []);
     setLoading(false);
   };
@@ -50,13 +76,10 @@ const PendingUpload = () => {
       image_url: req.cover_url
     }]);
 
-    if (insertError) {
-      console.error("Error inserting PDF:", insertError);
-      return;
+    if (!insertError) {
+      await supabase.from('upload_requests').update({ status: 'approved' }).eq('id', req.id);
+      fetchPendingRequests();
     }
-
-    await supabase.from('upload_requests').update({ status: 'approved' }).eq('id', req.id);
-    fetchPendingRequests();
   };
 
   const handleReject = async (reqId) => {
@@ -64,83 +87,207 @@ const PendingUpload = () => {
     fetchPendingRequests();
   };
 
-  return (
-    <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
-      <Container maxWidth="lg">
-        <Box sx={{ mb: 4, borderBottom: `2px solid ${isDarkMode ? '#3b82f6' : '#1e3a8a'}`, pb: 2 }}>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>PENDING UPLOADS</Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>REVIEW SUBMITTED INFORMATION</Typography>
-        </Box>
+  const filteredRequests = requests.filter(req => {
+    const matchesSearch = (req.title?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          req.author?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesType = typeFilter === 'All Types' || req.category === typeFilter;
+    return matchesSearch && matchesType;
+  });
 
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
-        ) : requests.length > 0 ? (
-          <Stack spacing={2}>
-            {requests.map((req) => (
-              <Paper key={req.id} sx={{ p: 3, bgcolor: cardBg, borderRadius: 1.5, border: `1px solid ${borderCol}` }}>
-                <Stack direction={isMobile ? 'column' : 'row'} spacing={2} alignItems="center" justifyContent="space-between">
-                  <Stack direction="row" spacing={2} alignItems="center" sx={{ flexGrow: 1 }}>
-                    <Avatar variant="rounded" src={getImageUrl(req.cover_url)} sx={{ width: 70, height: 90, bgcolor: 'divider' }}>
-                      <PictureAsPdf />
-                    </Avatar>
-                    <Box>
-                      <Typography variant="h6" sx={{ fontWeight: 700 }}>{req.title}</Typography>
-                      <Typography variant="body1" color="text.secondary">{req.author} | {req.genre}</Typography>
-                      <Button 
-                        size="small" 
-                        onClick={() => setExpandedId(expandedId === req.id ? null : req.id)}
-                        startIcon={expandedId === req.id ? <ExpandLess /> : <ExpandMore />}
-                        sx={{ mt: 0.5, textTransform: 'none', fontWeight: 700 }}
-                      >
-                        {expandedId === req.id ? "Hide Details" : "View Details"}
-                      </Button>
-                    </Box>
-                  </Stack>
-
-                  <Stack direction="row" spacing={1.5}>
-                    <Button variant="contained" onClick={() => handleApprove(req)} startIcon={<CheckCircle />} sx={{ bgcolor: '#16a34a', fontWeight: 800 }}>Approve</Button>
-                    <Button variant="contained" onClick={() => handleReject(req.id)} startIcon={<Cancel />} sx={{ bgcolor: '#dc2626', fontWeight: 800 }}>Reject</Button>
-                  </Stack>
-                </Stack>
-
-                <Collapse in={expandedId === req.id} timeout="auto" unmountOnExit>
-                  <Box sx={{ mt: 2, p: 2, borderRadius: 2, bgcolor: isDarkMode ? 'rgba(0,0,0,0.2)' : '#f8fafc' }}>
-                    <Divider sx={{ mb: 2 }} />
-                    <Stack spacing={1}>
-                      <Typography variant="body1"><strong>Category:</strong> {req.category || 'Not specified'}</Typography>
-                      <Typography variant="body1"><strong>Published Date:</strong> {req.published_date || 'N/A'}</Typography>
-                      <Box>
-                        <Typography variant="body1" sx={{ fontWeight: 700 }}>Description:</Typography>
-                        <Typography variant="body1" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-                          {req.description || 'No description provided.'}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Box>
-                </Collapse>
-              </Paper>
-            ))}
-          </Stack>
-        ) : (
-          /* EMPTY STATE - Shown when requests.length === 0 */
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              py: 10,
-              opacity: 0.6 
-            }}
-          >
-            <HourglassEmpty sx={{ fontSize: 60, mb: 2, color: 'text.secondary' }} />
-            <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-              No pending uploads found
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              All submitted documents have been processed.
+  // --- SUB-COMPONENT FOR MOBILE CARDS ---
+  const RequestMobileCard = ({ req }) => (
+    <Card sx={{ mb: 2, bgcolor: cardBg, border: `1px solid ${borderCol}`, borderRadius: 2 }}>
+      <CardContent>
+        <Stack direction="row" spacing={2} alignItems="flex-start">
+          <Avatar variant="rounded" src={getImageUrl(req.cover_url)} sx={{ width: 60, height: 80, border: `1px solid ${borderCol}` }}>
+            <PdfIcon />
+          </Avatar>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{req.title}</Typography>
+            <Typography variant="body2" color="text.secondary">{req.author} • {req.genre}</Typography>
+            {/* TEXT ONLY CATEGORY FOR MOBILE */}
+            <Typography 
+              sx={{ 
+                mt: 1, 
+                fontWeight: 900, 
+                color: isDarkMode ? '#94a3b8' : '#64748b', 
+                fontSize: '0.75rem', 
+                letterSpacing: '0.5px' 
+              }}
+            >
+              {req.category?.toUpperCase() || 'N/A'}
             </Typography>
           </Box>
+        </Stack>
+        
+        <Box sx={{ mt: 2, p: 1.5, bgcolor: 'rgba(0,0,0,0.05)', borderRadius: 1 }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>REASON:</Typography>
+          <Typography variant="body2" sx={{ fontStyle: 'italic' }}>{req.upload_reason || "None"}</Typography>
+        </Box>
+
+        <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+          <Button 
+            fullWidth variant="contained" color="success" startIcon={<CheckCircleIcon />} 
+            onClick={() => handleApprove(req)} sx={{ fontWeight: 700 }}
+          >
+            Approve
+          </Button>
+          <Button 
+            fullWidth variant="contained" color="error" startIcon={<HighlightOffIcon />} 
+            onClick={() => handleReject(req.id)} sx={{ fontWeight: 700 }}
+          >
+            Reject
+          </Button>
+        </Stack>
+        
+        <Button 
+          fullWidth size="small" sx={{ mt: 1, textTransform: 'none' }}
+          onClick={() => setExpandedId(expandedId === req.id ? null : req.id)}
+          endIcon={expandedId === req.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        >
+          {expandedId === req.id ? "Hide Details" : "View Details"}
+        </Button>
+
+        <Collapse in={expandedId === req.id}>
+          <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${borderCol}` }}>
+            <Typography variant="caption" sx={{ fontWeight: 800 }}>DESCRIPTION:</Typography>
+            <Typography variant="body2" color="text.secondary">{req.description}</Typography>
+          </Box>
+        </Collapse>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <Box sx={{ p: { xs: 2, md: 4 }, bgcolor: pageBg, minHeight: '100vh' }}>
+      <Container maxWidth="xl">
+        
+        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} sx={{ mb: 3 }}>
+          <Box>
+            <Typography 
+              variant="h3" 
+              sx={{ 
+                fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', 
+                fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.2rem', md: '3rem' }, letterSpacing: '1px'
+              }}
+            >
+              PENDING UPLOADS
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
+              REVIEW AND MANAGE DOCUMENT SUBMISSIONS
+            </Typography>
+          </Box>
+        </Stack>
+
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
+          <TextField 
+            fullWidth placeholder="Search title or author..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment> }} 
+            sx={filterStyle}
+          />
+          <TextField select label="Type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} sx={{ ...filterStyle, minWidth: { md: 200 } }}>
+            <MenuItem value="All Types">All Types</MenuItem>
+            <MenuItem value="book">Book</MenuItem>
+            <MenuItem value="academic paper">Academic Paper</MenuItem>
+          </TextField>
+        </Stack>
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress color="secondary" /></Box>
+        ) : filteredRequests.length === 0 ? (
+          <Box sx={{ textAlign: 'center', mt: 8, opacity: 0.5 }}>
+            <HourglassIcon sx={{ fontSize: 60, mb: 2 }} />
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>NO PENDING UPLOADS</Typography>
+          </Box>
+        ) : (
+          <>
+            {/* MOBILE VIEW: CARDS */}
+            {isMobile ? (
+              <Box>
+                {filteredRequests.map((req) => <RequestMobileCard key={req.id} req={req} />)}
+              </Box>
+            ) : (
+              /* DESKTOP VIEW: TABLE */
+              <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}` }}>
+                <Table>
+                  <TableHead sx={{ bgcolor: headerColor }}>
+                    <TableRow>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>AUTHOR</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>GENRE</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>CATEGORY</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTIONS</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredRequests.map((req) => (
+                      <React.Fragment key={req.id}>
+                        <TableRow hover sx={{ '& > *': { borderBottom: 'unset' } }}>
+                          <TableCell>
+                            <Stack direction="row" alignItems="center" spacing={2}>
+                              <Avatar variant="rounded" src={getImageUrl(req.cover_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}` }}>
+                                <PdfIcon fontSize="small" />
+                              </Avatar>
+                              <Box>
+                                <Typography sx={{ fontWeight: 700 }}>{req.title}</Typography>
+                                <Button 
+                                  size="small" 
+                                  onClick={() => setExpandedId(expandedId === req.id ? null : req.id)}
+                                  startIcon={expandedId === req.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                  sx={{ textTransform: 'none', fontSize: '0.7rem', p: 0 }}
+                                >
+                                  Details
+                                </Button>
+                              </Box>
+                            </Stack>
+                          </TableCell>
+                          <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{req.author}</Typography></TableCell>
+                          <TableCell><Typography variant="body2">{req.genre}</Typography></TableCell>
+                          <TableCell>
+                            {/* TEXT ONLY CATEGORY FOR DESKTOP */}
+                            <Typography 
+                              variant="body2" 
+                              sx={{ 
+                                fontWeight: 800, 
+                                color: isDarkMode ? '#cbd5e1' : '#475569', 
+                                letterSpacing: '0.5px' 
+                              }}
+                            >
+                              {req.category?.toUpperCase() || 'N/A'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: '200px' }}>
+                            <Typography variant="body2" noWrap sx={{ fontStyle: 'italic', opacity: 0.8 }}>
+                              {req.upload_reason || "No reason provided."}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="center">
+                            <Stack direction="row" justifyContent="center" spacing={1}>
+                              <IconButton onClick={() => handleApprove(req)} sx={{ color: '#16a34a' }}><CheckCircleIcon sx={{ fontSize: 30 }} /></IconButton>
+                              <IconButton onClick={() => handleReject(req.id)} sx={{ color: '#dc2626' }}><HighlightOffIcon sx={{ fontSize: 30 }} /></IconButton>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
+                            <Collapse in={expandedId === req.id} timeout="auto" unmountOnExit>
+                              <Box sx={{ margin: 2, p: 2, bgcolor: isDarkMode ? 'rgba(0,0,0,0.2)' : '#f8fafc', borderRadius: 2 }}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Full Description:</Typography>
+                                <Typography variant="body2" color="text.secondary">{req.description}</Typography>
+                                <Divider sx={{ my: 2 }} />
+                                <Typography variant="caption" sx={{ fontWeight: 700 }}>Submitted: {new Date(req.created_at).toLocaleDateString()}</Typography>
+                              </Box>
+                            </Collapse>
+                          </TableCell>
+                        </TableRow>
+                      </React.Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </>
         )}
       </Container>
     </Box>

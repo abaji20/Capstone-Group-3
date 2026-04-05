@@ -1,86 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Typography, CircularProgress, Stack, TextField, 
-  MenuItem, Button, Container, IconButton, Divider, useTheme, Grid
+  MenuItem, Container, Divider, useTheme, Grid, useMediaQuery 
 } from '@mui/material';
-import { History, Search } from '@mui/icons-material';
-import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { PdfCard } from '../../shared';
 import { supabase } from '../../supabaseClient';
-
-// --- Reusable Responsive Row Component ---
-const DownloadRow = ({ title, items }) => {
-  const theme = useTheme();
-  const isDarkMode = theme.palette.mode === 'dark';
-  const scrollRef = useRef(null);
-
-  const scroll = (direction) => {
-    const { current } = scrollRef;
-    const scrollAmount = window.innerWidth < 600 ? 280 : 400;
-    if (direction === 'left') {
-      current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-    } else {
-      current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    }
-  };
-
-  if (items.length === 0) return null;
-
-  return (
-    <Box sx={{ mb: { xs: 4, md: 6 } }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Typography 
-          variant="h6" 
-          sx={{ 
-            fontWeight: 800, borderLeft: '5px solid #1976d2', pl: 1.5, 
-            textTransform: 'uppercase', 
-            color: theme.palette.text.primary,
-            fontSize: { xs: '0.85rem', sm: '1.1rem' }
-          }}
-        >
-          {title}
-        </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Button size="small" sx={{ color: theme.palette.text.secondary, fontWeight: 700, textTransform: 'none' }}>
-            See All
-          </Button>
-          <IconButton 
-            onClick={() => scroll('left')} 
-            size="small" 
-            sx={{ bgcolor: isDarkMode ? '#1e293b' : '#e2e8f0', color: theme.palette.text.primary, display: { xs: 'none', sm: 'inline-flex' } }}
-          >
-            <ArrowBackIosNewIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-          <IconButton 
-            onClick={() => scroll('right')} 
-            size="small" 
-            sx={{ bgcolor: isDarkMode ? '#1e293b' : '#e2e8f0', color: theme.palette.text.primary, display: { xs: 'none', sm: 'inline-flex' } }}
-          >
-            <ArrowForwardIosIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-        </Stack>
-      </Stack>
-
-      <Box 
-        ref={scrollRef}
-        sx={{ 
-          display: 'flex', gap: 2, overflowX: 'auto', whiteSpace: 'nowrap', 
-          pb: 2,
-          msOverflowStyle: 'none', scrollbarWidth: 'none', 
-          '&::-webkit-scrollbar': { display: 'none' }, 
-          WebkitOverflowScrolling: 'touch'
-        }}
-      >
-        {items.map((doc) => (
-          <Box key={doc.id} sx={{ minWidth: { xs: '200px', sm: '250px' }, flexShrink: 0 }}>
-            <PdfCard pdf={doc} />
-          </Box>
-        ))}
-      </Box>
-    </Box>
-  );
-};
 
 const MyDownloads = () => {
   const theme = useTheme();
@@ -91,15 +15,39 @@ const MyDownloads = () => {
   const [activeTab, setActiveTab] = useState('LIBRARY');
   const [searchQuery, setSearchQuery] = useState('');
   const [genreFilter, setGenreFilter] = useState('All');
-  const [yearFilter, setYearFilter] = useState('');
 
+  // Colors based on your provided typography and shading preferences
   const dynamicStyles = {
-    inputBg: isDarkMode ? '#1e293b' : '#f1f5f9',
-    textPrimary: theme.palette.text.primary,
-    textSecondary: theme.palette.text.secondary,
+    inputBg: isDarkMode ? '#1e293b' : '#f1f5f9', 
+    textPrimary: isDarkMode ? '#ffffff' : '#213C51',
+    accent: '#1976d2',
     borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
   };
 
+  /**
+   * Functional Download Logic
+   * Generates a signed URL from Supabase storage
+   */
+  const handleDownload = async (pdf) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('pdfs') 
+        .createSignedUrl(pdf.file_url, 60);
+
+      if (error) throw error;
+
+      const link = document.createElement('a');
+      link.href = data.signedUrl;
+      link.download = `${pdf.title || 'document'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Download error:', error.message);
+    }
+  };
+
+  // Fetch unique download history for the current user
   useEffect(() => {
     const fetchMyDownloads = async () => {
       try {
@@ -112,6 +60,7 @@ const MyDownloads = () => {
             .eq('user_id', user.id);
           
           if (error) throw error;
+
           const uniquePdfsMap = new Map();
           data?.forEach(item => {
             if (item.pdfs && !uniquePdfsMap.has(item.pdfs.id)) {
@@ -120,105 +69,98 @@ const MyDownloads = () => {
           });
           setDownloads(Array.from(uniquePdfsMap.values()));
         }
-      } catch (error) { console.error(error); } finally { setLoading(false); }
+      } catch (error) { 
+        console.error(error); 
+      } finally { 
+        setLoading(false); 
+      }
     };
     fetchMyDownloads();
   }, []);
 
-  const filteredDownloads = useMemo(() => {
+  /**
+   * Working Genre Logic:
+   * Dynamically extracts unique genres from your downloaded PDFs
+   */
+  const availableGenres = useMemo(() => {
+    const genres = downloads.map(doc => doc.genre).filter(Boolean);
+    return ['All', ...new Set(genres)];
+  }, [downloads]);
+
+  const filteredDocs = useMemo(() => {
     return downloads.filter((doc) => {
-      const matchSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const matchSearch = doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (doc.author && doc.author.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchGenre = genreFilter === 'All' || (doc.genre && doc.genre.includes(genreFilter));
-      const matchYear = yearFilter === '' || String(doc.published_date || '').includes(yearFilter);
+      
+      const matchGenre = genreFilter === 'All' || doc.genre === genreFilter;
+      
       const matchTab = activeTab === 'LIBRARY' || 
                        (activeTab === 'BOOKS' && doc.category?.toLowerCase() === 'book') ||
                        (activeTab === 'ACADEMIC PAPERS' && doc.category?.toLowerCase() === 'academic paper');
-      return matchSearch && matchGenre && matchYear && matchTab;
+      
+      return matchSearch && matchGenre && matchTab;
     });
-  }, [downloads, searchQuery, genreFilter, yearFilter, activeTab]);
+  }, [downloads, searchQuery, genreFilter, activeTab]);
 
   return (
-    // ADJUSTED: Reduced pt (padding-top) from 10/12 to 4/6 to remove excess white space
-    <Box sx={{ p: { xs: 2, md: 4 }, pt: { xs: 4, md: 6 }, bgcolor: 'background.default', minHeight: '100vh' }}>
+    <Box sx={{ p: { xs: 2, md: 4 }, pt: 12, bgcolor: 'background.default', minHeight: '100vh' }}>
       <Container maxWidth="xl">
         
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
-          <History sx={{ fontSize: { xs: 28, md: 36 }, color: '#38bdf8' }} />
-          <Typography variant="h4" sx={{ fontWeight: 800, color: dynamicStyles.textPrimary }}>
+        {/* HEADER SECTION */}
+        <Box sx={{ mb: 4 }}>
+          <Typography 
+            variant="h3" 
+            sx={{ 
+              fontStyle: 'italic', fontWeight: 900, 
+              color: dynamicStyles.textPrimary, 
+              fontFamily: "'Montserrat', sans-serif",
+              fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' },
+              letterSpacing: '1px',
+              textTransform: 'uppercase'
+            }}
+          >
             Download History
           </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
+            MANAGE, RESTORE, OR REDOWNLOAD YOUR SAVED FILES.
+          </Typography>
+        </Box>
+
+        {/* FILTERS SECTION */}
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 6 }}>
+          <TextField 
+            fullWidth size="medium" placeholder="Search history..." value={searchQuery} 
+            onChange={(e) => setSearchQuery(e.target.value)} 
+            InputProps={{ sx: { bgcolor: dynamicStyles.inputBg, borderRadius: 1 } }}
+            sx={{ '& fieldset': { border: 'none' } }}
+          />
+          <TextField
+            select size="medium" label="Genre" value={genreFilter}
+            onChange={(e) => setGenreFilter(e.target.value)}
+            sx={{ minWidth: { xs: '100%', sm: 200 }, bgcolor: dynamicStyles.inputBg, borderRadius: 1 }}
+            InputProps={{ sx: { '& fieldset': { border: 'none' } } }}
+          >
+            {availableGenres.map((option) => (
+              <MenuItem key={option} value={option}>{option}</MenuItem>
+            ))}
+          </TextField>
         </Stack>
 
-        <Grid container spacing={2} sx={{ mb: 4, alignItems: 'center' }}>
-          <Grid item xs={12} md={6} lg={5}>
-            <TextField 
-              fullWidth size="small"
-              placeholder="Search your library..." 
-              value={searchQuery} 
-              onChange={(e) => setSearchQuery(e.target.value)}
-              InputProps={{ 
-                startAdornment: <Search sx={{ mr: 1, color: dynamicStyles.textSecondary }} />,
-                sx: { color: dynamicStyles.textPrimary, bgcolor: dynamicStyles.inputBg, borderRadius: 2, height: 45 }
-              }}
-              sx={{ '& fieldset': { border: 'none' } }}
-            />
-          </Grid>
-          
-          <Grid item xs={6} md={3} lg={2}>
-            <TextField 
-              select fullWidth size="small" label="Genre" value={genreFilter} 
-              onChange={(e) => setGenreFilter(e.target.value)} 
-              sx={{ 
-                bgcolor: dynamicStyles.inputBg, borderRadius: 2,
-                '& .MuiInputLabel-root': { color: dynamicStyles.textSecondary },
-                '& fieldset': { border: 'none' }
-              }}
-            >
-              <MenuItem value="All">All Genres</MenuItem>
-              <MenuItem value="Fantasy">Fantasy</MenuItem>
-              <MenuItem value="Education">Education</MenuItem>
-            </TextField>
-          </Grid>
-
-          <Grid item xs={6} md={3} lg={2}>
-            <TextField 
-              fullWidth size="small" label="Year" value={yearFilter} 
-              onChange={(e) => setYearFilter(e.target.value)} 
-              sx={{ 
-                bgcolor: dynamicStyles.inputBg, borderRadius: 2,
-                '& .MuiInputLabel-root': { color: dynamicStyles.textSecondary },
-                '& fieldset': { border: 'none' }
-              }} 
-            />
-          </Grid>
-        </Grid>
-
-        <Stack 
-          direction="row" 
-          spacing={4} 
-          sx={{ 
-            mb: 4, 
-            overflowX: 'auto', 
-            pb: 1,
-            msOverflowStyle: 'none', 
-            scrollbarWidth: 'none', 
-            '&::-webkit-scrollbar': { display: 'none' } 
-          }}
-        >
+        {/* TAB NAVIGATION */}
+        <Stack direction="row" spacing={4} sx={{ mb: 2, overflowX: 'auto', pb: 1, '&::-webkit-scrollbar': { display: 'none' } }}>
           {['LIBRARY', 'BOOKS', 'ACADEMIC PAPERS'].map((tab) => (
             <Typography
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab);
+                setGenreFilter('All');
+              }}
               sx={{
-                fontWeight: 800,
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                whiteSpace: 'nowrap',
-                color: activeTab === tab ? dynamicStyles.textPrimary : dynamicStyles.textSecondary,
-                borderBottom: activeTab === tab ? '3px solid #38bdf8' : 'none',
-                pb: 0.5,
-                '&:hover': { color: dynamicStyles.textPrimary }
+                fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap',
+                color: activeTab === tab ? dynamicStyles.accent : 'text.secondary',
+                borderBottom: activeTab === tab ? `3px solid ${dynamicStyles.accent}` : 'none',
+                pb: 0.5, transition: '0.2s',
+                '&:hover': { color: dynamicStyles.accent }
               }}
             >
               {tab}
@@ -228,16 +170,24 @@ const MyDownloads = () => {
 
         <Divider sx={{ mb: 6, borderColor: dynamicStyles.borderColor }} />
 
+        {/* GRID LAYOUT */}
         {loading ? (
           <Box sx={{ textAlign: 'center', py: 10 }}><CircularProgress /></Box>
-        ) : filteredDownloads.length > 0 ? (
-          <DownloadRow 
-            title={activeTab === 'LIBRARY' ? "Recently Downloaded" : activeTab} 
-            items={filteredDownloads} 
-          />
+        ) : filteredDocs.length > 0 ? (
+          <Grid container spacing={3}>
+            {filteredDocs.map((doc) => (
+              <Grid item xs={6} sm={4} md={3} lg={2.4} key={doc.id}>
+                <PdfCard 
+                  pdf={doc} 
+                  downloadLabel="REDOWNLOAD" // Corrected prop name to match your PdfCard.js
+                  onDownload={() => handleDownload(doc)} 
+                />
+              </Grid>
+            ))}
+          </Grid>
         ) : (
           <Box sx={{ textAlign: 'center', py: 10 }}>
-            <Typography sx={{ color: dynamicStyles.textSecondary }}>No documents found.</Typography>
+            <Typography color="text.secondary">No documents found matching your filters.</Typography>
           </Box>
         )}
       </Container>

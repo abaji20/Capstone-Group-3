@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { 
   AppBar, Toolbar, Box, Avatar, Typography, ButtonBase, Menu, MenuItem, 
   ListItemIcon, Divider, IconButton, useTheme, Drawer, List, ListItem, 
-  ListItemText, useMediaQuery 
+  ListItemText, useMediaQuery, Switch
 } from '@mui/material';
 import { 
   History, LockReset, Person as PersonIcon, Brightness4, Brightness7, 
@@ -17,15 +17,13 @@ import { ColorModeContext } from '../App';
 
 const ClientTopbar = () => {
   const [anchorEl, setAnchorEl] = useState(null);
-  const [mobileOpen, setMobileOpen] = useState(false); // Mobile Drawer State
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [username, setUsername] = useState('Loading...');
   
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
   const colorMode = useContext(ColorModeContext);
-  
-  // Hook to detect if screen is smaller than 'md' (900px)
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   useEffect(() => {
@@ -39,11 +37,8 @@ const ClientTopbar = () => {
     fetchUser();
   }, []);
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
-  // Content for the Mobile Sidebar
   const drawer = (
     <Box sx={{ height: '100%', bgcolor: 'background.paper', color: 'text.primary' }}>
       <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: theme.palette.mode === 'dark' ? '#111827' : '#213C51' }}>
@@ -81,7 +76,7 @@ const ClientTopbar = () => {
         position="fixed" 
         sx={{ 
           backgroundColor: theme.palette.mode === 'dark' ? '#111827' : '#213C51', 
-          height: 80, 
+          height: 90, 
           justifyContent: 'center',
           transition: 'background-color 0.3s ease',
           zIndex: theme.zIndex.drawer + 1
@@ -91,13 +86,20 @@ const ClientTopbar = () => {
           {/* Left: Logo & Hamburger */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {isMobile && (
-              <IconButton color="inherit" onClick={handleDrawerToggle} sx={{ mr: 1 }}>
+              <IconButton color="inherit" onClick={handleDrawerToggle} sx={{ ml: 1, mr: 1 }}>
                 <MenuIcon />
               </IconButton>
             )}
-            <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: 1.5 }} onClick={() => navigate('/')}>
-              <Box component="img" src={logo} sx={{ height: { xs: 40, md: 50 } }} />
-              <Typography variant="h6" sx={{ fontWeight: 700, color: 'white', fontSize: { xs: '1rem', md: '1.25rem' } }}>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: 2 }} onClick={() => navigate('/')}>
+              <Box 
+                component="img" src={logo} 
+                sx={{ height: { md: 50 }, ml: { md: 4 }, display: { xs: 'none', md: 'block' } }} 
+              />
+              <Typography 
+                fontFamily="Cinzel Decorative, sans-serif" variant="h6" 
+                sx={{ fontWeight: 800, color: 'white', fontSize: { xs: '1.05rem', md: '1.5rem' } }}
+              >
                 Library Repository
               </Typography>
             </Box>
@@ -105,16 +107,6 @@ const ClientTopbar = () => {
 
           {/* Right: Navigation (Desktop) & Profile */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 3 } }}>
-            
-            {/* THEME TOGGLE (Always Visible) */}
-            <IconButton 
-              onClick={colorMode.toggleColorMode} 
-              sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)', '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' } }}
-            >
-              {theme.palette.mode === 'dark' ? <Brightness7 /> : <Brightness4 />}
-            </IconButton>
-
-            {/* Desktop Navigation Links */}
             {!isMobile && navLinks.client.filter(l => l.path !== '/my-downloads').map(item => (
               <ButtonBase key={item.name} component={Link} to={item.path} 
                 sx={{ 
@@ -127,7 +119,6 @@ const ClientTopbar = () => {
               </ButtonBase>
             ))}
             
-            {/* User Profile Trigger */}
             <ButtonBase onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, color: 'white', ml: 1 }}>
               <Avatar sx={{ bgcolor: theme.palette.mode === 'dark' ? theme.palette.primary.main : '#fff', color: '#213C51', width: 32, height: 32 }}>
                 <PersonIcon />
@@ -144,7 +135,7 @@ const ClientTopbar = () => {
             open={Boolean(anchorEl)} 
             onClose={() => setAnchorEl(null)} 
             PaperProps={{ 
-              sx: { mt: 1.5, borderRadius: 3, minWidth: 220, bgcolor: 'background.paper' } 
+              sx: { mt: 1.5, borderRadius: 3, minWidth: 240, bgcolor: 'background.paper' } 
             }}
           >
             <Box sx={{ px: 2, py: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#f8fafc' }}>
@@ -152,26 +143,44 @@ const ClientTopbar = () => {
               <Typography variant="caption" color="text.secondary">Client Account</Typography>
             </Box>
             <Divider />
+            
+            {/* INTEGRATED DARK MODE TOGGLE */}
+            <MenuItem onClick={colorMode.toggleColorMode}>
+              <ListItemIcon>
+                {theme.palette.mode === 'dark' ? <Brightness7 fontSize="small" color="primary" /> : <Brightness4 fontSize="small" color="primary" />}
+              </ListItemIcon>
+              <ListItemText 
+                primary={theme.palette.mode === 'dark' ? "Light Mode" : "Dark Mode"} 
+                primaryTypographyProps={{ variant: 'body2' }} 
+              />
+              <Switch 
+                size="small" 
+                checked={theme.palette.mode === 'dark'} 
+                sx={{ ml: 1 }}
+              />
+            </MenuItem>
+
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/my-downloads'); }}>
               <ListItemIcon><History fontSize="small" color="primary" /></ListItemIcon> 
               <Typography variant="body2">My Downloads</Typography>
             </MenuItem>
+            
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/reset-password'); }}>
               <ListItemIcon><LockReset fontSize="small" color="primary" /></ListItemIcon> 
               <Typography variant="body2">Reset Password</Typography>
             </MenuItem>
+            
             <Divider sx={{ my: 0.5 }} />
             <Box sx={{ px: 2, py: 1 }}><LogoutButton /></Box>
           </Menu>
         </Toolbar>
       </AppBar>
 
-      {/* MOBILE DRAWER */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={handleDrawerToggle}
-        ModalProps={{ keepMounted: true }} // Better open performance on mobile
+        ModalProps={{ keepMounted: true }} 
         sx={{
           display: { xs: 'block', md: 'none' },
           '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 260 },
@@ -180,7 +189,6 @@ const ClientTopbar = () => {
         {drawer}
       </Drawer>
       
-      {/* Spacer to prevent content from going under fixed AppBar */}
       <Box sx={{ height: 80 }} />
     </>
   );

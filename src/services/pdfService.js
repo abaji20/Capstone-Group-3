@@ -43,19 +43,23 @@ export const uploadPdfWithFiles = async (pdfFile, imageFile, metadata, userId) =
   return { success: true };
 };
 
-export const checkDuplicate = async (title, author, fileName) => {
+// UPDATED: Now checks only Title and Author, and returns all data (*) for the UI
+export const checkDuplicate = async (title, author) => {
   const { data, error } = await supabase
     .from('pdfs')
-    .select('id')
-    .ilike('title', title)
-    .ilike('author', author)
-    .ilike('file_url', `%${fileName}`)
-    .maybeSingle();
+    .select('*') 
+    .ilike('title', title.trim())   
+    .ilike('author', author.trim()) 
+    .limit(1); // FIX: Get the first match instead of expecting only one
 
-  if (error) throw error;
-  return data;
+  if (error) {
+    console.error("Duplicate check error:", error);
+    throw error;
+  }
+
+  // Since .limit(1) returns an array, we return the first item or null
+  return data.length > 0 ? data[0] : null;
 };
-
 export const deletePdf = async (id) => {
   const { data: record, error: fetchError } = await supabase
     .from('pdfs')
@@ -103,11 +107,6 @@ export const uploadNewPdf = uploadPdfWithFiles;
 
 // --- NEW FEATURE: DYNAMIC RANKING ---
 
-/**
- * Fetches the top 5 most downloaded PDFs using a Supabase RPC.
- * This requires the 'get_most_downloaded_pdfs' function to be 
- * created in your Supabase SQL Editor.
- */
 export const fetchFeaturedPdfs = async () => {
   const { data, error } = await supabase.rpc('get_most_downloaded_pdfs');
   if (error) {

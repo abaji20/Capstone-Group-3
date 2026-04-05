@@ -112,25 +112,22 @@ const Login = () => {
             overflow: 'hidden'
           }}>
             {/* LIGHT EFFECT (Visible only in Dark Mode) */}
-                    {isDarkMode && (
-          <Box sx={{
-            position: 'absolute',
-            top: -20, // Positioned near the top edge
-            left: '50%',
-            transform: 'translateX(-50%)',
-            // The conic-gradient creates the pa-cone beam effect
-            background: 'conic-gradient(from 180deg at 100% 0%, rgba(0, 0, 0, 0.1) 0%, rgba(255, 255, 255, 0.49) 10%, rgba(0, 0, 0, 0.1) 20%, transparent 40%)',
-            // Reduced blur to make the beam edges more defined
-            filter: 'blur(25px)', 
-            width: '100%', // Widens the beam across the panel
-            height: '100%', // Length of the beam
-            zIndex: 2,
-            pointerEvents: 'none',
-            // Adds a soft fade at the very bottom of the beam
-            maskImage: 'linear-gradient(to bottom, black 50%, transparent 90%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 90%)'
-          }} />
-        )}
+            {isDarkMode && (
+              <Box sx={{
+                position: 'absolute',
+                top: -20,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'conic-gradient(from 180deg at 100% 0%, rgba(0, 0, 0, 0.1) 0%, rgba(255, 255, 255, 0.49) 10%, rgba(0, 0, 0, 0.1) 20%, transparent 40%)',
+                filter: 'blur(25px)', 
+                width: '100%',
+                height: '100%',
+                zIndex: 2,
+                pointerEvents: 'none',
+                maskImage: 'linear-gradient(to bottom, black 50%, transparent 90%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 90%)'
+              }} />
+            )}
 
             {/* Background Cover Image */}
             <Box
@@ -160,9 +157,22 @@ const Login = () => {
               alignItems: 'center', 
             }}
           >
-            <Avatar src={logo} variant="square" sx={{ mb: 2, width: 100, height: 100, bgcolor: 'transparent' }} />
+            <Avatar src={logo} variant="square" sx={{ mb: 2, width: 80, height: 80, bgcolor: 'transparent' }} />
             
-            <Typography variant="h5" sx={{ mb: 3, fontWeight: 900, color: 'text.primary', letterSpacing: '-0.5px' }}>
+            {/* --- UPDATED TYPOGRAPHY TO MONTSERRAT --- */}
+            <Typography 
+              variant="h4" 
+              sx={{ 
+                mb: 3, 
+                fontStyle: 'italic', 
+                fontWeight: 800, 
+                color: isDarkMode ? '#f8fafc' : '#002c72', 
+                fontFamily: "Cinzel Decorative, sans-serif",
+                letterSpacing: '1px',
+                textAlign: 'center',
+                fontSize: { xs: '1.25rem', sm: '1.7rem' }
+              }}
+            >
               Library Repository
             </Typography>
             

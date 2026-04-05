@@ -8,10 +8,6 @@ import { supabase } from '../../supabaseClient';
 
 // Icons
 import HistoryIcon from '@mui/icons-material/History';
-import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
-import CategoryIcon from '@mui/icons-material/Category';
-import DescriptionIcon from '@mui/icons-material/Description';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import SearchIcon from '@mui/icons-material/Search';
 
 const AdminLogs = () => {
@@ -42,26 +38,33 @@ const AdminLogs = () => {
     applyFilters();
   }, [logs, searchTerm, roleFilter, dateFilter]);
 
-  const fetchLogs = async () => {
+   const fetchLogs = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('audit_logs')
-      .select(`
-        id, action_type, created_at, description,
-        pdfs!audit_logs_pdf_id_fkey(title),
-        profiles!fk_audit_logs_user_id(full_name, role)
-      `)
-      .order('created_at', { ascending: false });
-
-    if (error) console.error("Error fetching logs:", error);
-    else setLogs(data || []);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select(`
+          id, 
+          action_type, 
+          created_at, 
+          description,
+          pdfs(title),
+          profiles!audit_logs_user_id_fkey1(full_name, role, email)
+        `) 
+        .order('created_at', { ascending: false });
+  
+      if (error) throw error;
+      setLogs(data || []);
+    } catch (error) {
+      console.error("Error fetching logs:", error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const applyFilters = () => {
     let tempLogs = [...logs];
     
-    // Logic: Admin view only sees Admin and Client actions (Excludes Superadmin)
     tempLogs = tempLogs.filter(log => 
         log.profiles?.role?.toLowerCase() === 'admin' || 
         log.profiles?.role?.toLowerCase() === 'client'
@@ -85,17 +88,14 @@ const AdminLogs = () => {
     setFilteredLogs(tempLogs);
   };
 
-  // --- INTEGRATED COLOR & DARK MODE LOGIC ---
   const getRoleStyles = (role, darkMode) => {
     const r = role?.toLowerCase();
     if (darkMode) {
-        // Dark Mode Roles: Subtle backgrounds with vibrant text (as seen in your clips)
         if (r === 'superadmin') return { bg: '#f3e8ff1a', text: '#d8b4fe' }; 
         if (r === 'admin') return { bg: '#fef3c71a', text: '#fbbf24' }; 
         if (r === 'client') return { bg: '#dbeafe1a', text: '#60a5fa' }; 
         return { bg: '#1e293b', text: '#94a3b8' };
     } else {
-        // Light Mode Roles
         if (r === 'superadmin') return { bg: '#F3E8FF', text: '#7C3AED' }; 
         if (r === 'admin') return { bg: '#FEF3C7', text: '#D97706' }; 
         if (r === 'client') return { bg: '#DBEAFE', text: '#2563EB' }; 
@@ -135,7 +135,7 @@ const AdminLogs = () => {
         bgcolor: styles.bg,
         color: styles.text,
         textTransform: 'uppercase',
-        minWidth: '100px', // Uniform width to match Master Logs
+        minWidth: '100px',
         display: 'inline-flex',
         justifyContent: 'center'
       }}>
@@ -157,14 +157,24 @@ const AdminLogs = () => {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
+    <Box sx={{ p: { xs: 2, md:5 }, bgcolor: pageBg, minHeight: '100vh' }}>
       <Container maxWidth="xl">
-        {/* HEADER SECTION */}
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4, borderBottom: `2px solid ${isDarkMode ? '#3b82f6' : '#1e3a8a'}`, pb: 2 }}>
-          <HistoryIcon sx={{ fontSize: 32, color: isDarkMode ? '#3b82f6' : '#1e3a8a' }} />
+        
+        {/* UPDATED PAGE HEADER LANG */}
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800 }}>ACTIVITY HISTORY</Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, letterSpacing: 1 }}>SYSTEM AUDIT LOGS</Typography>
+            <Typography 
+              variant="h3" 
+              sx={{ 
+                fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', 
+                fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px'
+              }}
+            >
+              ACTIVITY LOGS
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
+              SYSTEM AUDIT AND USER ACTIVITIES
+            </Typography>
           </Box>
         </Stack>
 

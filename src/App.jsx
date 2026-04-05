@@ -72,6 +72,7 @@ function App() {
     typography: { fontFamily: 'Inter, sans-serif' }
   }), [mode]);
 
+  
   const fetchUserRole = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -145,7 +146,7 @@ function App() {
                 <Route path="/admin-logs" element={<AdminLogs />} />
                 <Route path="/pending-upload" element={<PendingUpload />} />
                 <Route path="/pending" element={<PendingActions />} />
-                <Route path="/" element={<Navigate to="/upload" />} />
+                <Route path="/" element={<Navigate to="/upload" />} />  
               </Route>
             )}
 

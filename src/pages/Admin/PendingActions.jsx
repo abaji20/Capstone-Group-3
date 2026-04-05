@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
-  TableRow, CircularProgress, Typography, Stack, Chip, useTheme, useMediaQuery 
+  TableRow, CircularProgress, Typography, Stack, Chip, useTheme, useMediaQuery, 
+  Container, IconButton, Button, Modal, Fade, Backdrop 
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
 // Icons
-import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import DescriptionIcon from '@mui/icons-material/Description';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import SpeakerNotesOffIcon from '@mui/icons-material/SpeakerNotesOff'; // Added for empty state
 
 const PendingActions = () => {
   const theme = useTheme();
@@ -18,13 +20,13 @@ const PendingActions = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Dynamic Styles
-  const pageBg = isDarkMode 
-    ? 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' 
-    : 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)';
-  
-  const cardBg = isDarkMode ? 'rgba(30, 41, 59, 0.8)' : 'rgba(255, 255, 255, 0.9)';
-  const headerBg = isDarkMode ? '#334155' : '#1e3a8a';
+  // --- DELETE MODAL STATE ---
+  const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
+
+  const pageBg = isDarkMode ? '#141b2d' : '#f8fafc'; 
+  const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
+  const headerBg = isDarkMode ? '#0f172a' : '#213C51';
+  const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
 
   useEffect(() => {
     fetchPendingRequests();
@@ -48,6 +50,21 @@ const PendingActions = () => {
     setLoading(false);
   };
 
+  // --- DELETE FUNCTION ---
+  const handleDelete = async () => {
+    const { error } = await supabase
+      .from('delete_requests')
+      .delete()
+      .eq('id', deleteModal.id);
+
+    if (error) {
+      alert("Failed to delete log: " + error.message);
+    } else {
+      setRequests(requests.filter(req => req.id !== deleteModal.id));
+      setDeleteModal({ open: false, id: null });
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'APPROVED': return 'success';
@@ -57,86 +74,142 @@ const PendingActions = () => {
   };
 
   return (
-    <Box sx={{ 
-      p: { xs: 2, sm: 3, md: 4 }, 
-      background: pageBg, 
-      minHeight: '100vh',
-      transition: 'all 0.3s ease'
-    }}>
-      {/* Header Section */}
-      <Stack 
-        direction={{ xs: 'column', sm: 'row' }} 
-        alignItems={{ xs: 'flex-start', sm: 'center' }} 
-        spacing={2} 
-        sx={{ mb: 4 }}
-      >
-        <PendingActionsIcon sx={{ fontSize: { xs: 40, md: 50 }, color: isDarkMode ? '#38bdf8' : '#1e3a8a' }} />
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 900, color: isDarkMode ? '#f8fafc' : '#0f172a', fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
-            Pending Deletions
-          </Typography>
-          <Typography variant="body2" sx={{ color: isDarkMode ? '#94a3b8' : '#1e3a8a', fontWeight: 600 }}>
-            Manage and track document removal requests.
-          </Typography>
-        </Box>
-      </Stack>
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 10 }}><CircularProgress /></Box>
-      ) : isMobile ? (
-        /* MOBILE VIEW: Card List */
-        <Stack spacing={2}>
-          {requests.map((req) => (
-            <Paper key={req.id} sx={{ p: 2, borderRadius: 1, bgcolor: cardBg, borderLeft: `6px solid ${theme.palette[getStatusColor(req.status)].main}` }}>
-              <Stack spacing={1}>
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800, color: isDarkMode ? '#f1f5f9' : '#1e293b' }}>
-                    {req.pdfs?.title || 'Untitled Document'}
-                  </Typography>
-                  <Chip label={req.status} color={getStatusColor(req.status)} size="small" sx={{ fontWeight: 700, borderRadius: 1 }} />
-                </Stack>
-                
-                <Typography variant="body2" sx={{ color: isDarkMode ? '#cbd5e1' : '#475569', fontStyle: 'italic' }}>
-                  "{req.reason}"
-                </Typography>
-
-                <Stack direction="row" alignItems="center" spacing={1} sx={{ pt: 1, borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-                  <AccessTimeIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
-                  <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600 }}>
-                    Requested on {new Date(req.created_at).toLocaleDateString()}
-                  </Typography>
-                </Stack>
-              </Stack>
-            </Paper>
-          ))}
+    <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
+      <Container maxWidth="xl">
+        
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+          <Box>
+            <Typography variant="h3" sx={{ 
+              fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', 
+              fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px'
+            }}>
+              DELETE REQUEST LOGS
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
+              RECORDS OF DOCUMENT REMOVAL AUTHORIZATIONS
+            </Typography>
+          </Box>
         </Stack>
-      ) : (
-        /* DESKTOP VIEW: Professional Table */
-        <TableContainer component={Paper} sx={{ borderRadius: 1, overflow: 'hidden', bgcolor: cardBg }}>
-          <Table>
-            <TableHead sx={{ bgcolor: headerBg }}>
-              <TableRow>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }}>STATUS</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {requests.map((req) => (
-                <TableRow key={req.id} hover>
-                  <TableCell sx={{ fontWeight: 700 }}>{req.pdfs?.title}</TableCell>
-                  <TableCell>{req.reason}</TableCell>
-                  <TableCell>
-                    <Chip label={req.status} color={getStatusColor(req.status)} variant="outlined" sx={{ fontWeight: 700 }} />
-                  </TableCell>
-                  <TableCell>{new Date(req.created_at).toLocaleDateString()}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+        ) : requests.length === 0 ? (
+          /* --- EMPTY STATE --- */
+          <Box sx={{ 
+            textAlign: 'center', py: 10, bgcolor: cardBg, borderRadius: 2, 
+            border: `1px dashed ${borderCol}`, display: 'flex', flexDirection: 'column', alignItems: 'center' 
+          }}>
+            <SpeakerNotesOffIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+            <Typography variant="h6" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+              No pending logs
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.disabled' }}>
+              All request histories have been cleared or none exist.
+            </Typography>
+          </Box>
+        ) : (
+          <>
+            {isMobile ? (
+              /* MOBILE VIEW */
+              <Stack spacing={2}>
+                {requests.map((req) => (
+                  <Paper key={req.id} sx={{ 
+                    p: 2, borderRadius: 1, bgcolor: cardBg, 
+                    borderLeft: `6px solid ${theme.palette[getStatusColor(req.status)].main}`,
+                    border: `1px solid ${borderCol}`, boxShadow: 'none'
+                  }}>
+                    <Stack spacing={1}>
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                          {req.pdfs?.title || 'Untitled Document'}
+                        </Typography>
+                        <Chip label={req.status} color={getStatusColor(req.status)} size="small" />
+                      </Stack>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                        "{req.reason}"
+                      </Typography>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 1, borderTop: `1px solid ${borderCol}` }}>
+                        <Typography variant="caption" sx={{ color: '#94a3b8' }}>
+                          {new Date(req.created_at).toLocaleDateString()}
+                        </Typography>
+                        <Button 
+                          size="small" 
+                          color="error" 
+                          startIcon={<DeleteOutlineIcon />}
+                          onClick={() => setDeleteModal({ open: true, id: req.id })}
+                        >
+                          Clear
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </Paper>
+                ))}
+              </Stack>
+            ) : (
+              /* DESKTOP VIEW */
+              <TableContainer component={Paper} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
+                <Table>
+                  <TableHead sx={{ bgcolor: headerBg }}>
+                    <TableRow>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">STATUS</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTIONS</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {requests.map((req) => (
+                      <TableRow key={req.id} hover>
+                        <TableCell sx={{ fontWeight: 700 }}>{req.pdfs?.title}</TableCell>
+                        <TableCell sx={{ color: 'text.secondary' }}>{req.reason}</TableCell>
+                        <TableCell align="center">
+                          <Chip label={req.status} color={getStatusColor(req.status)} size="small" sx={{ fontWeight: 900, fontSize: '0.65rem' }} />
+                        </TableCell>
+                        <TableCell sx={{ color: 'text.secondary' }}>
+                          {new Date(req.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell align="center">
+                          <IconButton color="error" onClick={() => setDeleteModal({ open: true, id: req.id })}>
+                            <DeleteOutlineIcon />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </>
+        )}
+      </Container>
+
+      {/* --- CONFIRMATION MODAL --- */}
+      <Modal
+        open={deleteModal.open}
+        onClose={() => setDeleteModal({ open: false, id: null })}
+        closeAfterTransition
+        BackdropComponent={Backdrop}
+        BackdropProps={{ timeout: 500 }}
+      >
+        <Fade in={deleteModal.open}>
+          <Box sx={{
+            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            width: { xs: '90%', sm: 400 }, bgcolor: cardBg, p: 4, borderRadius: 2, textAlign: 'center',
+            border: `1px solid ${borderCol}`, outline: 'none'
+          }}>
+            <WarningAmberIcon sx={{ fontSize: 60, color: '#ef4444', mb: 2 }} />
+            <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>Delete Log Entry?</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+              This will permanently remove this record from the delete request history.
+            </Typography>
+            <Stack direction="row" spacing={2}>
+              <Button fullWidth onClick={() => setDeleteModal({ open: false, id: null })}>Cancel</Button>
+              <Button fullWidth variant="contained" color="error" onClick={handleDelete}>Delete</Button>
+            </Stack>
+          </Box>
+        </Fade>
+      </Modal>
     </Box>
   );
 };

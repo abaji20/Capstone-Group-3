@@ -1,0 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Metamorphous&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Poppins:ital,wght@0,100..900;1,100..900&family=Unna:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+body {
+  margin: 0;
+  padding: 0;
+  /* Default body font set to Poppins */
+  font-family: 'Poppins', sans-serif; 
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Helper class for Montserrat */
+.font-montserrat {
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* Helper class for Cinzel Decorative */
+.font-cinzel {
+  font-family: 'Cinzel Decorative', serif;
+}
