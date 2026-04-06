@@ -49,7 +49,7 @@ const Login = () => {
 
     // redirectTo is set to your local environment for now
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://capstone-group-3.vercel.app/forgot-password',
+      redirectTo: 'https://capstone-group-3-swart.vercel.app/forgot-password',
     });
 
     if (error) {
