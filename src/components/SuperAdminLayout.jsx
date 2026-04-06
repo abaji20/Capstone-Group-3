@@ -4,16 +4,13 @@ import { Box, AppBar, Toolbar, IconButton, Typography, useTheme } from '@mui/mat
 import MenuIcon from '@mui/icons-material/Menu';
 import SuperAdminSidebar from './SuperAdminSidebar';
 
-const expandedWidth = 280;
 const collapsedWidth = 85;
 
 const SuperAdminLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isMini, setIsMini] = useState(false);
   const theme = useTheme();
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
-  const handleToggleMini = () => setIsMini(!isMini);
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: theme.palette.mode === 'dark' ? '#0f172a' : '#f8fafc' }}>
@@ -24,7 +21,8 @@ const SuperAdminLayout = () => {
         sx={{ 
           display: { md: 'none' }, 
           bgcolor: theme.palette.mode === 'dark' ? '#1e293b' : '#213C51', 
-          zIndex: theme.zIndex.drawer + 1 
+          // Standard zIndex so Sidebar can slide over it
+          zIndex: theme.zIndex.appBar 
         }}
       >
         <Toolbar>
@@ -35,11 +33,10 @@ const SuperAdminLayout = () => {
         </Toolbar>
       </AppBar>
 
+      {/* Sidebar */}
       <SuperAdminSidebar 
         mobileOpen={mobileOpen} 
         handleDrawerToggle={handleDrawerToggle} 
-        isMini={isMini}
-        handleToggleMini={handleToggleMini}
       />
 
       <Box 
@@ -47,11 +44,9 @@ const SuperAdminLayout = () => {
         sx={{ 
           flexGrow: 1, 
           p: { xs: 2, md: 4 }, 
-          // Dynamically adjust margin and width based on sidebar
-          width: { md: `calc(100% - ${isMini ? collapsedWidth : expandedWidth}px)` },
+          ml: { md: `${collapsedWidth}px` },
           mt: { xs: 8, md: 0 },
           minHeight: '100vh',
-          transition: 'width 0.3s ease'
         }}
       >
         <Outlet /> 

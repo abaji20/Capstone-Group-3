@@ -2,12 +2,10 @@ import React, { useContext, useEffect, useState } from 'react';
 import { 
   Drawer, List, ListItem, ListItemButton, ListItemIcon, 
   ListItemText, Typography, Box, useTheme, useMediaQuery, 
-  Avatar, IconButton, Tooltip 
+  Avatar, Tooltip 
 } from '@mui/material';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  ChevronLeft as ChevronLeftIcon, 
-  ChevronRight as ChevronRightIcon,
   Logout as LogoutIcon,
   AccountCircle as AccountCircleIcon,
   Brightness4 as Brightness4Icon,
@@ -20,13 +18,16 @@ import { ColorModeContext } from '../App';
 const expandedWidth = 280;
 const collapsedWidth = 85;
 
-const AdminSidebar = ({ mobileOpen, handleDrawerToggle, isMini, handleToggleMini }) => {
+const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
   const colorMode = useContext(ColorModeContext);
+  
   const [fullName, setFullName] = useState('Loading...');
+  // Internal state for hover-to-expand logic
+  const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -44,100 +45,99 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle, isMini, handleToggleMini
     navigate('/login');
   };
 
+  // Determine if we show the mini or expanded version
+  const isMini = !isMobile && !isHovered;
+
   const drawerContent = (
-    <Box sx={{ 
-      height: '100%', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      backgroundColor: theme.palette.mode === 'dark' ? '#111827' : '#213C51', 
-      color: 'white',
-      borderRadius: 0, 
-      transition: 'width 0.3s ease',
-      overflowX: 'hidden',
-      position: 'relative',
-    }}>
-      
-      {/* TOGGLE SECTION */}
+    <Box 
+      onMouseEnter={() => !isMobile && setIsHovered(true)}
+      onMouseLeave={() => !isMobile && setIsHovered(false)}
+      sx={{ 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        backgroundColor: theme.palette.mode === 'dark' ? '#111827' : '#213C51', 
+        color: 'white',
+        transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)', // Exact same transition as SuperAdmin
+        width: isMini ? collapsedWidth : expandedWidth,
+        borderRight: '1px solid rgba(255,255,255,0.05)',
+        position: 'relative',
+        overflow: 'visible', 
+      }}
+    >
+      {/* PROFILE SECTION */}
       <Box sx={{ 
         display: 'flex', 
-        justifyContent: isMini ? 'center' : 'flex-end', 
-        p: 1,
-        minHeight: 50 
+        alignItems: 'center',
+        justifyContent: isMini ? 'center' : 'flex-start',
+        px: isMini ? 0 : 3,
+        minHeight: 100 
       }}>
-        {!isMobile && (
-          <IconButton 
-            onClick={handleToggleMini}
-            sx={{
-              color: 'white',
-              bgcolor: 'rgba(255,255,255,0.15)',
-              width: 32,
-              height: 32,
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' }
-            }}
-          >
-            {isMini ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-          </IconButton>
-        )}
-      </Box>
-
-      {/* PROFILE SECTION */}
-      <Box sx={{ pb: isMini ? 2 : 4, px: 2, textAlign: 'center' }}>
         <Avatar 
           sx={{ 
             bgcolor: '#3b82f6', 
-            width: isMini ? 40 : 70, 
-            height: isMini ? 40 : 70, 
-            mx: 'auto', 
-            mb: isMini ? 0 : 2,
+            width: isMini ? 32 : 45, 
+            height: isMini ? 32 : 45, 
+            mx: isMini ? 'auto' : 0,
             border: '2px solid rgba(255,255,255,0.2)',
-            transition: 'all 0.3s ease'
+            transition: 'all 0.2s'
           }}
         >
-          <AccountCircleIcon sx={{ fontSize: isMini ? 24 : 50 }} />
+          <AccountCircleIcon sx={{ fontSize: isMini ? 20 : 28 }} />
         </Avatar>
         {!isMini && (
-          <>
-            <Typography variant="body1" sx={{ fontWeight: 800, mt: 1 }}>
+          <Box sx={{ ml: 2, textAlign: 'left', whiteSpace: 'nowrap' }}>
+            <Typography variant="body1" sx={{ fontWeight: 800, color: 'white' }}>
               {fullName}
             </Typography>
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
+            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.7rem' }}>
               Administrator
             </Typography>
-          </>
+          </Box>
         )}
       </Box>
 
       {/* NAVIGATION */}
-      <List sx={{ px: isMini ? 0 : 1.5, flexGrow: 1 }}>
+      <List sx={{ px: 1.5, flexGrow: 1 }}>
         {navLinks.admin.map((item) => {
           const isActive = location.pathname === item.path;
+          
           const buttonContent = (
             <ListItemButton 
               component={Link} 
               to={item.path}
+              onClick={() => isMobile && handleDrawerToggle()}
               sx={{ 
-                borderRadius: isMini ? 0 : '8px',
-                py: 1.5,
+                borderRadius: '8px',
+                py: 1.2,
                 mb: 0.5,
                 justifyContent: isMini ? 'center' : 'flex-start',
-                backgroundColor: isActive ? '#3b82f6' : 'transparent',
-                '&:hover': { backgroundColor: isActive ? '#3b82f6' : 'rgba(255, 255, 255, 0.08)' }
+                backgroundColor: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.05)' },
+                position: 'relative',
+                transition: 'all 0.1s ease',
+                borderLeft: isActive ? '4px solid #3b82f6' : '3px solid transparent',
               }}
             >
               <ListItemIcon sx={{ 
-                color: 'white', 
-                minWidth: isMini ? 0 : 45, 
+                color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)', 
+                minWidth: isMini ? 0 : 40, 
                 display: 'flex',
                 justifyContent: 'center' 
               }}>
                 {React.isValidElement(item.icon) 
-                  ? React.cloneElement(item.icon, { sx: { fontSize: 24 } }) 
+                  ? React.cloneElement(item.icon, { sx: { fontSize: 22 } }) 
                   : null}
               </ListItemIcon>
               {!isMini && (
                 <ListItemText 
                   primary={item.name} 
-                  primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: isActive ? 700 : 500 }} 
+                  primaryTypographyProps={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: isActive ? 600 : 400,
+                    color: isActive ? 'white' : 'rgba(255,255,255,0.7)',
+                    whiteSpace: 'nowrap'
+                  }} 
                 />
               )}
             </ListItemButton>
@@ -145,23 +145,28 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle, isMini, handleToggleMini
 
           return (
             <ListItem key={item.name} disablePadding>
-              {isMini ? <Tooltip title={item.name} placement="right">{buttonContent}</Tooltip> : buttonContent}
+              {isMini ? (
+                <Tooltip title={item.name} placement="right" arrow>
+                  {buttonContent}
+                </Tooltip>
+              ) : buttonContent}
             </ListItem>
           );
         })}
       </List>
 
       {/* BOTTOM TOOLS */}
-      <Box sx={{ p: 2, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        {!isMini && (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, px: 1 }}>
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>THEME</Typography>
-            <IconButton onClick={colorMode.toggleColorMode} size="small" sx={{ color: 'white' }}>
-              {theme.palette.mode === 'dark' ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}
-            </IconButton>
-          </Box>
-        )}
-        
+      <Box sx={{ p: 2, mt: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <ListItemButton 
+          onClick={colorMode.toggleColorMode}
+          sx={{ borderRadius: '8px', justifyContent: isMini ? 'center' : 'flex-start', mb: 1 }}
+        >
+          <ListItemIcon sx={{ color: 'rgba(255,255,255,0.7)', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
+            {theme.palette.mode === 'dark' ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}
+          </ListItemIcon>
+          {!isMini && <ListItemText primary="Appearance" primaryTypographyProps={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }} />}
+        </ListItemButton>
+
         <ListItemButton 
           onClick={handleLogout}
           sx={{ 
@@ -170,23 +175,24 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle, isMini, handleToggleMini
             justifyContent: isMini ? 'center' : 'flex-start'
           }}
         >
-          <ListItemIcon sx={{ color: 'inherit', minWidth: isMini ? 0 : 45, justifyContent: 'center' }}>
+          <ListItemIcon sx={{ color: 'inherit', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
             <LogoutIcon fontSize="small" />
           </ListItemIcon>
-          {!isMini && <ListItemText primary="Logout" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.9rem' }} />}
+          {!isMini && <ListItemText primary="Logout" primaryTypographyProps={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap' }} />}
         </ListItemButton>
       </Box>
     </Box>
   );
 
   return (
-    <Box component="nav" sx={{ width: { md: isMini ? collapsedWidth : expandedWidth }, flexShrink: { md: 0 }, transition: 'width 0.3s' }}>
+    <Box component="nav">
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={handleDrawerToggle}
         sx={{
           display: { xs: 'block', md: 'none' },
+          zIndex: theme.zIndex.drawer + 2, 
           '& .MuiDrawer-paper': { width: expandedWidth, border: 'none', bgcolor: '#213C51' },
         }}
       >
@@ -195,14 +201,14 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle, isMini, handleToggleMini
 
       <Drawer
         variant="permanent"
-        open
         sx={{
           display: { xs: 'none', md: 'block' },
           '& .MuiDrawer-paper': { 
             width: isMini ? collapsedWidth : expandedWidth, 
             border: 'none',
-            bgcolor: 'transparent',
-            transition: 'width 0.3s'
+            overflowX: 'visible',
+            transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            zIndex: theme.zIndex.drawer + 1,
           },
         }}
       >

@@ -1,10 +1,11 @@
-import { useEffect, useState, useMemo, createContext, useContext } from 'react';
+import { useEffect, useState, useMemo, createContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 
 // MUI Theme Imports
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { Box, Typography } from '@mui/material';
 
 // Layouts
 import SuperAdminLayout from './components/SuperAdminLayout';
@@ -14,37 +15,30 @@ import ClientLayout from './components/ClientLayout';
 // Auth
 import Login from './pages/Auth/Login';
 import ResetPassword from './pages/Auth/ResetPassword';
+import ForgotPasswordPage from './pages/Auth/ForgotPasswordPage';
 
-// Client Pages
-import Browse from './pages/Client/Browse';
-import MyDownloads from './pages/Client/MyDownloads';
-import RequestUpload from './pages/Client/RequestUpload';
-
-// SuperAdmin Pages
+// Pages
 import Dashboard from './pages/SuperAdmin/Dashboard';
 import ManageAccount from './pages/SuperAdmin/ManageAccount';
 import Logs from './pages/SuperAdmin/Logs';
 import DeleteRequests from './pages/SuperAdmin/DeleteRequest';
 import Archived from './pages/SuperAdmin/Archived';
-
-// Admin Pages
 import PdfUploads from './pages/Admin/PdfUploads';
 import EditPDFs from './pages/Admin/EditPdfs';
 import PendingActions from './pages/Admin/PendingActions';
 import AdminLogs from './pages/Admin/AdminLogs';
 import PendingUpload from './pages/Admin/PendingUpload';
+import Browse from './pages/Client/Browse';
+import MyDownloads from './pages/Client/MyDownloads';
+import RequestUpload from './pages/Client/RequestUpload';
 
-// 1. Create a Context to hold the toggle function
 export const ColorModeContext = createContext({ toggleColorMode: () => {} });
 
 function App() {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // 2. State for Dark Mode (Persisted in LocalStorage)
   const [mode, setMode] = useState(localStorage.getItem('themeMode') || 'light');
 
-  // 3. Define the Theme Toggle Logic
   const colorMode = useMemo(() => ({
     toggleColorMode: () => {
       setMode((prevMode) => {
@@ -55,7 +49,6 @@ function App() {
     },
   }), []);
 
-  // 4. Create the Actual MUI Theme object
   const theme = useMemo(() => createTheme({
     palette: {
       mode,
@@ -72,7 +65,6 @@ function App() {
     typography: { fontFamily: 'Inter, sans-serif' }
   }), [mode]);
 
-  
   const fetchUserRole = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -80,7 +72,6 @@ function App() {
         .select('role')
         .eq('id', userId)
         .single();
-      
       if (data) setRole(data.role);
     } catch (err) {
       console.error("Error fetching role:", err);
@@ -90,20 +81,32 @@ function App() {
   };
 
   useEffect(() => {
+    // Check if user is currently resetting password
+    const isResetting = window.location.pathname === '/forgot-password';
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      const isCreatingAccount = sessionStorage.getItem('isCreatingAccount') === 'true';
-      if (session && !isCreatingAccount) {
+      // Logic: Do NOT fetch role if on the forgot-password page
+      if (session && !isResetting) {
         fetchUserRole(session.user.id);
       } else {
         setLoading(false);
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const isCreatingAccount = sessionStorage.getItem('isCreatingAccount') === 'true';
-      if (session && !isCreatingAccount) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const isCurrentlyResetting = window.location.pathname === '/forgot-password';
+      
+      // If a recovery event is triggered or they are on the recovery page, 
+      // treat them as a guest (role = null)
+      if (event === 'PASSWORD_RECOVERY' || isCurrentlyResetting) {
+        setRole(null);
+        setLoading(false);
+        return;
+      }
+
+      if (session) {
         fetchUserRole(session.user.id);
-      } else if (!session) {
+      } else {
         setRole(null);
         setLoading(false);
       }
@@ -113,19 +116,19 @@ function App() {
   }, []);
 
   if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      Loading System...
-    </div>
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: 'background.default' }}>
+      <Typography variant="h6" color="text.secondary">Loading System...</Typography>
+    </Box>
   );
 
   return (
     <ColorModeContext.Provider value={colorMode}>
       <ThemeProvider theme={theme}>
-        {/* CssBaseline makes sure the background color of the body updates automatically */}
         <CssBaseline />
         <Router>
           <Routes>
             <Route path="/login" element={role ? <Navigate to="/" /> : <Login />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
             {role === 'superadmin' && (
               <Route element={<SuperAdminLayout />}>

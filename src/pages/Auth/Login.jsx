@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { ColorModeContext } from '../../App'; 
 import logo from '../../assets/logo.png'; 
-import cover from '../../assets/cover.jpg'; // Import the cover image
+import cover from '../../assets/cover.jpg'; 
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -47,14 +47,15 @@ const Login = () => {
     setError(null);
     setMessage(null);
 
+    // redirectTo is set to your local environment for now
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: 'http://localhost:5173/forgot-password',
     });
 
     if (error) {
       setError(error.message);
     } else {
-      setMessage("Password reset link sent to your email!");
+      setMessage("Password reset link sent! Please check your Gmail inbox.");
     }
   };
 
@@ -111,7 +112,6 @@ const Login = () => {
             bgcolor: '#1e293b',
             overflow: 'hidden'
           }}>
-            {/* LIGHT EFFECT (Visible only in Dark Mode) */}
             {isDarkMode && (
               <Box sx={{
                 position: 'absolute',
@@ -129,7 +129,6 @@ const Login = () => {
               }} />
             )}
 
-            {/* Background Cover Image */}
             <Box
               component="img"
               src={cover}
@@ -159,7 +158,6 @@ const Login = () => {
           >
             <Avatar src={logo} variant="square" sx={{ mb: 2, width: 80, height: 80, bgcolor: 'transparent' }} />
             
-            {/* --- UPDATED TYPOGRAPHY TO MONTSERRAT --- */}
             <Typography 
               variant="h4" 
               sx={{ 

@@ -28,6 +28,6 @@ export const navLinks = {
   client: [ 
     { name: 'BROWSE', path: '/browse', icon: <LibraryBooksIcon /> },
     { name: 'UPLOAD', path: '/request-upload', icon: <PublishIcon /> },
-    { name: 'My Downloads', path: '/my-downloads', icon: <HistoryIcon /> },
+    { name: 'Downloads', path: '/my-downloads', icon: <HistoryIcon /> },
   ]
 };
