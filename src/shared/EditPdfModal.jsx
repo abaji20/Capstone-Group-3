@@ -1,88 +1,117 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Dialog, DialogTitle, DialogContent, DialogActions, 
-  Button, TextField, Stack, useTheme, MenuItem 
+  Button, TextField, Stack, useTheme, MenuItem, Box, Typography, Avatar 
 } from '@mui/material';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { supabase } from '../supabaseClient'; 
 
 const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
   
-  // Dynamic styles based on theme
   const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
   const inputBg = isDarkMode ? '#28334e' : '#f1f5f9';
 
   const [formData, setFormData] = useState({ ...pdf });
   const [loading, setLoading] = useState(false);
+  const [newImageFile, setNewImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
-  // Categories match the lowercase strings in your Supabase 'category' column
   const categories = [
     { value: 'book', label: 'Book' },
     { value: 'academic paper', label: 'Academic Paper' }
   ];
 
-  // Sync internal state when the selected PDF prop changes
   useEffect(() => {
-    if (pdf) setFormData({ ...pdf });
+    if (pdf) {
+      setFormData({ ...pdf });
+      setImagePreview(getImageUrl(pdf.image_url));
+      setNewImageFile(null);
+    }
   }, [pdf]);
 
+  const getImageUrl = (path) => {
+    if (!path) return null;
+    const { data } = supabase.storage.from('pdfs').getPublicUrl(path);
+    return data.publicUrl;
+  };
+
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setNewImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleSave = async () => {
     setLoading(true);
     try {
-      // 1. Logic to track changes for audit logs
+      let finalImageUrl = pdf.image_url;
+
+      if (newImageFile) {
+        const fileExt = newImageFile.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `covers/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('pdfs')
+          .upload(filePath, newImageFile);
+
+        if (uploadError) throw uploadError;
+        finalImageUrl = filePath;
+      }
+
+      // --- AUDIT LOG LOGIC: TRACKING YEAR ---
       const changeLogs = [];
       const fields = [
         { key: 'title', label: 'Title' },
         { key: 'author', label: 'Author' },
         { key: 'genre', label: 'Genre' },
         { key: 'category', label: 'Category' },
-        { key: 'published_date', label: 'Year' },
-        { key: 'description', label: 'Description' }
+        { key: 'published_date', label: 'Year' } // Correctly added field
       ];
 
       fields.forEach(({ key, label }) => {
-        if (formData[key] !== pdf[key]) {
-          const oldVal = pdf[key] || "Empty";
-          const newVal = formData[key] || "Empty";
-          changeLogs.push(`${label}: "${oldVal}" → "${newVal}"`);
+        // String comparison handles the transition from number (DB) to string (Input)
+        if (formData[key]?.toString() !== pdf[key]?.toString()) {
+          changeLogs.push(`${label}: "${pdf[key] || 'Empty'}" → "${formData[key] || 'Empty'}"`);
         }
       });
+      if (newImageFile) changeLogs.push("Cover Image updated");
 
-      const finalAuditDescription = changeLogs.length > 0 
-        ? `Edited: ${changeLogs.join(" | ")}` 
-        : "Updated document metadata";
-
-      // 2. Update the 'pdfs' table in Supabase
+      // --- SUPABASE UPDATE ---
       const { error: updateError } = await supabase
         .from('pdfs')
         .update({
           title: formData.title,
           author: formData.author,
           genre: formData.genre,
-          category: formData.category, // Connects to your database category column
+          category: formData.category,
           published_date: formData.published_date,
-          description: formData.description
+          description: formData.description,
+          image_url: finalImageUrl
         })
         .eq('id', pdf.id);
 
       if (updateError) throw updateError;
 
-      // 3. Insert the action into audit_logs
+      // --- INSERT AUDIT LOG ---
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         await supabase.from('audit_logs').insert([{
           user_id: user.id,
           pdf_id: pdf.id,
           action_type: 'Edit',
-          description: finalAuditDescription 
+          description: changeLogs.length > 0 ? `Edited: ${changeLogs.join(" | ")}` : "Metadata update"
         }]);
       }
 
-      onUpdate(); // Refresh the parent table data
-      onClose();  // Close the modal
+      onUpdate();
+      onClose();
     } catch (error) {
       console.error("Update failed:", error.message);
     } finally {
@@ -95,97 +124,48 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
       borderRadius: '8px',
       backgroundColor: inputBg,
       '& fieldset': { border: 'none' },
-      '&.Mui-focused fieldset': { border: `1px solid ${isDarkMode ? '#3b82f6' : '#94a3b8'}` },
     }
   };
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={onClose} 
-      fullWidth 
-      maxWidth="sm"
-      PaperProps={{
-        sx: { 
-          borderRadius: 4, 
-          bgcolor: cardBg,
-          backgroundImage: 'none'
-        }
-      }}
-    >
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: 4, bgcolor: cardBg, backgroundImage: 'none' } }}>
       <DialogTitle sx={{ fontWeight: 800, color: isDarkMode ? '#f8fafc' : '#1e3a8a', pt: 3 }}>
         Edit Document Details
       </DialogTitle>
 
-      <DialogContent sx={{ mt: 1 }}>
+      <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
-          <TextField 
-            fullWidth label="Title" name="title" 
-            value={formData.title} onChange={handleChange} 
-            sx={inputStyle} InputLabelProps={{ shrink: true }}
-          />
-          <TextField 
-            fullWidth label="Author" name="author" 
-            value={formData.author} onChange={handleChange} 
-            sx={inputStyle} InputLabelProps={{ shrink: true }}
-          />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, p: 2, borderRadius: 2, border: `1px dashed ${isDarkMode ? '#475569' : '#cbd5e1'}` }}>
+            <Avatar variant="rounded" src={imagePreview} sx={{ width: 80, height: 110, boxShadow: 3 }} />
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Cover Photo</Typography>
+              <Button component="label" variant="outlined" size="small" startIcon={<CloudUploadIcon />} sx={{ textTransform: 'none', borderRadius: '10px' }}>
+                Upload New
+                <input type="file" hidden accept="image/*" onChange={handleFileChange} />
+              </Button>
+            </Box>
+          </Box>
+
+          <TextField fullWidth label="Title" name="title" value={formData.title} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
           
           <Stack direction="row" spacing={2}>
-            <TextField 
-              fullWidth label="Genre" name="genre" 
-              value={formData.genre} onChange={handleChange} 
-              sx={inputStyle} InputLabelProps={{ shrink: true }}
-            />
-            {/* Category Select Dropdown */}
-            <TextField
-              select
-              fullWidth
-              label="Category"
-              name="category"
-              value={formData.category || ''}
-              onChange={handleChange}
-              sx={inputStyle}
-              InputLabelProps={{ shrink: true }}
-            >
+            <TextField fullWidth label="Author" name="author" value={formData.author} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
+            <TextField select fullWidth label="Category" name="category" value={formData.category || ''} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }}>
               {categories.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
+                <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
               ))}
             </TextField>
           </Stack>
 
-          <TextField 
-            fullWidth label="Year" name="published_date" 
-            value={formData.published_date} onChange={handleChange} 
-            sx={inputStyle} InputLabelProps={{ shrink: true }}
-          />
-
-          <TextField 
-            fullWidth label="Description" name="description" 
-            multiline rows={3} value={formData.description} 
-            onChange={handleChange} sx={inputStyle} 
-            InputLabelProps={{ shrink: true }}
-          />
+          <TextField fullWidth label="Genre" name="genre" value={formData.genre} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
+          <TextField fullWidth label="Year" name="published_date" value={formData.published_date} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
+          <TextField fullWidth label="Description" name="description" multiline rows={3} value={formData.description} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
         </Stack>
       </DialogContent>
 
       <DialogActions sx={{ p: 3, gap: 1 }}>
-        <Button onClick={onClose} sx={{ color: 'text.secondary', fontWeight: 600 }}>
-          Cancel
-        </Button>
-        <Button 
-          onClick={handleSave} 
-          variant="contained" 
-          disabled={loading}
-          sx={{ 
-            borderRadius: '25px', 
-            px: 4, 
-            fontWeight: 800,
-            bgcolor: '#3b82f6',
-            '&:hover': { bgcolor: '#2563eb' }
-          }}
-        >
+        <Button onClick={onClose} sx={{ color: 'text.secondary', fontWeight: 600 }}>Cancel</Button>
+        <Button onClick={handleSave} variant="contained" disabled={loading} sx={{ borderRadius: '25px', px: 4, fontWeight: 800, bgcolor: '#3b82f6' }}>
           {loading ? "Saving..." : "Save Changes"}
         </Button>
       </DialogActions>

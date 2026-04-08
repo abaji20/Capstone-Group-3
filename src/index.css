@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Metamorphous&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Poppins:ital,wght@0,100..900;1,100..900&family=Unna:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cormorant:ital,wght@0,300..700;1,300..700&family=Metamorphous&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Paytone+One&family=Playfair+Display+SC:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Poppins:ital,wght@0,100..900;1,100..900&family=Unna:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
 body {
   margin: 0;
@@ -9,12 +9,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Helper class for Montserrat */
+/* Existing Helper Classes */
 .font-montserrat {
   font-family: 'Montserrat', sans-serif;
 }
 
-/* Helper class for Cinzel Decorative */
 .font-cinzel {
   font-family: 'Cinzel Decorative', serif;
+}
+
+/* New Helper Classes */
+.font-paytone {
+  font-family: 'Paytone One', sans-serif;
+}
+
+.font-playfair-sc {
+  font-family: 'Playfair Display SC', serif;
+}
+
+.font-cormorant {
+  font-family: 'Cormorant', serif;
 }

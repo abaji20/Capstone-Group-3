@@ -174,7 +174,7 @@ const PdfUploads = () => {
       
       {/* HEADER SECTION */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h3" sx={{ fontFamily: "'Montserrat', sans-serif", fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51' }}>
+        <Typography variant="h3" sx={{ fontFamily: "'Montserrat', sans-serif", fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontSize: { xs: '1.75rem', sm: '2.2rem', md: '3rem' }, }}>
           UPLOAD PDFS
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>

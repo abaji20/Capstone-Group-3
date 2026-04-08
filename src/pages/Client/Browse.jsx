@@ -16,7 +16,6 @@ const MultiRowSection = ({ title, items, onSeeAll }) => {
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
 
-  // Physics refs
   const lastPageX = useRef(0);
   const velocity = useRef(0);
   const momentumId = useRef(null);
@@ -38,11 +37,9 @@ const MultiRowSection = ({ title, items, onSeeAll }) => {
       
       const x = e.pageX - scrollRef.current.offsetLeft;
       
-      // Track velocity for momentum
       velocity.current = e.pageX - lastPageX.current;
       lastPageX.current = e.pageX;
 
-      // SPEED MULTIPLIER: Lowered to 0.8 for "heavy" controlled movement
       const walk = (x - startX) * 0.8; 
       if (scrollRef.current) {
         scrollRef.current.scrollLeft = scrollLeft - walk;
@@ -58,8 +55,7 @@ const MultiRowSection = ({ title, items, onSeeAll }) => {
           if (scrollRef.current) {
             scrollRef.current.scrollLeft -= velocity.current * 1.2;
           }
-          // FRICTION: Lowered to 0.85 so it stops much faster
-          velocity.current += 0.5 ; 
+          velocity.current *= 0.85; 
           momentumId.current = requestAnimationFrame(glide);
         }
       };
@@ -146,20 +142,24 @@ const Browse = () => {
   }, []);
 
   const genres = useMemo(() => {
-    const commonGenres = [
-      'All', 'Romance', 'Action', 'Drama', 'Science Fiction', 
-      'Research Paper', 'Review Article', 'Case Study', 
-      'Thesis', 'Biography', 'Textbook'
-    ];
-    const dbGenres = documents.map(doc => doc.genre).filter(Boolean);
-    return [...new Set([...commonGenres, ...dbGenres])];
+    // Only "All" is static; everything else is pulled from your documents
+    const dbGenres = documents.flatMap(doc => 
+      doc.genre ? doc.genre.split(',').map(g => g.trim()) : []
+    );
+
+    // Filter out empty strings and create a unique set
+    return ['All', ...new Set(dbGenres.filter(Boolean))];
   }, [documents]);
 
   const filteredDocs = useMemo(() => {
     return documents.filter(doc => {
       const matchesSearch = doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             doc.author?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesGenre = selectedGenre === 'All' || doc.genre === selectedGenre;
+      
+      // Checks if selectedGenre exists within the split/trimmed genre array
+      const matchesGenre = selectedGenre === 'All' || 
+                           (doc.genre && doc.genre.split(',').map(g => g.trim()).includes(selectedGenre));
+      
       return matchesSearch && matchesGenre;
     });
   }, [documents, searchQuery, selectedGenre]);
@@ -223,26 +223,45 @@ const Browse = () => {
           </>
         ) : (
           <Box>
-            <Button 
-              startIcon={<ArrowBackIcon />} 
-              onClick={() => setActiveView('browse')}
-              sx={{ mb: 3, fontWeight: 700, textTransform: 'none', color: '#1976d2' }}
-            >
-              Back to Browse
-            </Button>
-            
-            <Typography variant="h5" sx={{ fontWeight: 900, mb: 4, textTransform: 'uppercase', borderLeft: '8px solid #1976d2', pl: 2 }}>
-              {expandedTitle}
-            </Typography>
+          <Button 
+            startIcon={<ArrowBackIcon />} 
+            onClick={() => setActiveView('browse')}
+            sx={{ mb: 3, fontWeight: 700, textTransform: 'none', color: '#1976d2' }}
+          >
+            Back to Browse
+          </Button>
+          
+          <Typography variant="h5" sx={{ fontWeight: 900, mb: 4, textTransform: 'uppercase', borderLeft: '8px solid #1976d2', pl: 2 }}>
+            {expandedTitle}
+          </Typography>
 
-            <Grid container spacing={3}>
-              {sections.find(s => s.title === expandedTitle)?.items.map((doc) => (
-                <Grid item xs={6} sm={4} md={3} lg={2.4} key={doc.id}>
-                  <PdfCard pdf={doc} />
-                </Grid>
-              ))}
-            </Grid>
+          <Box 
+            sx={{ 
+              display: 'grid',
+              gridTemplateColumns: { 
+                xs: 'repeat(auto-fill, minmax(155px, 1fr))', 
+                sm: 'repeat(auto-fill, minmax(175px, 1fr))' 
+              },
+              gap: 1.5, 
+              justifyContent: 'start',
+              width: '100%',
+              maxWidth: '1400px' 
+            }}
+          >
+            {sections.find(s => s.title === expandedTitle)?.items.map((doc) => (
+              <Box 
+                key={doc.id} 
+                sx={{ 
+                  display: 'flex',
+                  justifyContent: 'flex-start',
+                  width: '100%'
+                }}
+              >
+                <PdfCard pdf={doc} variant="small" />
+              </Box>
+            ))}
           </Box>
+        </Box>
         )}
 
         {filteredDocs.length === 0 && (

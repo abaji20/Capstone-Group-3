@@ -5,14 +5,14 @@ import {
   DialogContent, DialogActions, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, IconButton, 
   LinearProgress, useMediaQuery, Card, CardContent, Divider,
-  Snackbar, Avatar
+  Snackbar, Avatar, Tooltip
 } from '@mui/material';
 import { 
   PictureAsPdf, Image as ImageIcon, Add as AddIcon, 
-  Close as CloseIcon, ErrorOutline
+  Close as CloseIcon, ErrorOutline, DeleteForever as DeleteIcon
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
-import { checkDuplicate, deletePdf } from '../../services/pdfService'; 
+import { checkDuplicate } from '../../services/pdfService'; 
 
 const RequestUpload = () => {
   const theme = useTheme();
@@ -24,7 +24,7 @@ const RequestUpload = () => {
   const [requests, setRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [pdfFile, setPdfFile] = useState(null);
-  const [coverFile, setCoverFile] = useState(null);
+  const [coverFile, setCoverFile] = useState(null); 
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState({ open: false, type: 'success', message: '' });
   const [confirmData, setConfirmData] = useState({ open: false, record: null });
@@ -78,20 +78,57 @@ const RequestUpload = () => {
     setPdfFile(null); setCoverFile(null);
   };
 
+  // --- CANCEL REQUEST LOGIC ---
+  const handleCancel = async (req) => {
+    if (!window.confirm("Are you sure you want to cancel this request? This will delete the uploaded files.")) return;
+
+    try {
+      // 1. Delete files from storage
+      const filesToDelete = [req.pdf_url];
+      if (req.cover_url) filesToDelete.push(req.cover_url);
+      
+      await supabase.storage.from('pdfs').remove(filesToDelete);
+
+      // 2. Delete record from DB
+      const { error } = await supabase
+        .from('upload_requests')
+        .delete()
+        .eq('id', req.id);
+
+      if (error) throw error;
+
+      showStatus('success', 'Request cancelled and removed.');
+      fetchRequests();
+    } catch (error) {
+      showStatus('error', 'Failed to cancel: ' + error.message);
+    }
+  };
+
   const performUpload = async () => {
     setUploading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Authentication required.");
-      const timestamp = Date.now();
-      const pdfPath = `requests/pdfs/${timestamp}_${pdfFile.name}`;
-      const coverPath = `requests/covers/${timestamp}_${coverFile.name}`;
       
-      await supabase.storage.from('pdfs').upload(pdfPath, pdfFile);
-      await supabase.storage.from('pdfs').upload(coverPath, coverFile);
+      const timestamp = Date.now();
+      
+      const pdfPath = `requests/pdfs/${timestamp}_${pdfFile.name}`;
+      const { error: pdfError } = await supabase.storage.from('pdfs').upload(pdfPath, pdfFile);
+      if (pdfError) throw pdfError;
+
+      let coverPath = null;
+      if (coverFile) {
+        coverPath = `requests/covers/${timestamp}_${coverFile.name}`;
+        const { error: coverError } = await supabase.storage.from('pdfs').upload(coverPath, coverFile);
+        if (coverError) throw coverError;
+      }
       
       const { error: dbError } = await supabase.from('upload_requests').insert([{
-        client_id: user.id, ...formData, pdf_url: pdfPath, cover_url: coverPath, status: 'pending'
+        client_id: user.id, 
+        ...formData, 
+        pdf_url: pdfPath, 
+        cover_url: coverPath, 
+        status: 'pending'
       }]);
       
       if (dbError) throw dbError;
@@ -108,10 +145,11 @@ const RequestUpload = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!pdfFile || !coverFile) {
-      showStatus('error', 'Please select both a PDF and a Cover Image.');
+    if (!pdfFile) {
+      showStatus('error', 'Please select a PDF file.');
       return;
     }
+
     setUploading(true);
     const existingRecord = await checkDuplicate(formData.title.trim(), formData.author.trim());
     if (existingRecord) {
@@ -179,7 +217,6 @@ const RequestUpload = () => {
           </Paper>
         ) : (
           <>
-            {/* TABLE VIEW FOR DESKTOP */}
             {!isMobile ? (
               <Paper elevation={0} sx={{ borderRadius: 2, overflow: 'hidden', border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
                 <TableContainer>
@@ -190,6 +227,7 @@ const RequestUpload = () => {
                         <TableCell>Reason</TableCell>
                         <TableCell align="center">Status</TableCell>
                         <TableCell align="center">Date</TableCell>
+                        <TableCell align="center">Action</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -203,6 +241,15 @@ const RequestUpload = () => {
                           <TableCell align="center" sx={cellStyle}>
                             {new Date(req.created_at).toLocaleDateString()}
                           </TableCell>
+                          <TableCell align="center" sx={cellStyle}>
+                            {req.status === 'pending' && (
+                              <Tooltip title="Cancel Request">
+                                <IconButton color="error" onClick={() => handleCancel(req)}>
+                                  <DeleteIcon />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -210,7 +257,6 @@ const RequestUpload = () => {
                 </TableContainer>
               </Paper>
             ) : (
-              /* CARD VIEW FOR MOBILE */
               <Stack spacing={2}>
                 {requests.map((req) => (
                   <Card key={req.id} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 'none' }}>
@@ -225,11 +271,23 @@ const RequestUpload = () => {
                         <Chip label={req.status.toUpperCase()} sx={chipStyle(req.status)} />
                       </Stack>
                       <Divider sx={{ mb: 2 }} />
-                      <Box sx={{ bgcolor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f1f5f9', p: 1.5, borderRadius: 0.5 }}>
+                      <Box sx={{ bgcolor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f1f5f9', p: 1.5, borderRadius: 0.5, mb: 2 }}>
                         <Typography variant="body2" sx={{ color: 'text.primary', fontStyle: 'italic' }}>
                           "{req.upload_reason}"
                         </Typography>
                       </Box>
+                      {req.status === 'pending' && (
+                        <Button 
+                          fullWidth 
+                          variant="outlined" 
+                          color="error" 
+                          startIcon={<DeleteIcon />}
+                          onClick={() => handleCancel(req)}
+                          sx={{ fontWeight: 800, borderRadius: 1.5 }}
+                        >
+                          CANCEL REQUEST
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -238,7 +296,6 @@ const RequestUpload = () => {
           </>
         )}
 
-        {/* REQUEST MODAL */}
         <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: 3, bgcolor: 'background.paper' } }}>
           <DialogTitle sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h6" sx={{ fontWeight: 900, color: isDarkMode ? '#60a5fa' : '#1e3a5f' }}>NEW UPLOAD REQUEST</Typography>
@@ -255,7 +312,9 @@ const RequestUpload = () => {
                   }} component="label">
                     <input type="file" hidden accept=".pdf" onChange={(e) => setPdfFile(e.target.files[0])} />
                     <PictureAsPdf sx={{ color: pdfFile ? '#0284c7' : 'text.disabled' }} />
-                    <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: 'text.primary' }}>{pdfFile ? pdfFile.name.substring(0, 10) + '...' : "PDF"}</Typography>
+                    <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: 'text.primary' }}>
+                        {pdfFile ? pdfFile.name.substring(0, 10) + '...' : "PDF (Required)"}
+                    </Typography>
                   </Box>
 
                   <Box sx={{
@@ -264,7 +323,9 @@ const RequestUpload = () => {
                   }} component="label">
                     <input type="file" hidden accept="image/*" onChange={(e) => setCoverFile(e.target.files[0])} />
                     <ImageIcon sx={{ color: coverFile ? '#16a34a' : 'text.disabled' }} />
-                    <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: 'text.primary' }}>{coverFile ? coverFile.name.substring(0, 10) + '...' : "COVER"}</Typography>
+                    <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: 'text.primary' }}>
+                        {coverFile ? coverFile.name.substring(0, 10) + '...' : "COVER (Optional)"}
+                    </Typography>
                   </Box>
                 </Stack>
 
@@ -280,6 +341,8 @@ const RequestUpload = () => {
                   </TextField>
                 </Stack>
 
+                <TextField fullWidth label="Document Description" name="description" multiline rows={3} value={formData.description} onChange={handleInputChange} sx={inputStyle} size="small" required />
+                
                 <TextField fullWidth label="Reason for Request" name="upload_reason" multiline rows={2} value={formData.upload_reason} onChange={handleInputChange} sx={inputStyle} size="small" required />
               </Stack>
             </DialogContent>
@@ -292,7 +355,6 @@ const RequestUpload = () => {
           </form>
         </Dialog>
 
-        {/* DUPLICATE WARNING DIALOG - CANCEL ONLY */}
         <Dialog open={confirmData.open} onClose={() => setConfirmData({ open: false, record: null })} PaperProps={{ sx: { borderRadius: 3, bgcolor: isDarkMode ? '#1e293b' : '#ffffff', maxWidth: '400px' } }}>
           <DialogTitle sx={{ fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1 }}>
             <ErrorOutline color="warning" /> Duplicate Found

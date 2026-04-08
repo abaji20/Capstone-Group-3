@@ -12,7 +12,8 @@ import {
   Search as SearchIcon,
   HourglassEmpty as HourglassIcon,
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  ExpandLess as ExpandLessIcon,
+  PersonOutline as PersonIcon // Added icon for user display
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 
@@ -24,17 +25,17 @@ const PendingUpload = () => {
   // --- STYLING ---
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff'; 
   const cardBg = isDarkMode ? '#1e293b' : 'rgba(255, 255, 255, 0.9)';
+  const inputBg = isDarkMode ? '#28334e' : '#f1f5f9'; 
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
   const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
 
-  const filterStyle = {
-    bgcolor: isDarkMode ? '#28334e' : '#ffffff',
-    borderRadius: '5px',
+  const filterInputStyle = {
     '& .MuiOutlinedInput-root': {
-      height: '55px',
-      borderRadius: '12px',
-      '& fieldset': { borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#e2e8f0' },
+      borderRadius: 1,
+      bgcolor: inputBg,
+      '& fieldset': { border: 'none' },
     },
+    '& .MuiInputLabel-root': { fontWeight: 700 }
   };
 
   // --- STATE ---
@@ -55,9 +56,15 @@ const PendingUpload = () => {
 
   const fetchPendingRequests = async () => {
     setLoading(true);
+    // UPDATED: Added profiles(full_name) to the select query
     const { data } = await supabase
       .from('upload_requests')
-      .select('*')
+      .select(`
+        *,
+        profiles (
+          full_name
+        )
+      `)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
     setRequests(data || []);
@@ -94,7 +101,6 @@ const PendingUpload = () => {
     return matchesSearch && matchesType;
   });
 
-  // --- SUB-COMPONENT FOR MOBILE CARDS ---
   const RequestMobileCard = ({ req }) => (
     <Card sx={{ mb: 2, bgcolor: cardBg, border: `1px solid ${borderCol}`, borderRadius: 2 }}>
       <CardContent>
@@ -105,7 +111,15 @@ const PendingUpload = () => {
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{req.title}</Typography>
             <Typography variant="body2" color="text.secondary">{req.author} • {req.genre}</Typography>
-            {/* TEXT ONLY CATEGORY FOR MOBILE */}
+            
+            {/* ADDED: Submitted by display for mobile */}
+            <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 0.5 }}>
+              <PersonIcon sx={{ fontSize: '0.9rem', opacity: 0.7 }} />
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                By: {req.profiles?.full_name || 'Unknown'}
+              </Typography>
+            </Stack>
+
             <Typography 
               sx={{ 
                 mt: 1, 
@@ -181,11 +195,22 @@ const PendingUpload = () => {
 
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
           <TextField 
-            fullWidth placeholder="Search title or author..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment> }} 
-            sx={filterStyle}
+            fullWidth 
+            placeholder="Search title or author..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+            InputProps={{ 
+              startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment> 
+            }} 
+            sx={filterInputStyle}
           />
-          <TextField select label="Type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} sx={{ ...filterStyle, minWidth: { md: 200 } }}>
+          <TextField 
+            select 
+            label="Type" 
+            value={typeFilter} 
+            onChange={(e) => setTypeFilter(e.target.value)} 
+            sx={{ ...filterInputStyle, minWidth: { md: 200 } }}
+          >
             <MenuItem value="All Types">All Types</MenuItem>
             <MenuItem value="book">Book</MenuItem>
             <MenuItem value="academic paper">Academic Paper</MenuItem>
@@ -201,22 +226,20 @@ const PendingUpload = () => {
           </Box>
         ) : (
           <>
-            {/* MOBILE VIEW: CARDS */}
             {isMobile ? (
               <Box>
                 {filteredRequests.map((req) => <RequestMobileCard key={req.id} req={req} />)}
               </Box>
             ) : (
-              /* DESKTOP VIEW: TABLE */
               <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}` }}>
                 <Table>
                   <TableHead sx={{ bgcolor: headerColor }}>
                     <TableRow>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>AUTHOR</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>SUBMITTED BY</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>GENRE</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>CATEGORY</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTIONS</TableCell>
                     </TableRow>
                   </TableHead>
@@ -243,9 +266,14 @@ const PendingUpload = () => {
                             </Stack>
                           </TableCell>
                           <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{req.author}</Typography></TableCell>
+                          {/* ADDED: Submitted By Cell */}
+                          <TableCell>
+                             <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                                {req.profiles?.full_name || 'N/A'}
+                             </Typography>
+                          </TableCell>
                           <TableCell><Typography variant="body2">{req.genre}</Typography></TableCell>
                           <TableCell>
-                            {/* TEXT ONLY CATEGORY FOR DESKTOP */}
                             <Typography 
                               variant="body2" 
                               sx={{ 
@@ -255,11 +283,6 @@ const PendingUpload = () => {
                               }}
                             >
                               {req.category?.toUpperCase() || 'N/A'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell sx={{ maxWidth: '200px' }}>
-                            <Typography variant="body2" noWrap sx={{ fontStyle: 'italic', opacity: 0.8 }}>
-                              {req.upload_reason || "No reason provided."}
                             </Typography>
                           </TableCell>
                           <TableCell align="center">
@@ -276,7 +299,10 @@ const PendingUpload = () => {
                                 <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Full Description:</Typography>
                                 <Typography variant="body2" color="text.secondary">{req.description}</Typography>
                                 <Divider sx={{ my: 2 }} />
-                                <Typography variant="caption" sx={{ fontWeight: 700 }}>Submitted: {new Date(req.created_at).toLocaleDateString()}</Typography>
+                                <Stack direction="row" spacing={3}>
+                                    <Typography variant="caption" sx={{ fontWeight: 700 }}>Reason: {req.upload_reason || "None"}</Typography>
+                                    <Typography variant="caption" sx={{ fontWeight: 700 }}>Submitted: {new Date(req.created_at).toLocaleDateString()}</Typography>
+                                </Stack>
                               </Box>
                             </Collapse>
                           </TableCell>

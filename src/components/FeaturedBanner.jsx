@@ -1,11 +1,10 @@
 import React, { useEffect } from 'react';
-import { Box, Typography, Button, IconButton, Paper, Stack, Chip, useTheme } from '@mui/material';
+import { Box, Typography, Button, IconButton, Paper, Stack, useTheme } from '@mui/material';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import BookIcon from '@mui/icons-material/MenuBook';
-import DownloadIcon from '@mui/icons-material/Download';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../supabaseClient';
+import logo from '../assets/logo.png'; 
 
 const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
   const theme = useTheme();
@@ -22,7 +21,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
   const displayRank = rank || doc.rank || 1;
 
   const getImageUrl = (url) => {
-    if (!url) return '';
+    if (!url) return null;
     if (url.startsWith('http')) return url;
     const { data } = supabase.storage.from('pdfs').getPublicUrl(url);
     return data.publicUrl;
@@ -36,9 +35,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
   const handleDownload = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
       if (user) {
-        // Check if the user has already downloaded this specific document
         const { data: existingDownload } = await supabase
           .from('downloads')
           .select('id')
@@ -46,15 +43,12 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
           .eq('pdf_id', doc.id)
           .maybeSingle();
 
-        // Only insert if no previous record exists for this user/doc pair
         if (!existingDownload) {
           await supabase.from('downloads').insert([
             { user_id: user.id, pdf_id: doc.id }
           ]);
         }
       }
-      
-      // Proceed with the file download regardless of whether the count incremented
       const { data } = supabase.storage.from('pdfs').getPublicUrl(doc.file_url);
       const response = await fetch(data.publicUrl);
       const blob = await response.blob();
@@ -71,167 +65,208 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
     }
   };
 
+  const imageUrl = getImageUrl(doc.image_url);
+
   return (
     <AnimatePresence mode="wait">
       <motion.div 
         key={doc.id} 
-        initial={{ opacity: 0, x: 20 }} 
-        animate={{ opacity: 1, x: 0 }} 
-        exit={{ opacity: 0, x: -20 }} 
-        transition={{ duration: 0.4 }}
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        exit={{ opacity: 0 }} 
+        transition={{ duration: 0.5 }}
       >
         <Paper 
-          elevation={6} 
+          elevation={0} 
           sx={{ 
             width: '100%', 
-            height: { xs: 'auto', md: '400px' }, 
-            borderRadius: 3, 
-            display: 'flex', 
-            flexDirection: { xs: 'column', md: 'row' }, 
-            alignItems: 'center', 
+            height: { xs: '320px', md: '450px' }, 
+            borderRadius: { xs: 2, md: 4 }, 
             overflow: 'hidden', 
             position: 'relative', 
-            bgcolor: 'background.paper', 
             mb: 4,
-            transition: 'background-color 0.3s ease'
+            bgcolor: '#121212',
+            backgroundImage: imageUrl 
+              ? `linear-gradient(to right, rgba(0,0,0,0.95) 10%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.2) 100%), url(${imageUrl})`
+              : `linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)`, 
+            backgroundSize: 'cover',
+            backgroundPosition: 'center center',
+            backgroundRepeat: 'no-repeat',
+            display: 'flex',
+            alignItems: 'center',
+            transform: 'translateZ(0)',
           }}
         >
-          <IconButton 
-            onClick={onPrev} 
-            sx={{ 
-              position: 'absolute', 
-              left: 10, 
-              top: { xs: '30%', md: '50%' },
-              transform: 'translateY(-50%)',
-              zIndex: 2, 
-              color: 'text.primary', 
-              bgcolor: 'rgba(255,255,255,0.2)', 
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.4)' } 
-            }}
-          >
+          {/* Navigation Controls */}
+          <IconButton onClick={onPrev} sx={{ position: 'absolute', left: 10, zIndex: 10, color: '#fff', bgcolor: 'rgba(255,255,255,0.1)', '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' } }}>
             <ArrowBackIosIcon fontSize="small" sx={{ ml: 0.5 }} />
           </IconButton>
           
+          <IconButton onClick={onNext} sx={{ position: 'absolute', right: 10, zIndex: 10, color: '#fff', bgcolor: 'rgba(255,255,255,0.1)', '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' } }}>
+            <ArrowForwardIosIcon fontSize="small" />
+          </IconButton>
+
+          {/* Content Overlay */}
           <Box sx={{ 
-            width: { xs: '100%', md: '280px' }, 
-            height: { xs: '250px', md: '100%' }, 
-            backgroundImage: `url(${getImageUrl(doc.image_url)})`, 
-            backgroundSize: 'cover', 
-            backgroundPosition: 'center', 
-            flexShrink: 0,
-            position: 'relative'
-          }} />
-          
-          <Box sx={{ 
-            p: { xs: 3, md: 5 }, 
-            flexGrow: 1, 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: 1,
-            width: '100%'
+            p: { xs: 2.5, md: 8 }, 
+            width: { xs: '100%', md: '65%' },
+            zIndex: 2,
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            justifyContent: 'center'
           }}>
             
             <Box sx={{ 
-              bgcolor: '#E4FF30', 
-              color: '#362F4F', 
-              px: 2, 
-              py: 0.7, 
-              borderRadius: '20px', 
+              bgcolor: '#2ecc71', 
+              color: '#fff', 
+              px: 1.5, py: 0.5, 
+              borderRadius: '4px', 
               fontWeight: '900', 
-              fontSize: { xs: '0.75rem', md: '0.85rem' }, 
+              fontSize: '0.65rem', 
               width: 'fit-content', 
-              mb: 1,
-              boxShadow: '0 4px 10px rgba(225, 29, 72, 0.4)'
+              mb: 1.5,
+              textTransform: 'uppercase',
+              letterSpacing: 1
             }}>
-              #{displayRank} Most Downloaded ({doc.download_count || 0} downloads)
+              #{displayRank} Spotlight ({doc.download_count || 0} Downloads)
             </Box>
             
             <Typography 
-              variant="h3" 
+              variant="h2" 
               fontWeight="900" 
               sx={{ 
-                color: 'text.primary', 
-                fontSize: { xs: '1.5rem', md: '2.5rem' },
-                lineHeight: 1.2
+                fontSize: { xs: '1.5rem', md: '3.5rem' },
+                lineHeight: 1.1,
+                mb: 0.5,
+                textShadow: '0 2px 10px rgba(0,0,0,0.8)'
               }}
             >
               {doc.title}
             </Typography>
             
-            <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap', gap: 1 }}>
-              <Chip label={doc.genre || 'N/A'} color="primary" variant="outlined" size="small" />
-              <Chip label={doc.category || 'N/A'} variant="outlined" size="small" sx={{ color: 'text.secondary' }} />
+            {/* Metadata Section: Author, Genre, and Category */}
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, flexWrap: 'wrap' }}>
+              <Typography variant="subtitle1" sx={{ opacity: 0.9, fontWeight: 700, fontSize: { xs: '0.8rem', md: '1rem' } }}>
+                By <span style={{ color: '#2ecc71' }}>{doc.author}</span>
+              </Typography>
+              <Typography sx={{ opacity: 0.5 }}>|</Typography>
+              
+              {/* CATEGORY ADDED HERE */}
+              <Typography sx={{ 
+                fontSize: { xs: '0.75rem', md: '0.9rem' }, 
+                fontWeight: 600, 
+                color: '#fff',
+                textTransform: 'uppercase',
+                letterSpacing: 0.5
+              }}>
+                {doc.category || 'Document'}
+              </Typography>
+
+              <Typography sx={{ opacity: 0.3 }}>•</Typography>
+
+              <Typography sx={{ 
+                fontSize: { xs: '0.75rem', md: '0.9rem' }, 
+                fontWeight: 600, 
+                color: '#2ecc71',
+                textTransform: 'capitalize' 
+              }}>
+                {doc.genre || 'General'}
+              </Typography>
             </Stack>
             
-            <Typography variant="subtitle1" sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>
-              By <span style={{ color: theme.palette.primary.main, fontWeight: 700 }}>{doc.author}</span>
-            </Typography>
-            
-            <Typography variant="body1" sx={{ 
-              color: 'text.primary', mt: 1, mb: 3, 
-              maxHeight: { xs: '60px', md: '80px' }, 
-              overflow: 'hidden', 
-              display: '-webkit-box', 
-              WebkitLineClamp: { xs: 2, md: 3 }, 
-              WebkitBoxOrient: 'vertical',
-              fontSize: '0.875rem'
+            <Box sx={{ 
+              mb: 3, 
+              maxWidth: '500px',
+              maxHeight: { xs: '80px', md: '120px' },
+              overflowY: 'auto',
+              scrollbarWidth: 'none',
+              '&::-webkit-scrollbar': { display: 'none' },
             }}>
-              {doc.description}
-            </Typography>
+              <Typography variant="body1" sx={{ 
+                fontSize: { xs: '0.85rem', md: '1rem' },
+                lineHeight: 1.6,
+                opacity: 0.85,
+                textAlign: 'justify'
+              }}>
+                {doc.description}
+              </Typography>
+            </Box>
             
-            <Stack direction="row" spacing={2} sx={{ width: '100%' }}>
+            <Stack direction="row" spacing={2}>
               <Button 
                 variant="contained" 
                 onClick={handleRead}  
                 sx={{ 
-                  bgcolor: '#d32f2f', 
-                  color: '#ffffff', 
-                  minWidth: { xs: '100px', sm: '120px' },
-                  px: { xs: 0, sm: 4 },
-                  fontWeight: 800,
+                  bgcolor: '#2ecc71', 
+                  color: '#fff', 
+                  px: { xs: 3, md: 5 }, 
+                  py: { xs: 0.8, md: 1.2 },
+                  fontWeight: 900,
                   textTransform: 'none',
-                  borderRadius: 1,
-                  '&:hover': { bgcolor: '#b71c1c' }
+                  borderRadius: '6px',
+                  fontSize: { xs: '0.8rem', md: '0.9rem' },
+                  '&:hover': { bgcolor: '#27ae60' }
                 }}
               >
-                <Box sx={{ display: { xs: 'none', sm: 'block' } }}>Read Now</Box>
-                <BookIcon sx={{ display: { xs: 'block', sm: 'none' } }} />
+                Read Now
               </Button>
 
               <Button 
-                variant="contained" 
+                variant="outlined" 
                 onClick={handleDownload}  
                 sx={{ 
-                  bgcolor: '#1976d2', 
-                  color: '#ffffff', 
-                  minWidth: { xs: '100px ', sm: '120px' },
-                  px: { xs: 0, sm: 4 },
-                  fontWeight: 800,
+                  borderColor: 'rgba(255,255,255,0.4)', 
+                  color: '#fff', 
+                  px: { xs: 2.5, md: 5 }, 
+                  py: { xs: 0.8, md: 1.2 },
+                  fontWeight: 900,
                   textTransform: 'none',
-                  borderRadius: 1,
-                  '&:hover': { bgcolor: '#1565c0' }
+                  borderRadius: '6px',
+                  fontSize: { xs: '0.8rem', md: '0.9rem' },
+                  bgcolor: 'rgba(0,0,0,0.3)',
+                  backdropFilter: 'blur(4px)',
+                  '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' }
                 }}
               >
-                <Box sx={{ display: { xs: 'none', sm: 'block' } }}>Download Now</Box>
-                <DownloadIcon sx={{ display: { xs: 'block', sm: 'none' } }} />
+                Download Now
               </Button>
             </Stack>
           </Box>
-          
-          <IconButton 
-            onClick={onNext} 
-            sx={{ 
-              position: 'absolute', 
-              right: 10, 
-              top: { xs: '30%', md: '50%' },
-              transform: 'translateY(-50%)',
-              zIndex: 2, 
-              color: 'text.primary', 
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.4)' } 
-            }}
-          >
-            <ArrowForwardIosIcon fontSize="large" />
-          </IconButton>
+
+          {/* Floating High-Res Preview Card */}
+          <Box sx={{ 
+            display: { xs: 'none', lg: 'flex' },
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'absolute',
+            right: '8%',
+            width: '240px',
+            height: '340px',
+            borderRadius: 4,
+            boxShadow: '0 30px 60px rgba(0,0,0,0.7)',
+            background: imageUrl 
+              ? `url(${imageUrl}) center/cover` 
+              : `linear-gradient(145deg, #2c2c2c, #1a1a1a)`, 
+            border: '1px solid rgba(255,255,255,0.2)',
+            transform: 'perspective(1000px) rotateY(-5deg)',
+            zIndex: 3,
+            overflow: 'hidden'
+          }}>
+            {!imageUrl && (
+              <Box 
+                component="img"
+                src={logo}
+                alt="Logo"
+                sx={{ 
+                  width: '70%', 
+                  height: 'auto',
+                  filter: 'drop-shadow(0px 10px 20px rgba(0,0,0,0.4))'
+                }}
+              />
+            )}
+          </Box>
         </Paper>
       </motion.div>
     </AnimatePresence>

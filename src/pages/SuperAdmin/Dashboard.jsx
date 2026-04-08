@@ -15,10 +15,16 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SecurityIcon from '@mui/icons-material/Security'; 
 import DownloadIcon from '@mui/icons-material/Download';
 import HistoryIcon from '@mui/icons-material/History';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'; 
+import PublishIcon from '@mui/icons-material/Publish'; 
+import PeopleIcon from '@mui/icons-material/People'; // Added for Total Accounts
 
 const Dashboard = () => {
-  // Added superAdmins to state
-  const [stats, setStats] = useState({ books: 0, papers: 0, clients: 0, admins: 0, superAdmins: 0, total: 0, downloads: 0 });
+  const [stats, setStats] = useState({ 
+    books: 0, papers: 0, clients: 0, admins: 0, superAdmins: 0, 
+    total: 0, downloads: 0, deleteRequests: 0, clientRequests: 0,
+    totalAccounts: 0 // New state for Total Accounts
+  });
   const [activities, setActivities] = useState([]);
   const [monthlyDownloads, setMonthlyDownloads] = useState(new Array(12).fill(0));
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -31,14 +37,16 @@ const Dashboard = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      // Fetch data as per your layout logic
       const { count: books } = await supabase.from('pdfs').select('*', { count: 'exact', head: true }).eq('category', 'book');
       const { count: papers } = await supabase.from('pdfs').select('*', { count: 'exact', head: true }).eq('category', 'academic paper');
       const { count: clients } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'client');
-      
-      // Separate counts for Admin and Superadmin
       const { count: admins } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
       const { count: superAdmins } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'superadmin');
       
+      const { count: deleteReqs } = await supabase.from('delete_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+      const { count: clientReqs } = await supabase.from('upload_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+
       const { data: downloadList } = await supabase
         .from('downloads')
         .select('downloaded_at')
@@ -51,6 +59,9 @@ const Dashboard = () => {
         clients: clients || 0, 
         admins: admins || 0, 
         superAdmins: superAdmins || 0,
+        deleteRequests: deleteReqs || 0,
+        clientRequests: clientReqs || 0,
+        totalAccounts: (clients || 0) + (admins || 0) + (superAdmins || 0), // Summing all users
         total: (books || 0) + (papers || 0), 
         downloads: downloadList?.length || 0 
       });
@@ -79,13 +90,16 @@ const Dashboard = () => {
     fetchData();
   }, [selectedYear]);
 
-  // Updated statItems: Removed Books/Academic, Added Super Admin
+  // Updated statItems to include Total Accounts (Total of 8 items)
   const statItems = [
     { title: 'Total PDF', val: stats.total, icon: <DescriptionIcon />, color: '#3b82f6' },
+    { title: 'Total Accounts', val: stats.totalAccounts, icon: <PeopleIcon />, color: '#6366f1' },
     { title: 'Clients', val: stats.clients, icon: <GroupIcon />, color: '#10b981' },
     { title: 'Super Admin', val: stats.superAdmins, icon: <SecurityIcon />, color: '#7c3aed' },
     { title: 'Total Admins', val: stats.admins, icon: <AdminPanelSettingsIcon />, color: '#8b5cf6' },
-    { title: 'Downloads', val: stats.downloads, icon: <DownloadIcon />, color: '#f59e0b' }
+    { title: 'Downloads', val: stats.downloads, icon: <DownloadIcon />, color: '#f59e0b' },
+    { title: 'Delete Request', val: stats.deleteRequests, icon: <DeleteSweepIcon />, color: '#ef4444' },
+    { title: 'Client Request', val: stats.clientRequests, icon: <PublishIcon />, color: '#06b6d4' }
   ];
 
   const commonPaperStyle = {
@@ -165,10 +179,10 @@ const Dashboard = () => {
         {/* TOP STATS CARDS */}
         <Grid container spacing={2} sx={{ mb: 5 }}>
           {statItems.map((item, i) => (
-            <Grid item xs={6} sm={4} md={2.4} key={i}>
-              <Paper sx={{ ...commonPaperStyle, alignItems: 'center', textAlign: 'center', minWidth: 160, p: 2 }}>
+            <Grid item xs={6} sm={4} md={1.5} key={i}> {/* Adjusted width for 8 items */}
+              <Paper sx={{ ...commonPaperStyle, alignItems: 'center', textAlign: 'center', minWidth: 130, p: 2 }}>
                 <Avatar sx={{ bgcolor: `${item.color}15`, color: item.color, mb: 1 }}>{item.icon}</Avatar>
-                <Typography variant="caption" fontWeight="700" color="textSecondary">{item.title}</Typography>
+                <Typography variant="caption" fontWeight="700" color="textSecondary" sx={{ whiteSpace: 'nowrap' }}>{item.title}</Typography>
                 <Typography variant="h5" fontWeight="900" sx={{ color: item.color }}>{item.val}</Typography>
               </Paper>
             </Grid>

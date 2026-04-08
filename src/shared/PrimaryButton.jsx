@@ -5,8 +5,11 @@ const PrimaryButton = ({ children, onClick, ...props }) => (
     variant="contained" 
     onClick={onClick}
     sx={{ 
-      bgcolor: '#1976D2', 
+      bgcolor: '#003569', 
       textTransform: 'none', 
+      color: '#fff',
+      borderRadius: 2,
+      fontSize: '0.95rem',
       fontWeight: 'bold',
       px: 3,
       '&:hover': { bgcolor: '#0D47A1' } 

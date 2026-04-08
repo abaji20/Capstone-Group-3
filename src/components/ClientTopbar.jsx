@@ -2,11 +2,12 @@ import React, { useState, useEffect, useContext } from 'react';
 import { 
   AppBar, Toolbar, Box, Avatar, Typography, ButtonBase, Menu, MenuItem, 
   ListItemIcon, Divider, IconButton, useTheme, Drawer, List, ListItem, 
-  ListItemText, useMediaQuery, Switch
+  ListItemText, useMediaQuery, Switch, ListItemButton
 } from '@mui/material';
 import { 
-  History, LockReset, Person as PersonIcon, Brightness4, Brightness7, 
-  Menu as MenuIcon, Close as CloseIcon 
+  LockReset, Brightness4 as Brightness4Icon, 
+  Brightness7 as Brightness7Icon, Menu as MenuIcon,
+  AccountCircle as AccountCircleIcon, Logout as LogoutIcon
 } from '@mui/icons-material';
 import { supabase } from '../supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
@@ -15,7 +16,8 @@ import { LogoutButton } from '../shared';
 import logo from '../assets/logo.png'; 
 import { ColorModeContext } from '../App';
 
-// Animations: Float at Indicator expansion
+const expandedWidth = 280;
+
 const customAnimations = `
   @keyframes floatFaster {
     0% { transform: translateY(0px) scale(1); }
@@ -52,6 +54,66 @@ const ClientTopbar = () => {
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
+  };
+
+  const drawerContent = (
+    <Box 
+      sx={{ 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        backgroundColor: theme.palette.mode === 'dark' ? '#111827' : '#213C51', 
+        color: 'white',
+        width: expandedWidth,
+        borderRight: '1px solid rgba(255,255,255,0.05)',
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', px: 3, minHeight: 100 }}>
+        <Avatar sx={{ bgcolor: '#3b82f6', width: 45, height: 45, border: '2px solid rgba(255,255,255,0.2)' }}>
+          <AccountCircleIcon sx={{ fontSize: 28 }} />
+        </Avatar>
+        <Box sx={{ ml: 2, textAlign: 'left', whiteSpace: 'nowrap' }}>
+          <Typography variant="body1" sx={{ fontWeight: 800, color: 'white' }}>{username}</Typography>
+          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.7rem' }}>
+            Client Account
+          </Typography>
+        </Box>
+      </Box>
+
+      <List sx={{ px: 1.5, flexGrow: 1 }}>
+        {navLinks.client.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <ListItem key={item.name} disablePadding>
+              <ListItemButton 
+                component={Link} to={item.path} onClick={handleDrawerToggle}
+                sx={{ 
+                  borderRadius: '8px', py: 1.2, mb: 0.5,
+                  backgroundColor: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                  borderLeft: isActive ? '4px solid #3b82f6' : '3px solid transparent',
+                }}
+              >
+                <ListItemIcon sx={{ color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)', minWidth: 40 }}>
+                  {React.cloneElement(item.icon, { sx: { fontSize: 22 } })}
+                </ListItemIcon>
+                <ListItemText primary={item.name} primaryTypographyProps={{ fontSize: '0.85rem', fontWeight: isActive ? 600 : 400, color: isActive ? 'white' : 'rgba(255,255,255,0.7)' }} />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
+      </List>
+      <Box sx={{ p: 2, mt: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <ListItemButton onClick={handleLogout} sx={{ borderRadius: '8px', color: '#ff5252' }}>
+          <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}><LogoutIcon fontSize="small" /></ListItemIcon>
+          <ListItemText primary="Logout" primaryTypographyProps={{ fontWeight: 600, fontSize: '0.85rem' }} />
+        </ListItemButton>
+      </Box>
+    </Box>
+  );
+
   return (
     <>
       <style>{customAnimations}</style>
@@ -60,31 +122,40 @@ const ClientTopbar = () => {
         sx={{ 
           backgroundColor: theme.palette.mode === 'dark' ? 'rgba(17, 24, 39, 0.95)' : '#213C51', 
           backdropFilter: 'blur(8px)',
-          height: { xs: 70, md: 90 }, 
+          height: { xs: 70, md: 80 }, 
           justifyContent: 'center',
           zIndex: theme.zIndex.drawer + 1,
           boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-          borderBottom: '2px solid rgba(59, 130, 246, 0.3)'
+          borderBottom: '1px solid rgba(0, 58, 151, 0.34)'
         }}
       >
-        <Toolbar sx={{ position: 'relative', display: 'flex', justifyContent: 'space-between', px: { xs: 1, md: 4 } }}>
+        <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', px: { xs: 1, md: 4 } }}>
           
-          {/* LEFT: Logo Section */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, zIndex: 2 }}>
+          {/* LEFT SIDE: LOGO & TITLE */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, md: 1 } }}>
             {isMobile && (
-              <IconButton color="inherit" onClick={handleDrawerToggle} sx={{ mr: 1 }}>
-                <MenuIcon fontSize="large" />
+              <IconButton color="inherit" onClick={handleDrawerToggle} sx={{ mr: 0.5 }}>
+                <MenuIcon fontSize="medium" />
               </IconButton>
             )}
-            <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: 2 }} onClick={() => navigate('/')}>
-              <Box component="img" src={logo} sx={{ height: { xs: 40, md: 60 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} />
+            <Box 
+              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: { xs: 1, md: 2 } }} 
+              onClick={() => navigate('/')}
+            >
+              <Box 
+                component="img" 
+                src={logo} 
+                sx={{ height: { xs: 35, md: 55 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} 
+              />
               <Typography 
-                fontFamily="Cinzel Decorative, sans-serif" 
+                fontFamily="Paytone One"
                 sx={{ 
-                  fontWeight: 900, 
-                  color: 'white', 
-                  fontSize: { xs: '0.9rem', md: '1.25rem' }, 
-                  letterSpacing: 2,
+                  fontStyle: 'italic',
+                  fontWeight: 200, color: 'white', 
+                  fontSize: { xs: '0.85rem', sm: '1.1rem', md: '1.25rem' }, 
+                  letterSpacing: { xs: 1, md: 2 }, 
+                  display: 'block', // Ensures text shows on mobile
+                  whiteSpace: 'nowrap',
                   textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
                 }}
               >
@@ -93,189 +164,100 @@ const ClientTopbar = () => {
             </Box>
           </Box>
 
-          {/* CENTER: Navigation Links (Desktop Only) */}
-          {!isMobile && (
-            <Box 
-              sx={{ 
-                position: 'absolute', 
-                left: '50%', 
-                transform: 'translateX(-50%)', 
-                display: 'flex', 
-                gap: 8, 
-                zIndex: 1 
-              }}
-            >
-              {navLinks.client.map(item => {
-                const isActive = location.pathname === item.path;
-                return (
-                  <ButtonBase 
-                    key={item.name} 
-                    component={Link} 
-                    to={item.path} 
-                    sx={{ 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      gap: 0.8, 
-                      px: 2,
-                      py: 1,
-                      borderRadius: '9px',
-                      color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)',
-                      transition: 'all 0.3s ease',
-                      position: 'relative',
-                      '&:hover': { 
-                        color: '#fff',
-                        bgcolor: 'rgba(255,255,255,0.05)',
-                        '& .nav-icon': { 
-                          animation: 'floatFaster 0.6s ease-in-out infinite',
-                          color: '#3b82f6',
-                          filter: 'drop-shadow(0 0 10px rgba(59, 130, 246, 0.8))'
-                        } 
-                      }
-                    }}
-                  >
-                    <Box className="nav-icon" sx={{ display: 'flex', transition: 'all 0.3s ease' }}>
-                      {React.cloneElement(item.icon, { sx: { fontSize: '1.5rem' } })}
-                    </Box>
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>
-                      {item.name}
-                    </Typography>
+          {/* RIGHT SIDE CONTAINER: NAV + PROFILE */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { md: 2, lg: 4 } }}>
+            
+            {/* NAVIGATION (Desktop Only) */}
+            {!isMobile && (
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {navLinks.client.map(item => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <ButtonBase 
+                      key={item.name} component={Link} to={item.path} 
+                      sx={{ 
+                        display: 'flex', flexDirection: 'column', gap: 0.5, px: 2, py: 1, borderRadius: '9px',
+                        color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)',
+                        transition: 'all 0.3s ease', position: 'relative',
+                        '&:hover': { 
+                          color: '#fff', bgcolor: 'rgba(255,255,255,0.05)',
+                          '& .nav-icon': { animation: 'floatFaster 0.6s ease-in-out infinite', color: '#3b82f6' } 
+                        }
+                      }}
+                    >
+                      <Box className="nav-icon" sx={{ display: 'flex', transition: 'all 0.3s ease' }}>
+                        {React.cloneElement(item.icon, { sx: { fontSize: '1.2rem' } })}
+                      </Box>
+                      <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>
+                        {item.name}
+                      </Typography>
+                      {isActive && (
+                        <Box sx={{ position: 'absolute', bottom: -2, height: '3px', width: '60%', bgcolor: '#3b82f6', borderRadius: '10px', animation: 'lineGrow 0.3s forwards' }} />
+                      )}
+                    </ButtonBase>
+                  );
+                })}
+              </Box>
+            )}
 
-                    {/* ACTIVE INDICATOR (Underline effect) */}
-                    {isActive && (
-                      <Box 
-                        sx={{ 
-                          position: 'absolute', 
-                          bottom: -5, 
-                          height: '4px', 
-                          bgcolor: '#3b82f6', 
-                          borderRadius: '10px',
-                          boxShadow: '0 0 12px #3b82f6',
-                          animation: 'lineGrow 0.3s forwards'
-                        }} 
-                      />
-                    )}
-                  </ButtonBase>
-                );
-              })}
-            </Box>
-          )}
-
-          {/* RIGHT: Profile Section */}
-          <Box sx={{ display: 'flex', alignItems: 'center', zIndex: 2 }}>
+            {/* PROFILE BUTTON */}
             <ButtonBase 
               onClick={(e) => setAnchorEl(e.currentTarget)} 
               sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 1, 
-                color: 'white', 
-                p: 1, 
-                px: 1, 
-                borderRadius: '15px', 
-                bgcolor: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  bgcolor: 'rgba(59, 130, 246, 0.2)',
-                  transform: 'scale(1.05)'
-                }
+                display: 'flex', alignItems: 'center', gap: 1, color: 'white', p: 0.5, px: 1, borderRadius: '10px', 
+                bgcolor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
+                transition: 'all 0.3s ease', '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' }
               }}
             >
               {!isMobile && (
-                <Box sx={{ textAlign: 'right' }}>
-                  <Typography sx={{ fontSize: '1rem', fontWeight: 900, lineHeight: 1 }}>
+                <Box sx={{ textAlign: 'right', mr: 0.5 }}>
+                  <Typography sx={{ fontSize: '0.9rem', fontWeight: 900, lineHeight: 1 }}>
                     {username === 'Loading...' ? '...' : username.split(' ')[0].toUpperCase()}
                   </Typography>
-                  <Typography sx={{ fontSize: '0.65rem', color: '#3b82f6', fontWeight: 800, mt: 0.5 }}>
-                    Client Account
-                  </Typography>
+                  <Typography sx={{ fontSize: '0.6rem', color: '#3b82f6', fontWeight: 800, mt: 0.3 }}>Client Account</Typography>
                 </Box>
               )}
-              <Avatar 
-                sx={{ 
-                  bgcolor: '#3b82f6', 
-                  color: '#fff', 
-                  width: { xs: 40, md: 50 }, 
-                  height: { xs: 40, md: 50 }, 
-                  fontSize: '1.4rem',
-                  fontWeight: 900, 
-                  border: '3px solid rgba(255,255,255,0.3)',
-                  boxShadow: '0 0 15px rgba(59, 130, 246, 0.5)'
-                }}
-              >
+              <Avatar sx={{ bgcolor: '#3b82f6', color: '#fff', width: { xs: 35, md: 45 }, height: { xs: 35, md: 45 }, fontSize: { xs: '1rem', md: '1.2rem' }, fontWeight: 900, border: '2px solid rgba(255,255,255,0.3)' }}>
                 {username.charAt(0).toUpperCase()}
               </Avatar>
             </ButtonBase>
           </Box>
 
-          {/* ... Rest of the menu and drawer (Mananatili ang logic mo dito) ... */}
           <Menu 
-            anchorEl={anchorEl} 
-            open={Boolean(anchorEl)} 
-            onClose={() => setAnchorEl(null)} 
-            PaperProps={{ 
-              sx: { 
-                mt: 2, 
-                borderRadius: 2, 
-                minWidth: 250, 
-                boxShadow: '0 15px 35px rgba(0,0,0,0.4)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                bgcolor: theme.palette.mode === 'dark' ? '#1f2937' : '#fff'
-              } 
-            }}
+            anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} 
+            PaperProps={{ sx: { mt: 2, borderRadius: 2, minWidth: 220, bgcolor: theme.palette.mode === 'dark' ? '#1f2937' : '#fff' } }}
           >
             <Box sx={{ px: 3, py: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 900, fontSize: '1rem' }}>{username}</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 900 }}>{username}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>Client Account</Typography>
             </Box>
             <Divider />
-            <MenuItem onClick={colorMode.toggleColorMode} sx={{ py: 1.5 }}>
-              <ListItemIcon>{theme.palette.mode === 'dark' ? <Brightness7 /> : <Brightness4 />}</ListItemIcon>
-              <ListItemText primary="Theme Mode" primaryTypographyProps={{ fontWeight: 700 }} />
-              <Switch checked={theme.palette.mode === 'dark'} />
+            <MenuItem onClick={colorMode.toggleColorMode} sx={{ py: 1 }}>
+              <ListItemIcon>{theme.palette.mode === 'dark' ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}</ListItemIcon>
+              <ListItemText primary="Theme Mode" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem' }} />
+              <Switch size="small" checked={theme.palette.mode === 'dark'} />
             </MenuItem>
-            <MenuItem onClick={() => { setAnchorEl(null); navigate('/reset-password'); }} sx={{ py: 1.5 }}>
-              <ListItemIcon><LockReset /></ListItemIcon> 
-              <ListItemText primary="Account Security" primaryTypographyProps={{ fontWeight: 700 }} />
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/reset-password'); }} sx={{ py: 1 }}>
+              <ListItemIcon><LockReset fontSize="small" /></ListItemIcon> 
+              <ListItemText primary="Security" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem' }} />
             </MenuItem>
             <Divider />
-            <Box sx={{ p: 2 }}><LogoutButton fullWidth /></Box>
+            <Box sx={{ p: 1.5 }}><LogoutButton fullWidth /></Box>
           </Menu>
         </Toolbar>
       </AppBar>
 
-      {/* DRAWER (Mobile) - Consistent styling with the new look */}
       <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={handleDrawerToggle}
-        sx={{ '& .MuiDrawer-paper': { width: 300, bgcolor: theme.palette.mode === 'dark' ? '#0f172a' : '#fff' } }}
+        variant="temporary" open={mobileOpen} onClose={handleDrawerToggle}
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          zIndex: theme.zIndex.drawer + 2, 
+          '& .MuiDrawer-paper': { width: expandedWidth, border: 'none', bgcolor: '#213C51' },
+        }}
       >
-        <Box sx={{ p: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: '#213C51', color: 'white' }}>
-          <Typography variant="h5" fontWeight={900}>NAVIGATION</Typography>
-          <IconButton onClick={handleDrawerToggle} sx={{ color: 'white' }}><CloseIcon fontSize="large" /></IconButton>
-        </Box>
-        <List sx={{ p: 2 }}>
-          {navLinks.client.map((item) => (
-            <ListItem key={item.name} disablePadding sx={{ mb: 2 }}>
-              <ButtonBase component={Link} to={item.path} onClick={handleDrawerToggle}
-                sx={{ 
-                  width: '100%', 
-                  justifyContent: 'flex-start', 
-                  p: 2, 
-                  borderRadius: 3, 
-                  bgcolor: location.pathname === item.path ? 'rgba(59, 130, 246, 0.15)' : 'transparent', 
-                  color: location.pathname === item.path ? '#3b82f6' : 'text.primary',
-                  transition: '0.2s'
-                }}>
-                <ListItemIcon sx={{ color: 'inherit', minWidth: 50 }}>{React.cloneElement(item.icon, { sx: { fontSize: '2.2rem' } })}</ListItemIcon>
-                <ListItemText primary={item.name} primaryTypographyProps={{ fontWeight: 900, fontSize: '1.1rem' }} />
-              </ButtonBase>
-            </ListItem>
-          ))}
-        </List>
+        {drawerContent}
       </Drawer>
-      <Box sx={{ height: { xs: 70, md: 100 } }} />
+      <Box sx={{ height: { xs: 70, md: 80 } }} />
     </>
   );
 };

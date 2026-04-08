@@ -79,12 +79,21 @@ const MyDownloads = () => {
   }, []);
 
   /**
-   * Working Genre Logic:
-   * Dynamically extracts unique genres from your downloaded PDFs
+   * Updated Genre Logic:
+   * Splits genres by comma, trims whitespace, and creates a unique list
    */
   const availableGenres = useMemo(() => {
-    const genres = downloads.map(doc => doc.genre).filter(Boolean);
-    return ['All', ...new Set(genres)];
+    const allGenres = new Set();
+    downloads.forEach(doc => {
+      if (doc.genre) {
+        // Split by comma, trim spaces, and add each to the Set
+        doc.genre.split(',').forEach(g => {
+          const trimmed = g.trim();
+          if (trimmed) allGenres.add(trimmed);
+        });
+      }
+    });
+    return ['All', ...Array.from(allGenres).sort()];
   }, [downloads]);
 
   const filteredDocs = useMemo(() => {
@@ -92,7 +101,9 @@ const MyDownloads = () => {
       const matchSearch = doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (doc.author && doc.author.toLowerCase().includes(searchQuery.toLowerCase()));
       
-      const matchGenre = genreFilter === 'All' || doc.genre === genreFilter;
+      // Check if the selected genre exists within the comma-separated string
+      const matchGenre = genreFilter === 'All' || 
+                         (doc.genre && doc.genre.split(',').map(g => g.trim()).includes(genreFilter));
       
       const matchTab = activeTab === 'LIBRARY' || 
                        (activeTab === 'BOOKS' && doc.category?.toLowerCase() === 'book') ||
@@ -179,7 +190,7 @@ const MyDownloads = () => {
               <Grid item xs={6} sm={4} md={3} lg={2.4} key={doc.id}>
                 <PdfCard 
                   pdf={doc} 
-                  downloadLabel="REDOWNLOAD" // Corrected prop name to match your PdfCard.js
+                  downloadLabel="REDOWNLOAD" 
                   onDownload={() => handleDownload(doc)} 
                 />
               </Grid>

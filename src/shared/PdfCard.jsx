@@ -12,11 +12,14 @@ import DownloadIcon from '@mui/icons-material/Download';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'; 
 import TitleIcon from '@mui/icons-material/Title';
 import BookIcon from '@mui/icons-material/Book'; 
+import PersonIcon from '@mui/icons-material/Person'; 
 import { supabase } from '../supabaseClient';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCloudArrowDown, faFilePdf } from '@fortawesome/free-solid-svg-icons';
+// Import your logo
+import logo from '../assets/logo.png'; 
 
-const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
+const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
@@ -28,6 +31,8 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
   const coverUrl = pdf.image_url ? supabase.storage.from('pdfs').getPublicUrl(pdf.image_url).data.publicUrl : null;
   const iconColor = isDarkMode ? theme.palette.primary.light : '#1976d2'; 
   const poppinsFont = { fontFamily: "'Poppins', sans-serif" };
+
+  const isSmall = variant === "small";
 
   const handleRead = () => {
     const { data } = supabase.storage.from('pdfs').getPublicUrl(pdf.file_url);
@@ -41,7 +46,6 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
-        // Check if this specific user has already downloaded this specific PDF
         const { data: existingDownload } = await supabase
           .from('downloads')
           .select('id')
@@ -49,7 +53,6 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
           .eq('pdf_id', pdf.id)
           .maybeSingle();
 
-        // ONLY insert if the record does not exist
         if (!existingDownload) {
           await supabase.from('downloads').insert([{ user_id: user.id, pdf_id: pdf.id }]);
           
@@ -62,7 +65,6 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
         }
       }
 
-      // Physical file download logic (always runs)
       const { data } = supabase.storage.from('pdfs').getPublicUrl(pdf.file_url);
       const response = await fetch(data.publicUrl);
       const blob = await response.blob();
@@ -86,33 +88,86 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
       <Card sx={{ 
         ...poppinsFont,
         height: '100%', display: 'flex', flexDirection: 'column',
-        borderRadius: 2, maxWidth: 220, minWidth: 220, flexShrink: 0,
+        borderRadius: 2, 
+        maxWidth: isSmall ? { xs: 160, sm: 180 } : 220, 
+        minWidth: isSmall ? { xs: 160, sm: 180 } : 220, 
+        flexShrink: 0,
         bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
         transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
         '&:hover': { transform: 'translateY(-8px)', boxShadow: isDarkMode ? '0 8px 20px rgba(0,0,0,0.5)' : '0 8px 16px rgba(0,0,0,0.1)' }
       }}>
         {coverUrl ? (
-          <CardMedia component="img" height="260" image={coverUrl} alt={pdf.title} sx={{ objectFit: 'cover' }} />
+          <CardMedia 
+            component="img" 
+            height={isSmall ? "200" : "260"} 
+            image={coverUrl} 
+            alt={pdf.title} 
+            sx={{ objectFit: 'cover' }} 
+          />
         ) : (
-          <Box sx={{ height: 260, bgcolor: isDarkMode ? '#334155' : '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <PictureAsPdfIcon sx={{ fontSize: 80, color: isDarkMode ? '#ff6060' : '#f50000' }} /> 
+          /* UPDATED: Replaced PDF Icon with Logo */
+          <Box sx={{ 
+            height: isSmall ? 200 : 260, 
+            bgcolor: isDarkMode ? '#334155' : '#3441fd', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            p: 3
+          }}>
+            <Box 
+              component="img"
+              src={logo}
+              alt="Logo Fallback"
+              sx={{ 
+                width: '65%', 
+                height: 'auto', 
+                opacity: 0.8,
+                filter: isDarkMode ? 'drop-shadow(0px 4px 10px rgba(0,0,0,0.5))' : 'none'
+              }}
+            />
           </Box>
         )}
         
-        <CardContent sx={{ flexGrow: 1, p: 2 }}>
-          <Typography variant="body1" noWrap sx={{ fontWeight: 700, color: isDarkMode ? '#f8fafc' : 'inherit' }}>
+        <CardContent sx={{ flexGrow: 1, p: isSmall ? 1.5 : 2 }}>
+          <Typography 
+            variant={isSmall ? "body2" : "body1"} 
+            noWrap 
+            sx={{ fontWeight: 700, color: isDarkMode ? '#f8fafc' : 'inherit' }}
+          >
             {pdf.title}
           </Typography>
-          <Typography variant="body2" color="text.secondary" noWrap sx={{ color: isDarkMode ? '#94a3b8' : 'text.secondary' }}>
+          <Typography 
+            variant="caption" 
+            color="text.secondary" 
+            noWrap 
+            sx={{ color: isDarkMode ? '#94a3b8' : 'text.secondary' }}
+          >
             {pdf.author}
           </Typography>
         </CardContent>
 
-        <Stack spacing={1.5} sx={{ p: 2, pt: 0 }}>
-          <Button fullWidth variant="outlined" startIcon={<VisibilityIcon />} onClick={() => setOpen(true)} sx={{ fontSize: '0.8rem', textTransform: 'none' }}>
+        <Stack spacing={isSmall ? 1 : 1.5} sx={{ p: isSmall ? 1.5 : 2, pt: 0 }}>
+          <Button 
+            fullWidth 
+            variant="outlined" 
+            startIcon={<VisibilityIcon sx={{ fontSize: isSmall ? '1rem' : 'inherit' }} />} 
+            onClick={() => setOpen(true)} 
+            sx={{ fontSize: isSmall ? '0.7rem' : '0.8rem', textTransform: 'none' }}
+          >
             See More
           </Button>
-          <Button fullWidth variant="contained" startIcon={<DownloadIcon />} onClick={() => setConfirmOpen(true)} sx={{ fontSize: '0.8rem', textTransform: 'none',  color: '#fff', bgcolor: isDarkMode ? '#0284c7' : iconColor }}>
+          <Button 
+            fullWidth 
+            variant="contained" 
+            startIcon={<DownloadIcon sx={{ fontSize: isSmall ? '1rem' : 'inherit' }} />} 
+            onClick={() => setConfirmOpen(true)} 
+            sx={{ 
+              fontSize: isSmall ? '0.7rem' : '0.8rem', 
+              textTransform: 'none',  
+              color: '#fff', 
+              bgcolor: isDarkMode ? '#0284c7' : iconColor 
+            }}
+          >
             {downloadLabel}
           </Button>
         </Stack>
@@ -163,6 +218,11 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
               <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <TitleIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Title:</strong> {pdf.title}
               </Typography>
+              
+              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PersonIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Author:</strong> {pdf.author || 'N/A'}
+              </Typography>
+
               <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <LibraryBooksIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Type:</strong> {pdf.category || 'N/A'}
               </Typography>
@@ -221,7 +281,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download" }) => {
                 </Button> 
               </Stack>
             </Stack>
-          </Stack>  
+          </Stack>   
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)} sx={{ color: isDarkMode ? '#94a3b8' : 'inherit' }}>Close</Button>

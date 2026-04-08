@@ -16,7 +16,7 @@ const ClientLayout = () => {
       }}
     >
       <ClientTopbar />
-      <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 4 } }}>
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: 1, md: 4 } }}>
         <Outlet /> 
       </Box>
     </Box>

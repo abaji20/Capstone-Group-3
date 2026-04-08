@@ -19,6 +19,7 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null); 
+  const [loading, setLoading] = useState(false);
   
   const theme = useTheme();
   const navigate = useNavigate();
@@ -29,14 +30,37 @@ const Login = () => {
     e.preventDefault();
     setError(null);
     setMessage(null);
-    
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    
-    if (error) {
-      setError(error.message === "Invalid login credentials" ? "Incorrect email or password." : error.message);
+
+    // --- DOMAIN RESTRICTION LOGIC ---
+    if (!email.toLowerCase().endsWith('@goldenlink.ph')) {
+      setError("Access Denied: Only @goldenlink.ph accounts are allowed.");
       return;
     }
-    navigate('/');
+
+    setLoading(true);
+    
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (authError) {
+        if (authError.message === "Invalid login credentials") {
+          setError("Incorrect email or password. Please check your credentials.");
+        } else if (authError.message.includes("Email not confirmed")) {
+          setError("Email not confirmed. Please check your Gmail inbox to verify your account.");
+        } else {
+          setError(authError.message);
+        }
+        return;
+      }
+
+      if (data.user) {
+        navigate('/');
+      }
+    } catch (err) {
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleForgotPassword = async () => {
@@ -44,10 +68,15 @@ const Login = () => {
       setError("Please enter your email address first.");
       return;
     }
+    
+    if (!email.toLowerCase().endsWith('@goldenlink.ph')) {
+      setError("Only @goldenlink.ph accounts can request a password reset.");
+      return;
+    }
+
     setError(null);
     setMessage(null);
 
-    // redirectTo is set to your local environment for now
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: 'https://capstone-group-3-swart.vercel.app/forgot-password',
     });
@@ -162,11 +191,10 @@ const Login = () => {
               variant="h4" 
               sx={{ 
                 mb: 3, 
-                fontStyle: 'italic', 
                 fontWeight: 800, 
                 color: isDarkMode ? '#f8fafc' : '#002c72', 
-                fontFamily: "Cinzel Decorative, sans-serif",
-                letterSpacing: '1px',
+                fontFamily: "Paytone One",
+                letterSpacing: '3px',
                 textAlign: 'center',
                 fontSize: { xs: '1.25rem', sm: '1.7rem' }
               }}
@@ -190,6 +218,7 @@ const Login = () => {
               <TextField 
                 margin="normal" required fullWidth label="Email" 
                 variant="outlined"
+                value={email}
                 onChange={(e) => setEmail(e.target.value)} 
                 InputProps={{ 
                   startAdornment: (
@@ -205,6 +234,7 @@ const Login = () => {
                 margin="normal" required fullWidth label="Password" 
                 variant="outlined"
                 type={showPassword ? 'text' : 'password'} 
+                value={password}
                 onChange={(e) => setPassword(e.target.value)} 
                 InputProps={{ 
                   startAdornment: (
@@ -242,6 +272,7 @@ const Login = () => {
               
               <Button 
                 type="submit" fullWidth variant="contained" 
+                disabled={loading}
                 sx={{ 
                   mt: 4, py: 1.8, 
                   backgroundColor: isDarkMode ? '#38bdf8' : '#1976d2', 
@@ -250,7 +281,7 @@ const Login = () => {
                   '&:hover': { backgroundColor: isDarkMode ? '#0ea5e9' : '#1565c0', transform: 'translateY(-1px)' },
                 }}
               >
-                LOGIN
+                {loading ? "AUTHENTICATING..." : "LOGIN"}
               </Button>
             </form>
           </Box>

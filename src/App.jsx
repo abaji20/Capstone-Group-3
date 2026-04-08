@@ -23,11 +23,14 @@ import ManageAccount from './pages/SuperAdmin/ManageAccount';
 import Logs from './pages/SuperAdmin/Logs';
 import DeleteRequests from './pages/SuperAdmin/DeleteRequest';
 import Archived from './pages/SuperAdmin/Archived';
+
 import PdfUploads from './pages/Admin/PdfUploads';
 import EditPDFs from './pages/Admin/EditPdfs';
 import PendingActions from './pages/Admin/PendingActions';
+import AdminManageAccount from './pages/Admin/AdminManageAccount'; // ANG BAGONG IMPORT
 import AdminLogs from './pages/Admin/AdminLogs';
 import PendingUpload from './pages/Admin/PendingUpload';
+
 import Browse from './pages/Client/Browse';
 import MyDownloads from './pages/Client/MyDownloads';
 import RequestUpload from './pages/Client/RequestUpload';
@@ -134,6 +137,7 @@ function App() {
               <Route element={<SuperAdminLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/manage-accounts" element={<ManageAccount />} />
+                <Route path="/edit" element={<EditPDFs />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/pending-upload" element={<PendingUpload />} />
                 <Route path="/delete-requests" element={<DeleteRequests />} />
@@ -146,6 +150,7 @@ function App() {
               <Route element={<AdminLayout />}>
                 <Route path="/upload" element={<PdfUploads />} />
                 <Route path="/edit" element={<EditPDFs />} />
+                <Route path="/admin-manage-accounts" element={<AdminManageAccount />} />
                 <Route path="/admin-logs" element={<AdminLogs />} />
                 <Route path="/pending-upload" element={<PendingUpload />} />
                 <Route path="/pending" element={<PendingActions />} />

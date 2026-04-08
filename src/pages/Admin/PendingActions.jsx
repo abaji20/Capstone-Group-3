@@ -10,7 +10,8 @@ import { supabase } from '../../supabaseClient';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import SpeakerNotesOffIcon from '@mui/icons-material/SpeakerNotesOff'; // Added for empty state
+import SpeakerNotesOffIcon from '@mui/icons-material/SpeakerNotesOff';
+import CloseIcon from '@mui/icons-material/Close'; // Added for cancel icon
 
 const PendingActions = () => {
   const theme = useTheme();
@@ -48,6 +49,23 @@ const PendingActions = () => {
       })));
     }
     setLoading(false);
+  };
+
+  // --- CANCEL REQUEST FUNCTION ---
+  const handleCancelRequest = async (id) => {
+    const { error } = await supabase
+      .from('delete_requests')
+      .update({ status: 'REJECTED' }) // Or 'CANCELLED' based on your schema
+      .eq('id', id);
+
+    if (error) {
+      alert("Failed to cancel request: " + error.message);
+    } else {
+      // Refresh local state to show updated status
+      setRequests(requests.map(req => 
+        req.id === id ? { ...req, status: 'REJECTED' } : req
+      ));
+    }
   };
 
   // --- DELETE FUNCTION ---
@@ -94,7 +112,6 @@ const PendingActions = () => {
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
         ) : requests.length === 0 ? (
-          /* --- EMPTY STATE --- */
           <Box sx={{ 
             textAlign: 'center', py: 10, bgcolor: cardBg, borderRadius: 2, 
             border: `1px dashed ${borderCol}`, display: 'flex', flexDirection: 'column', alignItems: 'center' 
@@ -110,7 +127,6 @@ const PendingActions = () => {
         ) : (
           <>
             {isMobile ? (
-              /* MOBILE VIEW */
               <Stack spacing={2}>
                 {requests.map((req) => (
                   <Paper key={req.id} sx={{ 
@@ -132,21 +148,32 @@ const PendingActions = () => {
                         <Typography variant="caption" sx={{ color: '#94a3b8' }}>
                           {new Date(req.created_at).toLocaleDateString()}
                         </Typography>
-                        <Button 
-                          size="small" 
-                          color="error" 
-                          startIcon={<DeleteOutlineIcon />}
-                          onClick={() => setDeleteModal({ open: true, id: req.id })}
-                        >
-                          Clear
-                        </Button>
+                        <Stack direction="row" spacing={1}>
+                          {req.status === 'PENDING' && (
+                            <Button 
+                              size="small" 
+                              color="inherit" 
+                              startIcon={<CloseIcon />}
+                              onClick={() => handleCancelRequest(req.id)}
+                            >
+                              Cancel
+                            </Button>
+                          )}
+                          <Button 
+                            size="small" 
+                            color="error" 
+                            startIcon={<DeleteOutlineIcon />}
+                            onClick={() => setDeleteModal({ open: true, id: req.id })}
+                          >
+                            Clear
+                          </Button>
+                        </Stack>
                       </Stack>
                     </Stack>
                   </Paper>
                 ))}
               </Stack>
             ) : (
-              /* DESKTOP VIEW */
               <TableContainer component={Paper} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                 <Table>
                   <TableHead sx={{ bgcolor: headerBg }}>
@@ -170,9 +197,16 @@ const PendingActions = () => {
                           {new Date(req.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell align="center">
-                          <IconButton color="error" onClick={() => setDeleteModal({ open: true, id: req.id })}>
-                            <DeleteOutlineIcon />
-                          </IconButton>
+                          <Stack direction="row" spacing={1} justifyContent="center">
+                            {req.status === 'PENDING' && (
+                              <IconButton color="default" title="Cancel Request" onClick={() => handleCancelRequest(req.id)}>
+                                <CloseIcon />
+                              </IconButton>
+                            )}
+                            <IconButton color="error" title="Delete Log" onClick={() => setDeleteModal({ open: true, id: req.id })}>
+                              <DeleteOutlineIcon />
+                            </IconButton>
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -184,7 +218,6 @@ const PendingActions = () => {
         )}
       </Container>
 
-      {/* --- CONFIRMATION MODAL --- */}
       <Modal
         open={deleteModal.open}
         onClose={() => setDeleteModal({ open: false, id: null })}

@@ -7,19 +7,20 @@ import {
 import { supabase } from '../../supabaseClient';
 
 // Icons
-import HistoryIcon from '@mui/icons-material/History';
 import SearchIcon from '@mui/icons-material/Search';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import FilterListIcon from '@mui/icons-material/FilterList';
 
 const AdminLogs = () => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
   const isMobile = useMediaQuery(theme.breakpoints.down('md')); 
 
-  // --- DARK MODE COLOR STRATEGY ---
-  const pageBg = isDarkMode ? '#141b2d' : '#f8fafc'; 
+  // --- COLOR STRATEGY ---
+  const pageBg = isDarkMode ? '#0f172a' : '#ffffff'; 
   const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
-  const inputBg = isDarkMode ? '#28334e' : '#ffffff'; 
-  const headerBg = isDarkMode ? '#0f172a' : '#213C51';
+  const inputBg = isDarkMode ? '#1e293b' : '#f1f5f9'; // Matching reference style
+  const headerBg = isDarkMode ? '#1e293b' : '#213C51';
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
 
   const [logs, setLogs] = useState([]);
@@ -30,6 +31,30 @@ const AdminLogs = () => {
   const [roleFilter, setRoleFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('');
 
+  // Integrated Filter Style from ManageAccount
+  const filterInputStyle = {
+    flexGrow: 1,
+    '& .MuiOutlinedInput-root': {
+      borderRadius: 1,
+      bgcolor: inputBg,
+      '& fieldset': { border: 'none' },
+      '&:hover fieldset': { border: 'none' },
+      '&.Mui-focused fieldset': { border: 'none' },
+    },
+    '& .MuiInputBase-input': {
+      fontWeight: 500,
+      fontSize: '0.9rem',
+    },
+    '& .MuiInputLabel-root': {
+        fontWeight: 700,
+        fontSize: '0.85rem',
+        transform: 'translate(14px, 12px) scale(1)',
+        '&.Mui-focused, &.MuiInputLabel-shrink': {
+            transform: 'translate(14px, -8px) scale(0.75)',
+        }
+    }
+  };
+
   useEffect(() => {
     fetchLogs();
   }, []);
@@ -38,7 +63,7 @@ const AdminLogs = () => {
     applyFilters();
   }, [logs, searchTerm, roleFilter, dateFilter]);
 
-   const fetchLogs = async () => {
+  const fetchLogs = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -144,55 +169,77 @@ const AdminLogs = () => {
     );
   };
 
-  const filterStyle = {
-    backgroundColor: inputBg,
-    borderRadius: 2,
-    '& .MuiOutlinedInput-root': {
-      '& input': { backgroundColor: 'transparent' },
-      '& .MuiSelect-select': { backgroundColor: 'transparent' },
-      '& fieldset': { border: isDarkMode ? 'none' : '1px solid #e2e8f0' },
-      '&:hover fieldset': { border: isDarkMode ? 'none' : '1px solid #cbd5e1' },
-      '&.Mui-focused fieldset': { border: `1px solid ${theme.palette.primary.main}` }
-    }
-  };
-
   return (
-    <Box sx={{ p: { xs: 2, md:5 }, bgcolor: pageBg, minHeight: '100vh' }}>
+    <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
       <Container maxWidth="xl">
         
-        {/* UPDATED PAGE HEADER LANG */}
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-          <Box>
-            <Typography 
-              variant="h3" 
-              sx={{ 
-                fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', 
-                fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px'
-              }}
-            >
-              ACTIVITY LOGS
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
-              SYSTEM AUDIT AND USER ACTIVITIES
-            </Typography>
-          </Box>
-        </Stack>
+        <Box sx={{ mb: 4 }}>
+          <Typography 
+            variant="h3" 
+            sx={{ 
+              fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', 
+              fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px'
+            }}
+          >
+            ACTIVITY LOGS
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
+            SYSTEM AUDIT AND USER ACTIVITIES
+          </Typography>
+        </Box>
 
-        {/* FILTERS */}
+        {/* INTEGRATED FILTERS SECTION */}
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
           <TextField 
-            fullWidth placeholder="Search name, action, or file..." value={searchTerm} 
+            fullWidth 
+            placeholder="Search name, action, or file..." 
+            value={searchTerm} 
             onChange={(e) => setSearchTerm(e.target.value)} 
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment> }} 
-            sx={filterStyle} 
+            sx={filterInputStyle}
+            InputProps={{ 
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon color="primary" sx={{ opacity: 0.8 }} />
+                </InputAdornment>
+              ) 
+            }} 
           />
-          <Stack direction="row" spacing={2}>
-            <TextField select label="Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} sx={{ ...filterStyle, minWidth: 120 }}>
+          
+          <Stack direction="row" spacing={2} sx={{ width: { xs: '100%', md: 'auto' } }}>
+            <TextField 
+              select 
+              label="Role" 
+              value={roleFilter} 
+              onChange={(e) => setRoleFilter(e.target.value)} 
+              sx={{ ...filterInputStyle, minWidth: 140 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <FilterListIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                )
+              }}
+            >
               <MenuItem value="All">All Roles</MenuItem>
               <MenuItem value="admin">Admin</MenuItem>
               <MenuItem value="client">Client</MenuItem>
             </TextField>
-            <TextField type="month" label="Date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ ...filterStyle, minWidth: 150 }} />
+
+            <TextField 
+              type="month" 
+              label="Date" 
+              value={dateFilter} 
+              onChange={(e) => setDateFilter(e.target.value)} 
+              InputLabelProps={{ shrink: true }} 
+              sx={{ ...filterInputStyle, minWidth: 180 }}
+              InputProps={{
+                startAdornment: (
+                    <InputAdornment position="start">
+                        <CalendarTodayIcon fontSize="small" color="primary" />
+                    </InputAdornment>
+                )
+              }}
+            />
           </Stack>
         </Stack>
 
@@ -201,7 +248,7 @@ const AdminLogs = () => {
         ) : (
           <>
             {!isMobile && (
-              <TableContainer component={Paper} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
+              <TableContainer component={Paper} sx={{ bgcolor: cardBg, borderRadius: 2, border: isDarkMode ? `1px solid ${borderCol}` : 'none', boxShadow: isDarkMode ? 'none' : '0 4px 20px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
                 <Table>
                   <TableHead sx={{ bgcolor: headerBg }}>
                     <TableRow>
@@ -215,7 +262,7 @@ const AdminLogs = () => {
                   </TableHead>
                   <TableBody>
                     {filteredLogs.map((log) => (
-                      <TableRow key={log.id} hover>
+                      <TableRow key={log.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
                         <TableCell sx={{ width: '200px' }}>
                           <Typography sx={{ fontWeight: 600, fontSize: '0.9rem' }}>
                             {log.profiles?.full_name || 'System User'}
@@ -240,7 +287,7 @@ const AdminLogs = () => {
             {isMobile && (
               <Stack spacing={2}>
                 {filteredLogs.map((log) => (
-                  <Card key={log.id} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
+                  <Card key={log.id} sx={{ bgcolor: cardBg, borderRadius: 2, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                     <CardContent>
                       <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
                         <Typography sx={{ fontWeight: 700 }}>{log.profiles?.full_name}</Typography>
