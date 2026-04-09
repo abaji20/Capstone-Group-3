@@ -249,7 +249,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
             background: imageUrl 
               ? `url(${imageUrl}) center/cover` 
               : `linear-gradient(145deg, #2c2c2c, #1a1a1a)`, 
-            border: '1px solid rgba(255,255,255,0.2)',
+            border: '2px solid rgba(255,255,255,0.2)',
             transform: 'perspective(1000px) rotateY(-5deg)',
             zIndex: 3,
             overflow: 'hidden'

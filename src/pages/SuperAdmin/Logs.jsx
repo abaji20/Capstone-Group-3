@@ -14,6 +14,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 
 const Logs = () => {
   const theme = useTheme();
@@ -42,28 +43,28 @@ const Logs = () => {
   useEffect(() => { applyFilters(); }, [logs, searchTerm, roleFilter, dateFilter]);
 
   const fetchLogs = async () => {
-  setLoading(true);
-  try {
-    const { data, error } = await supabase
-      .from('audit_logs')
-      .select(`
-        id, 
-        action_type, 
-        created_at, 
-        description,
-        pdfs(title),
-        profiles!audit_logs_user_id_fkey1(full_name, role, email)
-      `) // Updated to match the specific foreign key name in your DB
-      .order('created_at', { ascending: false });
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select(`
+          id, 
+          action_type, 
+          created_at, 
+          description,
+          pdfs(title),
+          profiles!audit_logs_user_id_fkey1(full_name, role, email)
+        `)
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    setLogs(data || []);
-  } catch (error) {
-    console.error("Error fetching logs:", error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+      if (error) throw error;
+      setLogs(data || []);
+    } catch (error) {
+      console.error("Error fetching logs:", error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const applyFilters = () => {
     let tempLogs = [...logs];
@@ -112,11 +113,9 @@ const Logs = () => {
     }
   };
 
-  // --- UPDATED COLOR LOGIC FOR OUTLINED DARK MODE ---
   const getActionStyles = (action, darkMode) => { 
     const type = action?.toLowerCase();
     if (darkMode) {
-        // Dark Mode: Outlined Style (Transparent BG, Colored Border/Text)
         if (type?.includes('upload')) return { bg: 'transparent', text: '#4ade80', label: 'UPLOAD' };
         if (type?.includes('edit')) return { bg: 'transparent', text: '#facc15', label: 'EDIT' }; 
         if (type?.includes('delete')) return { bg: 'transparent', text: '#f87171', label: 'DELETE' };
@@ -124,7 +123,6 @@ const Logs = () => {
         if (type?.includes('create')) return { bg: 'transparent', text: '#01a8f0', label: 'CREATE' };
         return { bg: 'transparent', text: '#94a3b8', label: action?.toUpperCase() };
     } else {
-        // Light Mode: Solid Backgrounds
         if (type?.includes('upload')) return { bg: '#2F6B3F', text: '#FBF6F6', label: 'UPLOAD' };
         if (type?.includes('edit')) return { bg: '#ffd500', text: '#7c6800', label: 'EDIT' }; 
         if (type?.includes('delete')) return { bg: '#A82323', text: '#ffffff', label: 'DELETE' };
@@ -137,13 +135,11 @@ const Logs = () => {
   const getRoleStyles = (role, darkMode) => {
     const r = role?.toLowerCase();
     if (darkMode) {
-        // Dark Mode Roles: Subtle backgrounds with vibrant text
         if (r === 'superadmin') return { bg: '#f3e8ff1a', text: '#d8b4fe' }; 
         if (r === 'admin') return { bg: '#fef3c71a', text: '#fbbf24' }; 
         if (r === 'client') return { bg: '#dbeafe1a', text: '#60a5fa' }; 
         return { bg: '#1e293b', text: '#94a3b8' };
     } else {
-        // Light Mode Roles
         if (r === 'superadmin') return { bg: '#F3E8FF', text: '#7C3AED' }; 
         if (r === 'admin') return { bg: '#FEF3C7', text: '#D97706' }; 
         if (r === 'client') return { bg: '#DBEAFE', text: '#2563EB' }; 
@@ -180,17 +176,6 @@ const Logs = () => {
     );
   };
 
-  const filterStyle = {
-    backgroundColor: inputBg,
-    borderRadius: 0.5,
-    
-    '& .MuiOutlinedInput-root': {
-      '& fieldset': { border: isDarkMode ? 'none' : '1px solid #e2e8f0' },
-      '&:hover fieldset': { border: isDarkMode ? 'none' : '1px solid #cbd5e1' },
-      '&.Mui-focused fieldset': { border: `1px solid ${theme.palette.secondary.main}` }
-    }
-  };
-
   return (
     <Box sx={{ p: { xs: 2, md: 5   }, bgcolor: pageBg, minHeight: '100vh' }}>
       <Container maxWidth="xl">
@@ -210,27 +195,13 @@ const Logs = () => {
                   fontStyle: 'italic',
                   color: isDarkMode ? '#ffffff' : '#213C51', 
                   fontFamily: "'Montserrat', sans-serif", 
-                  fontSize: {
-                    xs: '1.75rem', 
-                    sm: '2.5rem',  
-                    md: '3rem'     
-                  },
-                  letterSpacing: '1px',
-                  transition: 'color 0.3s ease'
+                  fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' },
+                  letterSpacing: '1px'
                 }}
               >
                 ACTIVITY LOGS
               </Typography>
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  color: 'text.secondary', 
-                  fontWeight: 700, 
-                  letterSpacing: 1,
-                  display: 'block',
-                  mt: 0
-                }}
-              >
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
                 SUPERADMIN MASTER AUDIT TRAIL
               </Typography>
             </Box>
@@ -248,19 +219,48 @@ const Logs = () => {
 
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
           <TextField 
-            fullWidth placeholder="Search all activities..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon color="secondary" /></InputAdornment> }} 
-            sx={filterStyle}
+            fullWidth 
+            placeholder="Search all activities..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+            sx={{ flexGrow: 1, bgcolor: inputBg, borderRadius: 0.5 }}
+            InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="secondary" /></InputAdornment>) }}
           />
-          <Stack direction="row" spacing={2}>
-            <TextField select label="Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} sx={{ ...filterStyle, minWidth: 150 }}>
-              <MenuItem value="All">All Roles</MenuItem>
-              <MenuItem value="superadmin">Superadmin</MenuItem>
-              <MenuItem value="admin">Admin</MenuItem>
-              <MenuItem value="client">Client</MenuItem>
-            </TextField>
-            <TextField type="month" label="Date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ ...filterStyle, minWidth: 150 }} />
-          </Stack>
+          
+          <TextField
+            type="month"
+            size="medium"
+            label="Date" 
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            sx={{ 
+              minWidth: 180, 
+              bgcolor: inputBg, 
+              borderRadius: 0.5,
+              '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' },
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'secondary.main' }} />
+                </InputAdornment>
+              )
+            }}
+          />
+
+          <TextField 
+            select 
+            size="medium" 
+            label="Filter Role" 
+            value={roleFilter} 
+            onChange={(e) => setRoleFilter(e.target.value)} 
+            sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5 }}
+          >
+            <MenuItem value="All">All Roles</MenuItem>
+            <MenuItem value="superadmin">Superadmin</MenuItem>
+            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="client">Client</MenuItem>
+          </TextField>
         </Stack>
 
         {loading ? (
@@ -272,7 +272,7 @@ const Logs = () => {
                 <Table>
                   <TableHead sx={{ bgcolor: headerBg }}>
                     <TableRow>
-                      <TableCell sx={{ color: 'white', fontWeight: 700, width: '200px' }}>PERFORMED BY</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 700, width: '250px' }}>PERFORMED BY</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700, width: '150px' }} align="center">ROLE</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }} align="center">ACTION</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 700 }}>TARGET</TableCell>
@@ -284,10 +284,15 @@ const Logs = () => {
                   <TableBody>
                     {filteredLogs.map((log) => (
                       <TableRow key={log.id} hover>
-                        <TableCell sx={{ width: '200px' }}>
-                            <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.85rem'}}>
-                              {log.profiles?.full_name}
-                            </Typography>
+                        <TableCell sx={{ width: '250px' }}>
+                            <Stack spacing={0}>
+                                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.85rem'}}>
+                                {log.profiles?.full_name}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                                {log.profiles?.email}
+                                </Typography>
+                            </Stack>
                         </TableCell>  
                         <TableCell align="center" sx={{ width: '150px' }}>
                           <RoleChip role={log.profiles?.role} />
@@ -318,7 +323,10 @@ const Logs = () => {
                       <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
                         <Stack direction="column" spacing={0.5}>
                             <Typography sx={{ fontWeight: 700 }}>{log.profiles?.full_name}</Typography>
-                            <RoleChip role={log.profiles?.role} />
+                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.80rem', lineHeight: 1 }}>
+                                {log.profiles?.email}
+                            </Typography> 
+                            <RoleChip role={log.profiles?.role} />  
                         </Stack>
                         <IconButton onClick={() => openConfirm('single', log.id)} color="error" size="small"><DeleteOutlineIcon fontSize="small" /></IconButton>
                       </Stack>

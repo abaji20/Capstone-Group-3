@@ -37,7 +37,22 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
     return data.publicUrl;
   };
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    // Validation para sa Genre (Bawal ang numbers)
+    if (name === 'genre') {
+      const regex = /^[a-zA-Z\s,]*$/; // Tinatanggap lang ang letters, spaces, at commas
+      if (!regex.test(value)) return;
+    }
+
+    // Validation para sa Year (Limit to 4 characters)
+    if (name === 'published_date') {
+      if (value.length > 4) return;
+    }
+
+    setFormData({ ...formData, [name]: value });
+  };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -65,25 +80,6 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
         finalImageUrl = filePath;
       }
 
-      // --- AUDIT LOG LOGIC: TRACKING YEAR ---
-      const changeLogs = [];
-      const fields = [
-        { key: 'title', label: 'Title' },
-        { key: 'author', label: 'Author' },
-        { key: 'genre', label: 'Genre' },
-        { key: 'category', label: 'Category' },
-        { key: 'published_date', label: 'Year' } // Correctly added field
-      ];
-
-      fields.forEach(({ key, label }) => {
-        // String comparison handles the transition from number (DB) to string (Input)
-        if (formData[key]?.toString() !== pdf[key]?.toString()) {
-          changeLogs.push(`${label}: "${pdf[key] || 'Empty'}" → "${formData[key] || 'Empty'}"`);
-        }
-      });
-      if (newImageFile) changeLogs.push("Cover Image updated");
-
-      // --- SUPABASE UPDATE ---
       const { error: updateError } = await supabase
         .from('pdfs')
         .update({
@@ -99,15 +95,42 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
 
       if (updateError) throw updateError;
 
-      // --- INSERT AUDIT LOG ---
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase.from('audit_logs').insert([{
-          user_id: user.id,
-          pdf_id: pdf.id,
-          action_type: 'Edit',
-          description: changeLogs.length > 0 ? `Edited: ${changeLogs.join(" | ")}` : "Metadata update"
-        }]);
+        const fields = [
+          { key: 'title', label: 'Title' },
+          { key: 'author', label: 'Author' },
+          { key: 'genre', label: 'Genre' },
+          { key: 'category', label: 'Category' },
+          { key: 'published_date', label: 'Year' },
+          { key: 'description', label: 'Description' }
+        ];
+
+        const logEntries = [];
+
+        fields.forEach(({ key, label }) => {
+          if (formData[key]?.toString() !== pdf[key]?.toString()) {
+            logEntries.push({
+              user_id: user.id,
+              pdf_id: pdf.id,
+              action_type: 'Edit',
+              description: `Updated ${label}: "${pdf[key] || 'None'}" → "${formData[key] || 'None'}"`
+            });
+          }
+        });
+
+        if (newImageFile) {
+          logEntries.push({
+            user_id: user.id,
+            pdf_id: pdf.id,
+            action_type: 'Edit',
+            description: "Updated Cover Image"
+          });
+        }
+
+        if (logEntries.length > 0) {
+          await supabase.from('audit_logs').insert(logEntries);
+        }
       }
 
       onUpdate();
@@ -157,8 +180,25 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
             </TextField>
           </Stack>
 
-          <TextField fullWidth label="Genre" name="genre" value={formData.genre} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
-          <TextField fullWidth label="Year" name="published_date" value={formData.published_date} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
+          <TextField 
+            fullWidth 
+            label="Genre" 
+            name="genre" 
+            value={formData.genre} 
+            onChange={handleChange} 
+            sx={inputStyle} 
+            InputLabelProps={{ shrink: true }} 
+          />
+          <TextField 
+            fullWidth 
+            label="Year" 
+            name="published_date" 
+            value={formData.published_date} 
+            onChange={handleChange} 
+            sx={inputStyle} 
+            InputLabelProps={{ shrink: true }}
+            inputProps={{ maxLength: 4 }} // Karagdagang safety para sa max length
+          />
           <TextField fullWidth label="Description" name="description" multiline rows={3} value={formData.description} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
         </Stack>
       </DialogContent>

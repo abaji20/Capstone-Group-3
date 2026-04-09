@@ -3,7 +3,8 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Stack, Typography, MenuItem, TextField, InputAdornment, Avatar,
   IconButton, Chip, useTheme, useMediaQuery, Divider, Snackbar, Alert,
-  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button
+  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button,
+  CircularProgress
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, PrimaryButton, DeleteButton, ActionModal, FormInput } from '../../shared';
@@ -28,8 +29,11 @@ const AdminManageAccount = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isDarkMode = theme.palette.mode === 'dark';
   
+  // Design constants from reference
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff';
-  const inputBg = isDarkMode ? '#28334e' : '#f1f5f9'; // Matching EditPDFs style
+  const inputBg = isDarkMode ? '#28334e' : '#ffffff';
+  const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
+  const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
 
   // States
   const [users, setUsers] = useState([]);
@@ -49,17 +53,6 @@ const AdminManageAccount = () => {
   const [editData, setEditData] = useState({ id: '', fullName: '', role: 'client', oldName: '' });
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
-  // Filter design from EditPDFs
-  const filterInputStyle = {
-    flexGrow: 1,
-    '& .MuiOutlinedInput-root': {
-      borderRadius: 1,
-      bgcolor: inputBg,
-      '& fieldset': { border: 'none' },
-    },
-    '& .MuiInputLabel-root': { fontWeight: 700 }
-  };
-
   // Route Protection & Fetch
   useEffect(() => { 
     const checkUser = async () => {
@@ -74,6 +67,7 @@ const AdminManageAccount = () => {
   }, [navigate]);
 
   const fetchClients = async () => {
+    setLoading(true);
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -82,6 +76,7 @@ const AdminManageAccount = () => {
     
     if (error) console.error("Error fetching users:", error);
     else setUsers(data || []);
+    setLoading(false);
   };
 
   const createAuditLog = async (action, description) => {
@@ -98,20 +93,17 @@ const AdminManageAccount = () => {
     }
   };
 
-  // --- HANDLERS ---
+  // --- HANDLERS (LOGIC UNTOUCHED) ---
   const handleCreateAccount = async () => {
     if (!formData.email || !formData.password || !formData.fullName) {
       setNotify({ open: true, message: 'Please fill in all fields!', severity: 'error' });
       return;
     }
-
     if (!formData.email.toLowerCase().endsWith('@goldenlink.ph')) {
       setNotify({ open: true, message: 'Only @goldenlink.ph accounts are allowed!', severity: 'error' });
       return;
     }
-
     setLoading(true);
-
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
@@ -121,9 +113,7 @@ const AdminManageAccount = () => {
           emailRedirectTo: 'https://capstone-group-3-swart.vercel.app/login'
         }
       });
-
       if (authError) throw authError;
-
       const { error: profileError } = await supabase
         .from('profiles')
         .insert([{
@@ -132,15 +122,12 @@ const AdminManageAccount = () => {
           full_name: formData.fullName,
           role: 'client'
         }]);
-
       if (profileError) throw profileError;
-
       await createAuditLog('Create Client', `Admin created GLC account: ${formData.fullName}`);
       setNotify({ open: true, message: 'Client account created! Verify email to activate.', severity: 'success' });
       setIsCreateModalOpen(false);
       setFormData({ fullName: '', email: '', role: 'client', password: '' });
       fetchClients();
-
     } catch (err) {
       setNotify({ open: true, message: 'Error: ' + err.message, severity: 'error' });
     } finally {
@@ -154,7 +141,6 @@ const AdminManageAccount = () => {
       .from('profiles')
       .update({ full_name: editData.fullName })
       .eq('id', editData.id);
-    
     if (error) {
       setNotify({ open: true, message: 'Update failed', severity: 'error' });
     } else {
@@ -194,9 +180,19 @@ const AdminManageAccount = () => {
 
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, minHeight: '100vh', bgcolor: pageBg }}>
+      
       {/* HEADER SECTION */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h3" sx={{ fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px' }}>
+        <Typography 
+          variant="h3" 
+          sx={{ 
+            fontStyle: 'italic', fontWeight: 900, 
+            color: isDarkMode ? '#ffffff' : '#213C51', 
+            fontFamily: "'Montserrat', sans-serif", 
+            fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, 
+            letterSpacing: '1px' 
+          }}
+        >
           CLIENT MANAGEMENT
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block', mt: 0 }}>
@@ -208,43 +204,78 @@ const AdminManageAccount = () => {
         <Alert severity={notify.severity} variant="filled">{notify.message}</Alert>
       </Snackbar>
 
-      {/* SEARCH AND FILTERS - Integrated EditPDFs Design */}
+      {/* SEARCH AND FILTERS */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
         <TextField 
           fullWidth
-          placeholder="Search clients..." 
+          placeholder="Search by name or email..." 
           value={searchTerm} 
           onChange={(e) => setSearchTerm(e.target.value)} 
-          sx={filterInputStyle}
+          sx={{ bgcolor: inputBg, borderRadius: 0.5 }}
           InputProps={{ 
             startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) 
           }}
         />
         
-        <Stack direction="row" spacing={3} sx={{ width: { xs: '100%', md: 'auto' } }}>
-          <TextField 
-            type="date" 
-            value={dateFilter} 
-            onChange={(e) => setDateFilter(e.target.value)} 
-            sx={{ ...filterInputStyle, minWidth: 180, flex: 1 }}
-            InputProps={{ 
-              startAdornment: (<InputAdornment position="start"><CalendarTodayIcon fontSize="small" color="primary" /></InputAdornment>) 
-            }}
-          />
+        <TextField 
+          type="date" 
+          label="Date Joined"
+          size="medium"
+          value={dateFilter} 
+          onChange={(e) => setDateFilter(e.target.value)} 
+          sx={{ 
+            minWidth: 200, 
+            bgcolor: inputBg, 
+            borderRadius: 0.5,
+            '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' }
+          }}
+          InputProps={{ 
+            startAdornment: (
+              <InputAdornment position="start">
+                <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} />
+              </InputAdornment>
+            ) 
+          }}
+        />
 
-          <PrimaryButton fullWidth={isMobile} sx={{ bbgcolor: isDarkMode ? '#28334e' : '#ffffff'}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}>
-            New Client
-            </PrimaryButton>
-        </Stack>
+        <PrimaryButton 
+          sx={{ 
+            bgcolor: '#213C51', 
+            height: '56px', 
+            minWidth: 180,
+            borderRadius: 0.5,
+            '&:hover': { bgcolor: '#1a3041' }
+          }} 
+          startIcon={<AddCircleOutlineIcon />} 
+          onClick={() => setIsCreateModalOpen(true)}
+        >
+          New Client
+        </PrimaryButton>
       </Stack>
 
-      {/* RESPONSIVE UI */}
-      {isMobile ? (
-        <Stack spacing={2} alignItems="center">
+      {/* MAIN CONTENT AREA */}
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+          <CircularProgress color="primary" />
+        </Box>
+      ) : filteredUsers.length === 0 ? (
+        /* NO ACCOUNTS EMPTY STATE */
+        <Box sx={{ textAlign: 'center', mt: 10 }}>
+          <PersonOutlineIcon sx={{ fontSize: 60, color: 'text.disabled', opacity: 0.3, mb: 2 }} />
+          <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 800, textTransform: 'uppercase' }}>
+            No Client Accounts Found
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Try adjusting your search or add a new client to get started.
+          </Typography>
+        </Box>
+      ) : isMobile ? (
+        /* MOBILE VIEW */
+        <Stack spacing={2}>
           {filteredUsers.map((user) => (
-            <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: isDarkMode ? 'none' : `1px solid ${theme.palette.divider}`, boxShadow: isDarkMode ? 'none' : theme.shadows[1] }}>
+            <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
               <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-                <Avatar sx={{ width: 40, height: 40, bgcolor: '#fbc02d', color: '#000000', fontWeight: 700 }}>{user.full_name?.charAt(0)}</Avatar>
+                <Avatar sx={{ width: 45, height: 45, bgcolor: '#fbc02d', color: '#000000', fontWeight: 700 }}>{user.full_name?.charAt(0)}</Avatar>
               </Box>
               <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{user.email}</Typography>
@@ -260,14 +291,15 @@ const AdminManageAccount = () => {
           ))}
         </Stack>
       ) : (
-        <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: theme.palette.background.paper, border: isDarkMode ? 'none' : `1px solid ${theme.palette.divider}`, boxShadow: 'none' }}>
+        /* DESKTOP VIEW */
+        <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: theme.palette.background.paper, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
           <Table>
-            <TableHead sx={{ bgcolor: isDarkMode ? '#1e1e2d' : '#213C51' }}>
+            <TableHead sx={{ bgcolor: headerColor }}>
               <TableRow>
-                <TableCell sx={{ color: 'white', fontWeight: 750 }}>CLIENT DETAILS</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ROLE</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">JOINED DATE</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 750 }} align="right">ACTIONS</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }}>CLIENT DETAILS</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ROLE</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">JOINED DATE</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }} align="right">ACTIONS</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -275,7 +307,7 @@ const AdminManageAccount = () => {
                 <TableRow key={user.id} hover>
                   <TableCell>
                     <Stack direction="row" spacing={2} alignItems="center">
-                      <Avatar sx={{ width: 30, height: 30, bgcolor: '#fbc02d', color: '#000000', fontWeight: 700 }}>{user.full_name?.charAt(0)}</Avatar>
+                      <Avatar sx={{ width: 35, height: 35, bgcolor: '#fbc02d', color: '#000000', fontWeight: 700 }}>{user.full_name?.charAt(0)}</Avatar>
                       <Box>
                         <Typography fontWeight={700}>{user.full_name}</Typography>
                         <Typography variant="caption" color="text.secondary">{user.email}</Typography>
@@ -283,7 +315,7 @@ const AdminManageAccount = () => {
                     </Stack>
                   </TableCell>
                   <TableCell align="center">
-                     <Chip label="CLIENT" variant="outlined" sx={{ borderColor: theme.palette.primary.main, color: theme.palette.primary.main, fontWeight: 800, borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} />
+                     <Chip label="CLIENT" variant="outlined" sx={{ borderColor: theme.palette.primary.main, color: theme.palette.primary.main, fontWeight: 800, borderRadius: '10px', width: '100px', fontSize: '0.65rem' }} />
                   </TableCell>
                   <TableCell align="center">{new Date(user.created_at).toLocaleDateString()}</TableCell>
                   <TableCell align="right">
@@ -317,7 +349,7 @@ const AdminManageAccount = () => {
         </DialogActions>
       </Dialog>
 
-      {/* CREATE CLIENT MODAL */}
+      {/* CREATE MODAL */}
       <ActionModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create GLC Client" onConfirm={handleCreateAccount} confirmText={loading ? "Creating..." : "Create Account"}>
         <Stack spacing={2} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
@@ -327,7 +359,7 @@ const AdminManageAccount = () => {
         </Stack>
       </ActionModal>
 
-      {/* EDIT CLIENT MODAL */}
+      {/* EDIT MODAL */}
       <ActionModal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Client Info" onConfirm={handleUpdateAccount} confirmText={loading ? "Saving..." : "Update"}>
         <Stack spacing={2} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={editData.fullName} onChange={(e) => setEditData({...editData, fullName: e.target.value})} />

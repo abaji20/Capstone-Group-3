@@ -3,7 +3,7 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Typography, CircularProgress, Stack, IconButton, Avatar,
   useTheme, useMediaQuery, Container, TextField, InputAdornment, MenuItem, 
-  Collapse, Divider, Chip, Button, Card, CardContent
+  Collapse, Divider, Button, Card, CardContent
 } from '@mui/material';
 import { 
   CheckCircleOutline as CheckCircleIcon, 
@@ -13,7 +13,8 @@ import {
   HourglassEmpty as HourglassIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
-  PersonOutline as PersonIcon // Added icon for user display
+  PersonOutline as PersonIcon,
+  CalendarToday as CalendarIcon
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 
@@ -25,24 +26,16 @@ const PendingUpload = () => {
   // --- STYLING ---
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff'; 
   const cardBg = isDarkMode ? '#1e293b' : 'rgba(255, 255, 255, 0.9)';
-  const inputBg = isDarkMode ? '#28334e' : '#f1f5f9'; 
+  const inputBg = isDarkMode ? '#28334e' : '#ffffff'; 
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
   const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
-
-  const filterInputStyle = {
-    '& .MuiOutlinedInput-root': {
-      borderRadius: 1,
-      bgcolor: inputBg,
-      '& fieldset': { border: 'none' },
-    },
-    '& .MuiInputLabel-root': { fontWeight: 700 }
-  };
 
   // --- STATE ---
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('All Types');
+  const [dateFilter, setDateFilter] = useState(''); // Added Date Filter State
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => { fetchPendingRequests(); }, []);
@@ -56,7 +49,6 @@ const PendingUpload = () => {
 
   const fetchPendingRequests = async () => {
     setLoading(true);
-    // UPDATED: Added profiles(full_name) to the select query
     const { data } = await supabase
       .from('upload_requests')
       .select(`
@@ -94,25 +86,33 @@ const PendingUpload = () => {
     fetchPendingRequests();
   };
 
+  // --- UPDATED FILTERING LOGIC ---
   const filteredRequests = requests.filter(req => {
-    const matchesSearch = (req.title?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          req.author?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = (
+      req.title?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      req.author?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      req.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) // Added user search
+    );
     const matchesType = typeFilter === 'All Types' || req.category === typeFilter;
-    return matchesSearch && matchesType;
+    
+    // Added Date logic
+    const requestDate = req.created_at ? new Date(req.created_at).toISOString().split('T')[0] : '';
+    const matchesDate = !dateFilter || requestDate === dateFilter;
+
+    return matchesSearch && matchesType && matchesDate;
   });
 
   const RequestMobileCard = ({ req }) => (
     <Card sx={{ mb: 2, bgcolor: cardBg, border: `1px solid ${borderCol}`, borderRadius: 2 }}>
       <CardContent>
         <Stack direction="row" spacing={2} alignItems="flex-start">
-          <Avatar variant="rounded" src={getImageUrl(req.cover_url)} sx={{ width: 60, height: 80, border: `1px solid ${borderCol}` }}>
-            <PdfIcon />
+          <Avatar variant="rounded" src={getImageUrl(req.cover_url)} sx={{ width: 60, height: 80, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
+            <PdfIcon sx={{ color: 'red', fontSize: '2rem' }} />
           </Avatar>
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{req.title}</Typography>
             <Typography variant="body2" color="text.secondary">{req.author} • {req.genre}</Typography>
             
-            {/* ADDED: Submitted by display for mobile */}
             <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 0.5 }}>
               <PersonIcon sx={{ fontSize: '0.9rem', opacity: 0.7 }} />
               <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
@@ -176,40 +176,62 @@ const PendingUpload = () => {
     <Box sx={{ p: { xs: 2, md: 4 }, bgcolor: pageBg, minHeight: '100vh' }}>
       <Container maxWidth="xl">
         
-        <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} sx={{ mb: 3 }}>
-          <Box>
-            <Typography 
-              variant="h3" 
-              sx={{ 
-                fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', 
-                fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.2rem', md: '3rem' }, letterSpacing: '1px'
-              }}
-            >
-              PENDING UPLOADS
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
-              REVIEW AND MANAGE DOCUMENT SUBMISSIONS
-            </Typography>
-          </Box>
-        </Stack>
+        <Box sx={{ mb: 4 }}>
+          <Typography 
+            variant="h3" 
+            sx={{ 
+              fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', 
+              fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.2rem', md: '3rem' }, letterSpacing: '1px'
+            }}
+          >
+            PENDING UPLOADS
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
+            REVIEW AND MANAGE DOCUMENT SUBMISSIONS
+          </Typography>
+        </Box>
 
+        {/* STANDARDIZED FILTER BAR */}
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
           <TextField 
             fullWidth 
-            placeholder="Search title or author..." 
+            placeholder="Search title, author, or requester..." 
             value={searchTerm} 
             onChange={(e) => setSearchTerm(e.target.value)} 
+            sx={{ bgcolor: inputBg, borderRadius: 0.5 }}
             InputProps={{ 
               startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment> 
             }} 
-            sx={filterInputStyle}
           />
+
+          <TextField
+            type="date"
+            size="medium"
+            label="Date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            sx={{ 
+              minWidth: 200, 
+              bgcolor: inputBg, 
+              borderRadius: 0.5,
+              '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' },
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <CalendarIcon fontSize="small" sx={{ color: 'primary.main' }} />
+                </InputAdornment>
+              )
+            }}
+          />
+
           <TextField 
             select 
-            label="Type" 
+            size="medium"
+            label="Category" 
             value={typeFilter} 
             onChange={(e) => setTypeFilter(e.target.value)} 
-            sx={{ ...filterInputStyle, minWidth: { md: 200 } }}
+            sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5 }}
           >
             <MenuItem value="All Types">All Types</MenuItem>
             <MenuItem value="book">Book</MenuItem>
@@ -220,9 +242,9 @@ const PendingUpload = () => {
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress color="secondary" /></Box>
         ) : filteredRequests.length === 0 ? (
-          <Box sx={{ textAlign: 'center', mt: 8, opacity: 0.5 }}>
-            <HourglassIcon sx={{ fontSize: 60, mb: 2 }} />
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>NO PENDING UPLOADS</Typography>
+          <Box sx={{ textAlign: 'center', mt: 8 }}>
+            <HourglassIcon sx={{ fontSize: 50, color: 'text.disabled', opacity: 0.4, mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 800 }}>NO PENDING UPLOADS</Typography>
           </Box>
         ) : (
           <>
@@ -231,7 +253,7 @@ const PendingUpload = () => {
                 {filteredRequests.map((req) => <RequestMobileCard key={req.id} req={req} />)}
               </Box>
             ) : (
-              <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}` }}>
+              <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                 <Table>
                   <TableHead sx={{ bgcolor: headerColor }}>
                     <TableRow>
@@ -249,8 +271,8 @@ const PendingUpload = () => {
                         <TableRow hover sx={{ '& > *': { borderBottom: 'unset' } }}>
                           <TableCell>
                             <Stack direction="row" alignItems="center" spacing={2}>
-                              <Avatar variant="rounded" src={getImageUrl(req.cover_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}` }}>
-                                <PdfIcon fontSize="small" />
+                              <Avatar variant="rounded" src={getImageUrl(req.cover_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
+                                <PdfIcon sx={{ color: 'red' }} />
                               </Avatar>
                               <Box>
                                 <Typography sx={{ fontWeight: 700 }}>{req.title}</Typography>
@@ -266,7 +288,6 @@ const PendingUpload = () => {
                             </Stack>
                           </TableCell>
                           <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{req.author}</Typography></TableCell>
-                          {/* ADDED: Submitted By Cell */}
                           <TableCell>
                              <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>
                                 {req.profiles?.full_name || 'N/A'}

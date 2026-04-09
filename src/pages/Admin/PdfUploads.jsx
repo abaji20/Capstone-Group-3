@@ -86,6 +86,7 @@ const PdfUploads = () => {
       return;
     }
 
+    // Genre and other fields accept any characters (including numbers)
     setFormData({ ...formData, [name]: value });
   };
 
@@ -106,7 +107,6 @@ const PdfUploads = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Duplicate check uses raw input as per your original logic
       const existingRecord = await checkDuplicate(formData.title.trim(), formData.author.trim());
       
       if (existingRecord) {
@@ -116,10 +116,7 @@ const PdfUploads = () => {
       }
 
       await uploadPdfWithFiles(selectedFile, selectedImage, formData, user?.id);
-      
-      // Auto-refresh Recent Activity
       await fetchRecent(); 
-      
       showStatus('success', "Added as a new record!");
       resetForm();
     } catch (error) {
@@ -136,7 +133,6 @@ const PdfUploads = () => {
       const { data: { user } } = await supabase.auth.getUser();
       await deletePdf(recordId); 
       await uploadNewPdf(selectedFile, selectedImage, formData, user?.id);
-      
       await fetchRecent();
       showStatus('success', "Existing resource replaced!");
       resetForm();
@@ -151,7 +147,6 @@ const PdfUploads = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       await uploadPdfWithFiles(selectedFile, selectedImage, formData, user?.id);
-      
       await fetchRecent();
       showStatus('success', "Added as a new record!");
       resetForm();
@@ -170,7 +165,7 @@ const PdfUploads = () => {
   };
 
   return (
-    <Box sx={{ p: 4, bgcolor: isDarkMode ? '#0f172a' : 'transparent', minHeight: '100vh' }}>
+    <Box sx={{ p: 4, bgcolor: isDarkMode ? '#0f172a' : 'transparent', minHeight: '100vh'  }}>
       
       {/* HEADER SECTION */}
       <Box sx={{ mb: 4 }}>
@@ -189,7 +184,21 @@ const PdfUploads = () => {
             <Stack spacing={3}>
               <Stack direction="row" spacing={2}>
                 <Box sx={{ flex: 1, p: 3, border: '1.5px dashed #cbd5e1', borderRadius: 2, textAlign: 'center', bgcolor: inputBg, cursor: 'pointer' }} component="label">
-                  <input type="file" hidden accept=".pdf" onChange={(e) => setSelectedFile(e.target.files[0])} />
+                  <input 
+                    type="file" 
+                    hidden 
+                    accept="application/pdf" 
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file && file.type !== 'application/pdf') {
+                        showStatus('error', 'Only PDF files are allowed!');
+                        e.target.value = null; 
+                        setSelectedFile(null);
+                        return;
+                      }
+                      setSelectedFile(file);
+                    }} 
+                  />
                   <FontAwesomeIcon icon={selectedFile ? faCheckCircle : faFilePdf} style={{ fontSize: '24px', color: selectedFile ? '#22c55e' : '#3b82f6' }} />
                   <Typography variant="body2" sx={{ mt: 1, fontWeight: 800 }}>{selectedFile ? selectedFile.name : "CHOOSE PDF"}</Typography>
                 </Box>

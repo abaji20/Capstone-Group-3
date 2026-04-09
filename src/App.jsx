@@ -23,6 +23,7 @@ import ManageAccount from './pages/SuperAdmin/ManageAccount';
 import Logs from './pages/SuperAdmin/Logs';
 import DeleteRequests from './pages/SuperAdmin/DeleteRequest';
 import Archived from './pages/SuperAdmin/Archived';
+import SuperAdminEditPDFs from './pages/SuperAdmin/SuperAdminEditPDFs'; // Eto yung bago
 
 import PdfUploads from './pages/Admin/PdfUploads';
 import EditPDFs from './pages/Admin/EditPdfs';
@@ -137,7 +138,8 @@ function App() {
               <Route element={<SuperAdminLayout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/manage-accounts" element={<ManageAccount />} />
-                <Route path="/edit" element={<EditPDFs />} />
+                <Route path="/super-editpdfs" element={<SuperAdminEditPDFs />} />
+                <Route path="/upload" element={<PdfUploads />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/pending-upload" element={<PendingUpload />} />
                 <Route path="/delete-requests" element={<DeleteRequests />} />

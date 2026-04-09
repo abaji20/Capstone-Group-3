@@ -13,7 +13,9 @@ export const navLinks = {
   superadmin: [
     { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
     { name: 'Manage Accounts', path: '/manage-accounts', icon: <PeopleIcon /> },
-    { name: 'Edit PDFs', path: '/edit', icon: <EditNoteIcon /> },
+    // In-update natin ito para tumugma sa SuperAdminEditPDFs route
+    { name: 'Edit PDFs', path: '/super-editpdfs', icon: <EditNoteIcon /> }, 
+    { name: 'Upload PDFs', path: '/upload', icon: <UploadFileIcon /> },
     { name: 'Activity Logs', path: '/logs', icon: <HistoryIcon /> },
     { name: 'Delete Requests', path: '/delete-requests', icon: <DeleteSweepIcon /> },
     { name: 'Client Requests', path: '/pending-upload', icon: <PendingActionsIcon /> },

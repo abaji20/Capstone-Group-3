@@ -21,6 +21,7 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import { color } from 'framer-motion';
 
 const ManageAccount = () => {
   const theme = useTheme();
@@ -275,14 +276,32 @@ const ManageAccount = () => {
           InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
         />
         
-        <TextField 
-          type="date" 
-          size="medium" 
-          value={dateFilter} 
-          onChange={(e) => setDateFilter(e.target.value)} 
-          sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
-          InputProps={{ startAdornment: (<InputAdornment position="start"><CalendarTodayIcon fontSize="small" color="primary" /></InputAdornment>) }}
-        />
+        <TextField
+          type="date"
+          size="medium"
+          label="Date" 
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          sx={{ 
+            minWidth: 180, 
+            bgcolor: isDarkMode ? '#28334e' : '#ffffff', 
+            borderRadius: 0.5,
+            // Target the native calendar picker icon in some browsers
+            '& input::-webkit-calendar-picker-indicator': {
+              filter: isDarkMode ? 'invert(1)' : 'none',
+            },
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <CalendarTodayIcon 
+                  fontSize="small" 
+                  sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} 
+                />
+              </InputAdornment>
+            )
+          }}
+/>
 
         <TextField select size="medium" label="Filter Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} sx={{ minWidth: 200, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
           <MenuItem value="All Roles">All Roles</MenuItem>
@@ -291,10 +310,10 @@ const ManageAccount = () => {
           <MenuItem value="client">Client</MenuItem>
         </TextField>
 
-        <PrimaryButton fullWidth={isMobile} sx={{ bbgcolor: isDarkMode ? '#28334e' : '#ffffff'}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}>
+        <PrimaryButton fullWidth={isMobile} sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: isDarkMode ? '#28334e' : '#28334e'}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}>
           New Account
         </PrimaryButton>
-      </Stack>
+      </Stack>  
 
       {isMobile ? (
         <Stack spacing={2} alignItems="center">

@@ -2,47 +2,44 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, IconButton, CircularProgress, Typography, Dialog, 
-  DialogTitle, DialogContent, TextField, DialogActions, Button, 
+  DialogTitle, DialogContent, DialogActions, Button, 
   Chip, Stack, Avatar, useTheme, useMediaQuery, Snackbar, Alert,
-  MenuItem, InputAdornment
+  MenuItem, InputAdornment, TextField 
 } from '@mui/material';
 
 // Icons
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday'; 
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 
-import { fetchPdfs, submitDeleteRequest } from '../../services/pdfService';
 import EditPdfModal from '../../shared/EditPdfModal';
 import { supabase } from '../../supabaseClient'; 
-
-// Import your logo asset
 import logo from '../../assets/logo.png'; 
 
-const EditPDFs = () => {
+const SuperAdminEditPDFs = () => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  // --- EXISTING STATE ---
+  // --- STATE ---
   const [pdfs, setPdfs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedPdf, setSelectedPdf] = useState(null);
-  const [deleteReason, setDeleteReason] = useState("");
   const [status, setStatus] = useState({ open: false, type: 'success', message: '' });
 
-  // --- NEW FILTER STATE ---
+  // --- FILTER STATE ---
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGenre, setSelectedGenre] = useState("All Genres"); 
-  const [selectedYear, setSelectedYear] = useState(""); 
+  const [selectedGenre, setSelectedGenre] = useState("All");
+  const [dateFilter, setDateFilter] = useState("");
 
   // --- STYLING ---
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff';
   const cardBg = isDarkMode ? '#1e293b' : 'rgba(255, 255, 255, 0.9)';
-  const inputBg = isDarkMode ? '#28334e' : '#f1f5f9';
+  const inputBg = isDarkMode ? '#28334e' : '#ffffff';
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
   const headerBg = isDarkMode ? '#1e1e2d' : '#213C51'; 
 
@@ -53,7 +50,13 @@ const EditPDFs = () => {
   const loadPdfs = async () => {
     try {
       setLoading(true);
-      const data = await fetchPdfs();
+      const { data, error } = await supabase
+        .from('pdfs')
+        .select('*')
+        .eq('is_archived', false)
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
       setPdfs(data || []);
     } catch (error) {
       console.error("Error loading PDFs:", error);
@@ -66,23 +69,30 @@ const EditPDFs = () => {
     const allGenres = pdfs.flatMap(p => 
       p.genre ? p.genre.split(',').map(g => g.trim()) : []
     );
-    return ["All Genres", ...new Set(allGenres)].sort(); 
+    return ["All", ...new Set(allGenres)].sort();
   }, [pdfs]);
 
+  // --- ENHANCED FILTER LOGIC (Title, Author, Genre) ---
   const filteredPdfs = useMemo(() => {
     return pdfs.filter(pdf => {
+      const query = searchQuery.toLowerCase();
       const matchesSearch = 
-        pdf.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        pdf.author?.toLowerCase().includes(searchQuery.toLowerCase());
+        pdf.title?.toLowerCase().includes(query) ||
+        pdf.author?.toLowerCase().includes(query) ||
+        pdf.genre?.toLowerCase().includes(query);
       
-      const matchesGenre = selectedGenre === "All Genres" || 
+      const matchesGenre = selectedGenre === "All" || 
         (pdf.genre && pdf.genre.split(',').map(g => g.trim()).includes(selectedGenre));
       
-      const matchesDate = !selectedYear || pdf.created_at?.includes(selectedYear);
+      let matchesDate = true;
+      if (dateFilter) {
+        const fileDate = new Date(pdf.created_at).toISOString().split('T')[0];
+        matchesDate = fileDate === dateFilter;
+      }
 
       return matchesSearch && matchesGenre && matchesDate;
     });
-  }, [pdfs, searchQuery, selectedGenre, selectedYear]);
+  }, [pdfs, searchQuery, selectedGenre, dateFilter]);
 
   const getImageUrl = (path) => {
     if (!path) return null;
@@ -92,39 +102,50 @@ const EditPDFs = () => {
 
   const showStatus = (type, message) => setStatus({ open: true, type, message });
 
-  const handleDeleteSubmit = async () => {
-    if (selectedPdf) {
-      try {
-        const { data: existingRequest, error: checkError } = await supabase
-          .from('delete_requests')
-          .select('id')
-          .eq('pdf_id', selectedPdf.id)
-          .eq('status', 'pending')
-          .maybeSingle();
+  // --- ARCHIVE LOGIC (Clears Delete Requests Automatically) ---
+  const handleArchiveDocument = async () => {
+    if (!selectedPdf) return;
 
-        if (existingRequest) {
-          showStatus('error', "This document already has a pending delete request.");
-          setDeleteOpen(false);
-          setDeleteReason("");
-          return;
-        }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
 
-        const { data: { user } } = await supabase.auth.getUser();
-        await submitDeleteRequest(selectedPdf.id, deleteReason, user.id);
-        showStatus('success', "Delete request submitted.");
-        setDeleteOpen(false);
-        setDeleteReason("");
-        loadPdfs(); 
-      } catch (error) {
-        showStatus('error', "Failed to submit request.");
+      // 1. Move to Archive
+      const { error: archiveError } = await supabase
+        .from('pdfs')
+        .update({ is_archived: true })
+        .eq('id', selectedPdf.id);
+
+      if (archiveError) throw archiveError;
+
+      // 2. Clear associated delete requests
+      await supabase
+        .from('delete_requests')
+        .delete()
+        .eq('pdf_id', selectedPdf.id);
+
+      // 3. Audit Log
+      if (user) {
+        await supabase.from('audit_logs').insert([{
+          user_id: user.id,
+          pdf_id: selectedPdf.id,
+          action_type: 'Delete',
+          description: `Archived PDF: "${selectedPdf.title}"`
+        }]);
       }
+
+      showStatus('success', "Document moved to Archives and requests cleared.");
+      setDeleteOpen(false);
+      loadPdfs(); 
+    } catch (error) {
+      console.error(error);
+      showStatus('error', "Failed to archive document.");
     }
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 5 }, background: pageBg, minHeight: '100vh' }}>
-      
-      <Box sx={{ mb: 4 }}>
+    <Box sx={{ p: { xs: 2, md: 5 }, background: pageBg, minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+
+      <Box sx={{ mb: 4, position: 'relative', zIndex: 1 }}>
         <Typography 
           variant="h3" 
           sx={{ 
@@ -142,24 +163,23 @@ const EditPDFs = () => {
         </Typography>
       </Box>
 
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
+      {/* FILTER BAR */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4, position: 'relative', zIndex: 2 }}>
         <TextField 
           fullWidth 
-          placeholder="Search by title or author..." 
+          placeholder="Search by title, author, or genre..." 
           value={searchQuery} 
           onChange={(e) => setSearchQuery(e.target.value)} 
-          sx={{ bgcolor: inputBg, borderRadius: 0.5 }}
-          InputProps={{ 
-            startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment> 
-          }} 
+          sx={{ flexGrow: 1, bgcolor: inputBg, borderRadius: 0.5 }}
+          InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
         />
         
         <TextField
           type="date"
-          label="Date"
           size="medium"
-          value={selectedYear}
-          onChange={(e) => setSelectedYear(e.target.value)}
+          label="Date"  
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
           sx={{ 
             minWidth: 180, 
             bgcolor: inputBg, 
@@ -177,25 +197,22 @@ const EditPDFs = () => {
 
         <TextField 
           select 
+          size="medium" 
           label="Genre" 
           value={selectedGenre} 
           onChange={(e) => setSelectedGenre(e.target.value)} 
-          sx={{ minWidth: { md: 200 }, bgcolor: inputBg, borderRadius: 0.5 }}
+          sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5 }}
         >
           {genres.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
         </TextField>
       </Stack>
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-          <CircularProgress color="secondary" />
-        </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress color="secondary" /></Box>
       ) : (
-        <Box>
+        <Box sx={{ position: 'relative', zIndex: 1 }}>
           {filteredPdfs.length === 0 ? (
-            <Typography align="center" sx={{ py: 10, color: 'text.secondary', fontWeight: 600 }}>
-              No matching documents found.
-            </Typography>
+            <Typography align="center" sx={{ py: 10, color: 'text.secondary', fontWeight: 600 }}>No documents found.</Typography>
           ) : !isMobile ? (
             <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
               <Table>
@@ -203,7 +220,7 @@ const EditPDFs = () => {
                   <TableRow>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }}>AUTHOR</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">GENRE</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">CATEGORY</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">DATE UPLOADED</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTIONS</TableCell>
                   </TableRow>
@@ -213,43 +230,23 @@ const EditPDFs = () => {
                     <TableRow key={pdf.id} hover>
                       <TableCell>
                         <Stack direction="row" alignItems="center" spacing={2}>
-                          <Avatar 
-                            variant="rounded" 
-                            src={getImageUrl(pdf.image_url)} 
-                            sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}
-                          >
-                            {!pdf.image_url && (
-                              <Box component="img" src={logo} sx={{ width: '50%', opacity: 0.8 }} />
-                            )}
+                          <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
+                            {!pdf.image_url && <Box component="img" src={logo} sx={{ width: '60%', opacity: 0.8 }} />}
                           </Avatar>
                           <Typography sx={{ fontWeight: 700 }}>{pdf.title}</Typography>
                         </Stack>
                       </TableCell>
                       <TableCell sx={{ fontWeight: 500 }}>{pdf.author || 'N/A'}</TableCell>
                       <TableCell align="center">
-                        <Chip 
-                          label={pdf.genre || 'N/A'} 
-                          variant="outlined"
-                          sx={{ 
-                            color: '#3b82f6', 
-                            borderColor: isDarkMode ? '#3b82f6aa' : '#3b82f6',
-                            fontWeight: 600, 
-                            borderRadius: '16px',
-                            minWidth: '110px', 
-                          }} 
-                        />
+                        <Chip label={pdf.genre || 'Academic'} variant="outlined" sx={{ color: '#3b82f6', borderColor: '#3b82f6', fontWeight: 600, borderRadius: '16px', minWidth: '110px' }} />
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 500, color: 'text.secondary' }}>
                         {pdf.created_at ? new Date(pdf.created_at).toLocaleDateString() : 'N/A'}
                       </TableCell>
                       <TableCell align="center">
                         <Stack direction="row" justifyContent="center" spacing={1}>
-                          <IconButton onClick={() => { setSelectedPdf(pdf); setEditOpen(true); }} color="info" sx={{ bgcolor: isDarkMode ? 'rgba(59, 130, 246, 0.1)' : '#f0f7ff' }}>
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton onClick={() => { setSelectedPdf(pdf); setDeleteOpen(true); }} color="error" sx={{ bgcolor: isDarkMode ? 'rgba(239, 68, 68, 0.1)' : '#fef2f2' }}>
-                            <DeleteIcon />
-                          </IconButton>
+                          <IconButton onClick={() => { setSelectedPdf(pdf); setEditOpen(true); }} color="info"><EditIcon /></IconButton>
+                          <IconButton onClick={() => { setSelectedPdf(pdf); setDeleteOpen(true); }} color="error"><DeleteIcon /></IconButton>
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -261,46 +258,18 @@ const EditPDFs = () => {
             <Stack spacing={2}>
               {filteredPdfs.map((pdf) => (
                 <Paper key={pdf.id} sx={{ p: 3, bgcolor: cardBg, borderRadius: 4, border: `1px solid ${borderCol}`, textAlign: 'center' }}>
-                  <Avatar 
-                    variant="rounded" 
-                    src={getImageUrl(pdf.image_url)} 
-                    sx={{ width: 90, height: 120, mx: 'auto', mb: 2, bgcolor: 'transparent', borderRadius: 2 }}
-                  >
-                    {!pdf.image_url && (
-                      <Box component="img" src={logo} sx={{ width: '70%', opacity: 0.8 }} />
-                    )}
+                  <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 90, height: 120, mx: 'auto', mb: 2, bgcolor: 'transparent' }}>
+                    {!pdf.image_url && <Box component="img" src={logo} sx={{ width: '70%', opacity: 0.8 }} />}
                   </Avatar>
                   <Typography variant="h6" sx={{ fontWeight: 800 }}>{pdf.title}</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{pdf.author || 'Unknown Author'}</Typography>
                   <Typography variant="caption" sx={{ display: 'block', mb: 2, color: 'text.secondary' }}>
                     Uploaded: {pdf.created_at ? new Date(pdf.created_at).toLocaleDateString() : 'N/A'}
                   </Typography>
-                  <Chip 
-                    label={pdf.genre || 'N/A'} 
-                    variant="outlined"
-                    sx={{ color: '#3b82f6', borderColor: '#3b82f6', fontWeight: 700, mb: 3, textTransform: 'uppercase' }} 
-                  />
+                  <Chip label={pdf.genre || 'Academic'} variant="outlined" sx={{ color: '#3b82f6', borderColor: '#3b82f6', fontWeight: 700, mb: 3 }} />
                   <Stack direction="row" spacing={2}>
-                    <Button 
-                      fullWidth 
-                      variant="contained" 
-                      color="info" 
-                      startIcon={<EditIcon />} 
-                      onClick={() => { setSelectedPdf(pdf); setEditOpen(true); }}
-                      sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 700 }}
-                    >
-                      Edit
-                    </Button>
-                    <Button 
-                      fullWidth 
-                      variant="outlined" 
-                      color="error" 
-                      startIcon={<DeleteIcon />} 
-                      onClick={() => { setSelectedPdf(pdf); setDeleteOpen(true); }}
-                      sx={{ borderRadius: 3, textTransform: 'none', fontWeight: 700 }}
-                    >
-                      Delete
-                    </Button>
+                    <Button fullWidth variant="contained" color="info" startIcon={<EditIcon />} onClick={() => { setSelectedPdf(pdf); setEditOpen(true); }}>Edit</Button>
+                    <Button fullWidth variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => { setSelectedPdf(pdf); setDeleteOpen(true); }}>Archive</Button>
                   </Stack>
                 </Paper>
               ))}
@@ -309,35 +278,33 @@ const EditPDFs = () => {
         </Box>
       )}
 
+      {/* FEEDBACK */}
       <Snackbar open={status.open} autoHideDuration={4000} onClose={() => setStatus({ ...status, open: false })}>
         <Alert severity={status.type} variant="filled">{status.message}</Alert>
       </Snackbar>
 
+      {/* EDIT MODAL */}
       {selectedPdf && (
         <EditPdfModal open={editOpen} onClose={() => setEditOpen(false)} pdf={selectedPdf} onUpdate={loadPdfs} />
       )}
 
+      {/* ARCHIVE CONFIRMATION DIALOG */}
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} PaperProps={{ sx: { borderRadius: 3, bgcolor: cardBg, p: 1 } }}>
-        <DialogTitle sx={{ fontWeight: 800 }}>Request Deletion</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningAmberIcon color="warning" /> Confirm Archive
+        </DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            Please provide a reason for removing this document.
+          <Typography variant="body1" sx={{ mb: 1, fontWeight: 700 }}>
+            Archive "{selectedPdf?.title}"?
           </Typography>
-          <TextField 
-            fullWidth placeholder="Reason for deletion" multiline rows={3} 
-            value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} 
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: inputBg, '& fieldset': { border: 'none' } } }}
-          />
+          <Typography variant="body2" sx={{ fontWeight: 600, opacity: 0.8 }}>
+            Moving to Archives will automatically remove any pending delete requests for this document.
+          </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
           <Button onClick={() => setDeleteOpen(false)} sx={{ color: 'text.secondary', fontWeight: 600 }}>Cancel</Button>
-          <Button 
-            variant="contained" 
-            onClick={handleDeleteSubmit} 
-            disabled={!deleteReason.trim()}
-            sx={{ bgcolor: '#ff4d4d', '&:hover': { bgcolor: '#ff3333' }, borderRadius: '20px', px: 4, fontWeight: 700 }}
-          >
-            Submit Request
+          <Button variant="contained" onClick={handleArchiveDocument} color="warning" sx={{ borderRadius: '20px', px: 4, fontWeight: 700 }}>
+            Confirm Archive
           </Button>
         </DialogActions>
       </Dialog>
@@ -345,4 +312,4 @@ const EditPDFs = () => {
   );
 };
 
-export default EditPDFs;
+export default SuperAdminEditPDFs;

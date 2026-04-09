@@ -210,7 +210,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           '& .MuiDrawer-paper': { 
             width: isMini ? collapsedWidth : expandedWidth, 
             border: 'none',
-            overflowX: 'visible',
+            overflowX: 'hidden',
             transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             zIndex: theme.zIndex.drawer + 1,
           },

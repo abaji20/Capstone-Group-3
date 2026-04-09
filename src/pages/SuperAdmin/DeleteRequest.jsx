@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
-  TableRow, Typography, CircularProgress, Stack, IconButton, Tooltip, Avatar,
+  TableRow, Typography, CircularProgress, Stack, IconButton, Avatar,
   useTheme, useMediaQuery, Card, CardContent, Button, Divider, TextField, MenuItem, InputAdornment
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
@@ -9,11 +9,10 @@ import { supabase } from '../../supabaseClient';
 // Icons
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
-import DateRangeIcon from '@mui/icons-material/DateRange';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'; 
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import SearchIcon from '@mui/icons-material/Search';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 
 const DeleteRequests = () => {
   const theme = useTheme();
@@ -23,37 +22,26 @@ const DeleteRequests = () => {
   // --- STYLING CONSTANTS ---
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff'; 
   const cardBg = isDarkMode ? '#1e293b' : 'rgba(255, 255, 255, 0.9)';
+  const inputBg = isDarkMode ? '#28334e' : '#ffffff'; 
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
   const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
-
-  const filterStyle = {
-    bgcolor: isDarkMode ? '#28334e' : '#ffffff',
-    borderRadius: '5px',
-    '& .MuiOutlinedInput-root': {
-      height: '55px',
-      borderRadius: '12px',
-      '& fieldset': { borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#e2e8f0' },
-    },
-    '& .MuiInputLabel-root': { lineHeight: '10px', fontSize: '0.85rem' }
-  };
 
   // --- STATE ---
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('All Roles');
-  const [dateFilter, setDateFilter] = useState(''); // Simplified date state
+  const [genreFilter, setGenreFilter] = useState('All Genres'); 
+  const [dateFilter, setDateFilter] = useState('');
 
   useEffect(() => { fetchRequests(); }, []);
 
-  // --- LOGIC FUNCTIONS (STRICTLY UNCHANGED) ---
   const fetchRequests = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('delete_requests')
       .select(`
         id, pdf_id, reason, created_at, 
-        pdfs(id, title, image_url), 
+        pdfs(id, title, image_url, author, genre), 
         profiles(full_name, role)
       `)
       .eq('status', 'pending')
@@ -63,6 +51,14 @@ const DeleteRequests = () => {
     else setRequests(data || []);
     setLoading(false);
   };
+
+  // --- DYNAMIC GENRE LIST (WITH SPLIT & TRIM) ---
+  const genres = useMemo(() => {
+    const allGenres = requests.flatMap(r => 
+      r.pdfs?.genre ? r.pdfs.genre.split(',').map(g => g.trim()) : []
+    );
+    return ["All Genres", ...new Set(allGenres)].sort();
+  }, [requests]);
 
   const handleApprove = async (requestId, pdfId) => {
     await supabase.from('pdfs').update({ is_archived: true }).eq('id', pdfId);
@@ -77,22 +73,28 @@ const DeleteRequests = () => {
 
   const getImageUrl = (path) => {
     if (!path) return null;
-    return `https://yktwxeyxmzfkxqhlesly.supabase.co/storage/v1/object/public/pdfs/${path}`;
+    const { data } = supabase.storage.from('pdfs').getPublicUrl(path);
+    return data.publicUrl;
   };
 
-  // --- FILTERING LOGIC ---
+  // --- UPDATED FILTERING LOGIC ---
   const filteredRequests = requests.filter(req => {
-    const createdAt = new Date(req.created_at).toISOString().split('T')[0]; // Format to YYYY-MM-DD
+    const createdAt = new Date(req.created_at).toISOString().split('T')[0];
+    const query = searchTerm.toLowerCase();
     
-    const matchesSearch = req.pdfs?.title?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         req.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = 
+      (req.pdfs?.title?.toLowerCase() || '').includes(query) || 
+      (req.pdfs?.author?.toLowerCase() || '').includes(query) ||
+      (req.pdfs?.genre?.toLowerCase() || '').includes(query) ||
+      (req.profiles?.full_name?.toLowerCase() || '').includes(query);
+
+    // Support for multiple genres in filter check
+    const itemGenres = req.pdfs?.genre ? req.pdfs.genre.split(',').map(g => g.trim()) : [];
+    const matchesGenre = genreFilter === 'All Genres' || itemGenres.includes(genreFilter);
     
-    const matchesRole = roleFilter === 'All Roles' || req.profiles?.role === roleFilter;
-    
-    // Simple date match
     const matchesDate = !dateFilter || createdAt === dateFilter;
     
-    return matchesSearch && matchesRole && matchesDate;
+    return matchesSearch && matchesGenre && matchesDate;
   });
 
   return (
@@ -100,59 +102,65 @@ const DeleteRequests = () => {
       
       {/* HEADER SECTION */}
       <Box sx={{ mb: 4 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-          <Box>
-            <Typography 
-              variant="h3" 
-              sx={{ 
-                fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', 
-                fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px'
-              }}
-            >
-              DELETE REQUEST
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
-              AUTHORIZING PERMANENT REMOVAL OF DOCUMENTS
-            </Typography>
-          </Box>
-        </Stack>
-
-        {/* FILTER TOOLBAR */}
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-          <TextField 
-            fullWidth placeholder="Search requests..." size="medium" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment> }} 
-            sx={filterStyle}
-          />
-
-          <Stack direction="row" spacing={1} sx={{ flexWrap: { xs: 'wrap', sm: 'nowrap' }, width: { xs: '100%', md: 'auto' } }}>
-            {/* SIMPLE DATE FILTER */}
-            <TextField 
-              type="date"
-              label="Filter Date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              sx={{ 
-                ...filterStyle, 
-                minWidth: { xs: 'calc(50% - 4px)', sm: 160 },
-                '& input::-webkit-calendar-picker-indicator': {
-                  filter: isDarkMode ? 'invert(1)' : 'none',
-                  cursor: 'pointer'
-                }
-              }}
-            />
-
-            {/* ROLE FILTER */}
-            <TextField select label="Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} sx={{ ...filterStyle, minWidth: { xs: 'calc(50% - 4px)', sm: 140 } }}>
-              <MenuItem value="All Roles">All Roles</MenuItem>
-              <MenuItem value="superadmin">Superadmin</MenuItem>
-              <MenuItem value="admin">Admin</MenuItem>
-              <MenuItem value="client">Client</MenuItem>
-            </TextField>
-          </Stack>
-        </Stack>
+        <Typography 
+          variant="h3" 
+          sx={{ 
+            fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', 
+            fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.2rem', md: '3rem' }, letterSpacing: '1px'
+          }}
+        >
+          DELETE REQUESTS
+        </Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
+          AUTHORIZING PERMANENT REMOVAL OF DOCUMENTS
+        </Typography>
       </Box>
+
+      {/* FILTER BAR */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
+        <TextField 
+          fullWidth 
+          placeholder="Search by title, author, requester, or genre..." 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)} 
+          sx={{ flexGrow: 1, bgcolor: inputBg, borderRadius: 0.5 }}
+          InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
+        />
+        
+        <TextField
+          type="date"
+          size="medium"
+          label="Date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          sx={{ 
+            minWidth: 180, 
+            bgcolor: inputBg, 
+            borderRadius: 0.5,
+            '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' },
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} />
+              </InputAdornment>
+            )
+          }}
+        />
+
+        <TextField 
+          select 
+          size="medium" 
+          label="Genre" 
+          value={genreFilter} 
+          onChange={(e) => setGenreFilter(e.target.value)} 
+          sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5 }}
+        >
+          {genres.map((g) => (
+            <MenuItem key={g} value={g}>{g}</MenuItem>
+          ))}
+        </TextField>
+      </Stack>
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress color="secondary" /></Box>
@@ -164,8 +172,7 @@ const DeleteRequests = () => {
       ) : (
         <>
           {!isMobile ? (
-            /* --- DESKTOP TABLE VIEW --- */
-            <TableContainer component={Paper} sx={{ mt: 4, borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}`, boxShadow: isDarkMode ? 'none' : '0 10px 40px rgba(0,0,0,0.08)' }}>
+            <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
               <Table sx={{ minWidth: 650 }}>
                 <TableHead sx={{ bgcolor: headerColor }}>
                   <TableRow>
@@ -181,16 +188,17 @@ const DeleteRequests = () => {
                     <TableRow key={req.id} hover>
                       <TableCell>
                         <Stack direction="row" alignItems="center" spacing={2}>
-                          <Avatar variant="rounded" src={getImageUrl(req.pdfs?.image_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}` }}>
-                            <DescriptionOutlinedIcon fontSize="small" />
+                          <Avatar variant="rounded" src={getImageUrl(req.pdfs?.image_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
+                            <PictureAsPdfIcon fontSize="small" sx={{ color: '#ef4444' }} />
                           </Avatar>
-                          <Typography sx={{ fontWeight: 700 }}>{req.pdfs?.title || 'Unknown File'}</Typography>
+                          <Box>
+                            <Typography sx={{ fontWeight: 700 }}>{req.pdfs?.title || 'Unknown File'}</Typography>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>{req.pdfs?.genre || 'Academic'}</Typography>
+                          </Box>
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{req.profiles?.full_name}</Typography>
-                        </Stack>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{req.profiles?.full_name}</Typography>
                       </TableCell>
                       <TableCell sx={{ maxWidth: '250px' }}><Typography variant="body2" noWrap>{req.reason}</Typography></TableCell>
                       <TableCell><Typography variant="body2">{new Date(req.created_at).toLocaleDateString()}</Typography></TableCell>
@@ -206,17 +214,19 @@ const DeleteRequests = () => {
               </Table>
             </TableContainer>
           ) : (
-            /* --- MOBILE CARD VIEW --- */
-            <Stack spacing={2} sx={{ mt: 2 }}>
+            <Stack spacing={2}>
               {filteredRequests.map((req) => (
                 <Card key={req.id} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                   <CardContent sx={{ p: 2 }}>
                     <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-                       <Avatar variant="rounded" src={getImageUrl(req.pdfs?.image_url)} sx={{ width: 50, height: 65, border: `1px solid ${borderCol}` }}><DescriptionOutlinedIcon /></Avatar>
-                       <Box sx={{ flex: 1 }}>
-                         <Typography sx={{ fontWeight: 800 }}>{req.pdfs?.title}</Typography>
-                         <Typography variant="caption">{req.profiles?.full_name}</Typography>
-                       </Box>
+                        <Avatar variant="rounded" src={getImageUrl(req.pdfs?.image_url)} sx={{ width: 50, height: 65, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
+                          <PictureAsPdfIcon sx={{ color: '#ef4444' }} />
+                        </Avatar>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography sx={{ fontWeight: 800 }}>{req.pdfs?.title}</Typography>
+                          <Typography variant="caption" sx={{ display: 'block' }}>By: {req.profiles?.full_name}</Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main' }}>{req.pdfs?.genre || 'Academic'}</Typography>
+                        </Box>
                     </Stack>
                     <Box sx={{ bgcolor: isDarkMode ? 'rgba(0,0,0,0.2)' : '#f8fafc', p: 1.5, mb: 2 }}>
                       <Typography variant="body2" sx={{ fontStyle: 'italic' }}>"{req.reason}"</Typography>

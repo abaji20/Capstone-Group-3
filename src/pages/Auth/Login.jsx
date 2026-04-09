@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { ColorModeContext } from '../../App'; 
 import logo from '../../assets/logo.png'; 
-import cover from '../../assets/cover.jpg'; 
+import coverlogin from '../../assets/coverlogin.png'; 
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -92,7 +92,7 @@ const Login = () => {
     ? 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' 
     : 'linear-gradient(135deg, #025bb4 0%, #e2e8f0 100%)';
 
-  return (
+ return (
     <Box sx={{ 
       minHeight: '100vh', 
       display: 'flex', 
@@ -103,7 +103,23 @@ const Login = () => {
       position: 'relative',
       transition: 'background 0.3s ease'
     }}>
-      
+
+      {/* --- LOGO AT TOP LEFT --- */}
+      <Avatar 
+        src={logo} 
+        variant="square" 
+        sx={{ 
+          position: 'absolute', 
+          top: 20, 
+          left: 20, 
+          width: 80, 
+          height: 80, 
+          bgcolor: 'transparent',
+          // Hide on extra-small/small screens (mobile), show as flex on medium and up
+          display: { xs: 'none', md: 'flex' } 
+        }} 
+      />
+    
       {/* Darkmode Toggle */}
       <Box sx={{ position: 'absolute', top: 20, right: 20 }}>
         <Tooltip title={`Switch to ${isDarkMode ? 'Light' : 'Dark'} Mode`}>
@@ -160,7 +176,7 @@ const Login = () => {
 
             <Box
               component="img"
-              src={cover}
+              src={coverlogin}
               alt="Library Cover"
               sx={{
                 width: '100%',
@@ -185,21 +201,21 @@ const Login = () => {
               alignItems: 'center', 
             }}
           >
-            <Avatar src={logo} variant="square" sx={{ mb: 2, width: 80, height: 80, bgcolor: 'transparent' }} />
+              
             
             <Typography 
               variant="h4" 
               sx={{ 
-                mb: 3, 
-                fontWeight: 800, 
+                mb: 2, 
+                fontWeight: 600, 
                 color: isDarkMode ? '#f8fafc' : '#002c72', 
-                fontFamily: "Paytone One",
-                letterSpacing: '3px',
+                fontFamily: "monserrat, sans-serif",
+                letterSpacing: '2px',
                 textAlign: 'center',
-                fontSize: { xs: '1.25rem', sm: '1.7rem' }
+                fontSize: { xs: '1.25rem', sm: '1.8rem' }
               }}
             >
-              Library Repository
+              Sign In
             </Typography>
             
             <Collapse in={!!error} sx={{ width: '100%', mb: 2 }}>

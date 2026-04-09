@@ -104,11 +104,11 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
             alt={pdf.title} 
             sx={{ objectFit: 'cover' }} 
           />
-        ) : (
+        ) : ( 
           /* UPDATED: Replaced PDF Icon with Logo */
           <Box sx={{ 
             height: isSmall ? 200 : 260, 
-            bgcolor: isDarkMode ? '#334155' : '#3441fd', 
+            bgcolor: isDarkMode ? '#334155' : '#213C51', 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',

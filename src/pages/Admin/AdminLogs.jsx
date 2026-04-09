@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
-  TableRow, Typography, CircularProgress, Stack, MenuItem, TextField, 
-  InputAdornment, useTheme, useMediaQuery, Container, Card, CardContent 
+  TableRow, Stack, Typography, MenuItem, TextField, InputAdornment, 
+  useTheme, useMediaQuery, Container, Card, CardContent, CircularProgress
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
@@ -10,19 +10,21 @@ import { supabase } from '../../supabaseClient';
 import SearchIcon from '@mui/icons-material/Search';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import FilterListIcon from '@mui/icons-material/FilterList';
+import AssignmentLateIcon from '@mui/icons-material/AssignmentLate';
 
 const AdminLogs = () => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
   const isMobile = useMediaQuery(theme.breakpoints.down('md')); 
 
-  // --- COLOR STRATEGY ---
+  // --- DARK MODE LAYOUT COLORS ---
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff'; 
   const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
-  const inputBg = isDarkMode ? '#1e293b' : '#f1f5f9'; // Matching reference style
-  const headerBg = isDarkMode ? '#1e293b' : '#213C51';
+  const inputBg = isDarkMode ? '#28334e' : '#f1f5f9'; 
+  const headerBg = isDarkMode ? '#0f172a' : '#213C51';
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
 
+  // --- STATE ---
   const [logs, setLogs] = useState([]);
   const [filteredLogs, setFilteredLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,37 +33,18 @@ const AdminLogs = () => {
   const [roleFilter, setRoleFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('');
 
-  // Integrated Filter Style from ManageAccount
-  const filterInputStyle = {
-    flexGrow: 1,
-    '& .MuiOutlinedInput-root': {
-      borderRadius: 1,
-      bgcolor: inputBg,
-      '& fieldset': { border: 'none' },
-      '&:hover fieldset': { border: 'none' },
-      '&.Mui-focused fieldset': { border: 'none' },
-    },
-    '& .MuiInputBase-input': {
-      fontWeight: 500,
-      fontSize: '0.9rem',
-    },
-    '& .MuiInputLabel-root': {
-        fontWeight: 700,
-        fontSize: '0.85rem',
-        transform: 'translate(14px, 12px) scale(1)',
-        '&.Mui-focused, &.MuiInputLabel-shrink': {
-            transform: 'translate(14px, -8px) scale(0.75)',
-        }
-    }
+  useEffect(() => { fetchLogs(); }, []);
+  useEffect(() => { applyFilters(); }, [logs, searchTerm, roleFilter, dateFilter]);
+
+  // --- DATE FORMATTER FUNCTION (MM/DD/YYYY) ---
+  const formatDate = (dateString) => {
+    if (!dateString) return '—';
+    const date = new Date(dateString);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}/${day}/${year}`;
   };
-
-  useEffect(() => {
-    fetchLogs();
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [logs, searchTerm, roleFilter, dateFilter]);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -89,12 +72,10 @@ const AdminLogs = () => {
 
   const applyFilters = () => {
     let tempLogs = [...logs];
-    
     tempLogs = tempLogs.filter(log => 
         log.profiles?.role?.toLowerCase() === 'admin' || 
         log.profiles?.role?.toLowerCase() === 'client'
     );
-
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       tempLogs = tempLogs.filter(log => 
@@ -173,7 +154,8 @@ const AdminLogs = () => {
     <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
       <Container maxWidth="xl">
         
-        <Box sx={{ mb: 4 }}>
+        {/* HEADER SECTION */}
+        <Box sx={{ mb: 5 }}>
           <Typography 
             variant="h3" 
             sx={{ 
@@ -188,95 +170,104 @@ const AdminLogs = () => {
           </Typography>
         </Box>
 
-        {/* INTEGRATED FILTERS SECTION */}
+        {/* SEARCH AND FILTERS */}
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
           <TextField 
             fullWidth 
-            placeholder="Search name, action, or file..." 
+            placeholder="Search all activities..." 
             value={searchTerm} 
             onChange={(e) => setSearchTerm(e.target.value)} 
-            sx={filterInputStyle}
+            sx={{ flexGrow: 1, bgcolor: inputBg, borderRadius: 0.5 }}
             InputProps={{ 
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="primary" sx={{ opacity: 0.8 }} />
-                </InputAdornment>
-              ) 
+                startAdornment: (
+                    <InputAdornment position="start">
+                        <SearchIcon color="primary" sx={{ opacity: 0.8 }} />
+                    </InputAdornment>
+                ) 
             }} 
           />
           
-          <Stack direction="row" spacing={2} sx={{ width: { xs: '100%', md: 'auto' } }}>
-            <TextField 
-              select 
-              label="Role" 
-              value={roleFilter} 
-              onChange={(e) => setRoleFilter(e.target.value)} 
-              sx={{ ...filterInputStyle, minWidth: 140 }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <FilterListIcon fontSize="small" color="primary" />
-                  </InputAdornment>
-                )
-              }}
-            >
-              <MenuItem value="All">All Roles</MenuItem>
-              <MenuItem value="admin">Admin</MenuItem>
-              <MenuItem value="client">Client</MenuItem>
-            </TextField>
+          <TextField
+            type="date"
+            label="Date" 
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            sx={{ 
+              minWidth: 180, 
+              bgcolor: inputBg, 
+              borderRadius: 0.5,
+              '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' },
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} />
+                </InputAdornment>
+              )
+            }}
+          />
 
-            <TextField 
-              type="month" 
-              label="Date" 
-              value={dateFilter} 
-              onChange={(e) => setDateFilter(e.target.value)} 
-              InputLabelProps={{ shrink: true }} 
-              sx={{ ...filterInputStyle, minWidth: 180 }}
-              InputProps={{
-                startAdornment: (
-                    <InputAdornment position="start">
-                        <CalendarTodayIcon fontSize="small" color="primary" />
-                    </InputAdornment>
-                )
-              }}
-            />
-          </Stack>
+          <TextField 
+            select 
+            label="Filter Role" 
+            value={roleFilter} 
+            onChange={(e) => setRoleFilter(e.target.value)} 
+            sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5 }}
+          >
+            <MenuItem value="All">All Roles</MenuItem>
+            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="client">Client</MenuItem>
+          </TextField>
         </Stack>
 
+        {/* CONTENT AREA */}
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress color="primary" /></Box>
+        ) : filteredLogs.length === 0 ? (
+          <Box sx={{ textAlign: 'center', mt: 10 }}>
+            <AssignmentLateIcon sx={{ fontSize: 60, color: 'text.disabled', opacity: 0.3, mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 800, textTransform: 'uppercase' }}>
+              No Activity Logs Found
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Try adjusting your search or filters to find specific records.
+            </Typography>
+          </Box>
         ) : (
           <>
             {!isMobile && (
-              <TableContainer component={Paper} sx={{ bgcolor: cardBg, borderRadius: 2, border: isDarkMode ? `1px solid ${borderCol}` : 'none', boxShadow: isDarkMode ? 'none' : '0 4px 20px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+              <TableContainer component={Paper} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none', overflow: 'hidden' }}>
                 <Table>
                   <TableHead sx={{ bgcolor: headerBg }}>
                     <TableRow>
-                      <TableCell sx={{ color: 'white', fontWeight: 700, py: 2.5, width: '200px' }} align="center">PERFORMED BY</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700, width: '150px' }} align="center">ROLE</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="center">ACTION</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }}>TARGET PDF</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }}>DETAILS</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }}>DATE</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800, py: 2.5, width: '200px' }}>PERFORMED BY</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800, width: '150px' }} align="center">ROLE</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTION</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>TARGET PDF</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>DETAILS</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {filteredLogs.map((log) => (
                       <TableRow key={log.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                        <TableCell sx={{ width: '200px' }}>
-                          <Typography sx={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                        <TableCell>
+                          <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
                             {log.profiles?.full_name || 'System User'}
                           </Typography>
                         </TableCell>
-                        <TableCell sx={{ width: '150px' }} align="center">
+                        <TableCell align="center">
                           <RoleChip role={log.profiles?.role} />
                         </TableCell>
                         <TableCell align="center">
                           <ActionButton action={log.action_type} />
                         </TableCell>
-                        <TableCell sx={{ fontWeight: 500 }}>{log.pdfs?.title || '—'}</TableCell>
-                        <TableCell sx={{ maxWidth: 300, color: 'text.secondary', fontSize: '0.85rem' }}>{log.description || '—'}</TableCell>
-                        <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{new Date(log.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>{log.pdfs?.title || '—'}</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{log.description || '—'}</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
+                          {/* UPDATED DATE FORMAT */}
+                          {formatDate(log.created_at)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -291,7 +282,10 @@ const AdminLogs = () => {
                     <CardContent>
                       <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
                         <Typography sx={{ fontWeight: 700 }}>{log.profiles?.full_name}</Typography>
-                        <Typography variant="caption" sx={{ color: 'text.disabled' }}>{new Date(log.created_at).toLocaleDateString()}</Typography>
+                        <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                           {/* UPDATED DATE FORMAT */}
+                           {formatDate(log.created_at)}
+                        </Typography>
                       </Stack> 
                       <Stack spacing={2}>
                         <Box>
