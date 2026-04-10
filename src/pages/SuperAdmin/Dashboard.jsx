@@ -113,12 +113,21 @@ const Dashboard = () => {
   }, [selectedYear]);
 
   const handleExportExcel = async () => {
-    const { data: allPDFs } = await supabase.from('pdfs').select('*').eq('is_archived', false);
-    const { data: allProfiles } = await supabase.from('profiles').select('*');
+    // 1. Fetch data para sa sheets
+    const { data: allPDFs } = await supabase
+      .from('pdfs')
+      .select('*')
+      .eq('is_archived', false);
+      
+    const { data: allProfiles } = await supabase
+      .from('profiles')
+      .select('*');
+
     const now = new Date();
     const dateString = `${now.toLocaleString('default', { month: 'long' })}-${now.getDate()}-${now.getFullYear()}`;
     const wb = XLSX.utils.book_new();
 
+    // --- SHEET 1: DASHBOARD SUMMARY ---
     let dashboardSheetData = [
       ["LIBRARY REPOSITORY SYSTEM SUMMARY REPORT"],
       ["Generated on:", dateString],
@@ -139,7 +148,75 @@ const Dashboard = () => {
       ["Books", stats.books],
       ["Academic Papers", stats.papers],
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dashboardSheetData), "Dashboard Summary");
+    const wsDashboard = XLSX.utils.aoa_to_sheet(dashboardSheetData);
+    XLSX.utils.book_append_sheet(wb, wsDashboard, "Dashboard Summary");
+
+
+    // --- SHEET 2: ACCOUNTS (Categorized by Role) ---
+    let accountsSheetData = [
+      ["USER ACCOUNTS CATEGORIZED BY ROLE"],
+      ["Generated on:", dateString],
+      [],
+    ];
+
+    const roles = ['superadmin', 'admin', 'client'];
+    roles.forEach(role => {
+      const filtered = allProfiles?.filter(acc => acc.role === role) || [];
+      accountsSheetData.push([`${role.toUpperCase()} ACCOUNTS`]);
+      
+      if (filtered.length > 0) {
+        accountsSheetData.push(["ID", "Full Name", "Email", "Role", "Created At"]);
+        filtered.forEach(item => {
+          accountsSheetData.push([
+            item.id,
+            item.full_name || 'N/A',
+            item.email || 'N/A',
+            item.role,
+            new Date(item.created_at).toLocaleDateString()
+          ]);
+        });
+      } else {
+        accountsSheetData.push(["No accounts found for this role."]);
+      }
+      accountsSheetData.push([]);
+    });
+    const wsAccounts = XLSX.utils.aoa_to_sheet(accountsSheetData);
+    XLSX.utils.book_append_sheet(wb, wsAccounts, "Accounts");
+
+
+    // --- SHEET 3: PDF LIBRARY (Categorized by Category) ---
+    let pdfSheetData = [
+      ["PDF LIBRARY CATEGORIZED BY TYPE"],
+      ["Generated on:", dateString],
+      [],
+    ];
+
+    const categories = ['book', 'academic paper'];
+    categories.forEach(cat => {
+      const filtered = allPDFs?.filter(p => p.category?.toLowerCase() === cat.toLowerCase()) || [];
+      pdfSheetData.push([`${cat.toUpperCase()}S`]);
+      
+      if (filtered.length > 0) {
+        pdfSheetData.push(["ID", "Title", "Author", "Genre", "Category", "Uploaded At"]);
+        filtered.forEach(item => {
+          pdfSheetData.push([
+            item.id,
+            item.title,
+            item.author || 'N/A',
+            item.genre || 'Uncategorized',
+            item.category,
+            new Date(item.created_at).toLocaleDateString()
+          ]);
+        });
+      } else {
+        pdfSheetData.push([`No ${cat}s found in the library.`]);
+      }
+      pdfSheetData.push([]);
+    });
+    const wsPDFs = XLSX.utils.aoa_to_sheet(pdfSheetData);
+    XLSX.utils.book_append_sheet(wb, wsPDFs, "PDF Library");
+
+    // Final Action: Download the file
     XLSX.writeFile(wb, `Library_Repository_Report_${dateString}.xlsx`);
   };
 
@@ -349,7 +426,7 @@ const Dashboard = () => {
               </Grid>
 
               {/* Ginawa nating md={12} para full width sa laptop, pero pwede ring md={8} kung may katabi */}
-<Grid item xs={12} md={12}>
+<Grid item xs={8} md={12}>
   <Paper 
     sx={{ 
       ...commonPaperStyle, 
@@ -421,15 +498,15 @@ const Dashboard = () => {
           />
           
           {/* ml: 'auto' ensures the icon stays at the far right regardless of width */}
-          <Stack direction="row" alignItems="center" spacing={0.5} sx={{ color: '#f59e0b', ml: 'auto', flexShrink: 0 }}>
-            <DownloadIcon sx={{ fontSize: '0.9rem' }} />
-            <Typography variant="caption" sx={{ fontWeight: 900 }}>{pdf.download_count}</Typography>
-          </Stack>
-        </ListItem>
-      ))}
-    </List>
-  </Paper>
-</Grid>
+                  <Stack direction="row" alignItems="center" spacing={0.5} sx={{ color: '#f59e0b', ml: 'auto', flexShrink: 0 }}>
+                    <DownloadIcon sx={{ fontSize: '0.9rem' }} />
+                    <Typography variant="caption" sx={{ fontWeight: 900 }}>{pdf.download_count}</Typography>
+                  </Stack>
+                </ListItem>
+                  ))}
+                </List>
+              </Paper>
+            </Grid>
             </Grid>
           </Grid>
         </Grid>
