@@ -322,7 +322,7 @@ const Dashboard = () => {
               sx={{ 
                 width: '100%', 
                 overflowX: isMobile ? 'auto' : 'hidden', 
-                backgroundColor: '#fff',
+                backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
                 overflowY: 'hidden',
                 borderRadius: '12px',
                 p: 1,

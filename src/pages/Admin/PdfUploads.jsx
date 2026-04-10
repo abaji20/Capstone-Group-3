@@ -165,12 +165,12 @@ const PdfUploads = () => {
   };
 
   return (
-    <Box sx={{ p: 4, bgcolor: isDarkMode ? '#0f172a' : 'transparent', minHeight: '100vh'  }}>
+    <Box sx={{ p: 4, bgcolor: isDarkMode ? '#0f172a' : '#ffffff', minHeight: '100vh'  }}>
       
       {/* HEADER SECTION */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h3" sx={{ fontFamily: "'Montserrat', sans-serif", fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontSize: { xs: '1.75rem', sm: '2.2rem', md: '3rem' }, }}>
-          UPLOAD PDFS
+          UPLOAD PDFs
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>
           ADD NEW ACADEMIC MATERIALS TO THE REPOSITORY SYSTEM.
@@ -255,7 +255,7 @@ const PdfUploads = () => {
         <Grid item xs={12} lg={5}>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, ml: 1 }}>
             <FontAwesomeIcon icon={faHistory} style={{ color: '#3b82f6' }} />
-            <Typography variant="subtitle1" sx={{ fontWeight: 900, textTransform: 'uppercase' }}>Recent Activity</Typography>
+            <Typography variant="subtitle1" sx={{ fontWeight: 900, textTransform: 'uppercase' }}>Latest Activity</Typography>
           </Stack>
 
           <Stack spacing={2}>
@@ -271,7 +271,7 @@ const PdfUploads = () => {
                       <Typography variant="caption" color="text.secondary">{item.author} • {new Date(item.created_at).toLocaleDateString()}</Typography>
                     </Box>
                     <Box sx={{ bgcolor: '#f0fdf4', px: 1.5, py: 0.5, borderRadius: 1 }}>
-                      <Typography variant="caption" sx={{ color: '#00bb09', fontWeight: 800 }}>Live</Typography>
+                      <Typography variant="caption" sx={{ color: '#00bb09', fontWeight: 800 }}>Recent</Typography>
                     </Box>
                   </Stack>
                 </CardContent>

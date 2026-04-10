@@ -112,6 +112,7 @@ const Login = () => {
           position: 'absolute', 
           top: 20, 
           left: 20, 
+          opacity: 0.8,
           width: 80, 
           height: 80, 
           bgcolor: 'transparent',
@@ -206,7 +207,8 @@ const Login = () => {
             <Typography 
               variant="h4" 
               sx={{ 
-                mb: 2, 
+                mt: 2,
+                mb: 1, 
                 fontWeight: 600, 
                 color: isDarkMode ? '#f8fafc' : '#002c72', 
                 fontFamily: "monserrat, sans-serif",
