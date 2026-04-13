@@ -5,6 +5,9 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../supabaseClient';
 import logo from '../assets/logo.png'; 
+import nonamelogo from '../assets/nonamelogo.png';
+// Import your background asset
+import clientbackground from '../assets/clientbackground.png'; 
 
 const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
   const theme = useTheme();
@@ -16,7 +19,8 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
     return () => clearInterval(interval); 
   }, [onNext]);
 
-  if (!doc) return null;
+  // If there is no document, or if the document is archived, render nothing.
+  if (!doc || doc.is_archived) return null;
   
   const displayRank = rank || doc.rank || 1;
 
@@ -86,9 +90,10 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
             position: 'relative', 
             mb: 4,
             bgcolor: '#121212',
+            // LOGIC FOR MAIN BANNER BACKGROUND
             backgroundImage: imageUrl 
               ? `linear-gradient(to right, rgba(0,0,0,0.95) 10%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.2) 100%), url(${imageUrl})`
-              : `linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)`, 
+              : `linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url(${clientbackground})`, 
             backgroundSize: 'cover',
             backgroundPosition: 'center center',
             backgroundRepeat: 'no-repeat',
@@ -119,13 +124,14 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
           }}>
             
             <Box sx={{ 
-              bgcolor: '#2ecc71', 
+              bgcolor: '#1976d2', 
               color: '#fff', 
-              px: 1.5, py: 0.5, 
+              px: 2, py: 1, 
               borderRadius: '4px', 
               fontWeight: '900', 
               fontSize: '0.65rem', 
               width: 'fit-content', 
+              height: 'fit-content',
               mb: 1.5,
               textTransform: 'uppercase',
               letterSpacing: 1
@@ -149,11 +155,10 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
             {/* Metadata Section: Author, Genre, and Category */}
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, flexWrap: 'wrap' }}>
               <Typography variant="subtitle1" sx={{ opacity: 0.9, fontWeight: 700, fontSize: { xs: '0.8rem', md: '1rem' } }}>
-                By <span style={{ color: '#2ecc71' }}>{doc.author}</span>
+                By <span style={{ color: '#1976d2' }}>{doc.author}</span>
               </Typography>
               <Typography sx={{ opacity: 0.5 }}>|</Typography>
               
-              {/* CATEGORY ADDED HERE */}
               <Typography sx={{ 
                 fontSize: { xs: '0.75rem', md: '0.9rem' }, 
                 fontWeight: 600, 
@@ -169,7 +174,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
               <Typography sx={{ 
                 fontSize: { xs: '0.75rem', md: '0.9rem' }, 
                 fontWeight: 600, 
-                color: '#2ecc71',
+                color: '#1976d2',
                 textTransform: 'capitalize' 
               }}>
                 {doc.genre || 'General'}
@@ -199,7 +204,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
                 variant="contained" 
                 onClick={handleRead}  
                 sx={{ 
-                  bgcolor: '#2ecc71', 
+                  bgcolor: '#1976d2', 
                   color: '#fff', 
                   px: { xs: 3, md: 5 }, 
                   py: { xs: 0.8, md: 1.2 },
@@ -207,7 +212,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
                   textTransform: 'none',
                   borderRadius: '6px',
                   fontSize: { xs: '0.8rem', md: '0.9rem' },
-                  '&:hover': { bgcolor: '#27ae60' }
+                  '&:hover': { bgcolor: '#110835' }
                 }}
               >
                 Read Now
@@ -246,9 +251,12 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
             height: '340px',
             borderRadius: 4,
             boxShadow: '0 30px 60px rgba(0,0,0,0.7)',
-            background: imageUrl 
-              ? `url(${imageUrl}) center/cover` 
-              : `linear-gradient(145deg, #2c2c2c, #1a1a1a)`, 
+            // LOGIC FOR FLOATING CARD BACKGROUND
+            backgroundImage: imageUrl 
+              ? `linear-gradient(rgba(0,0,0,0.2), rgba(0,0,0,0.2)), url(${imageUrl})` 
+              : `linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url(${clientbackground})`, 
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
             border: '2px solid rgba(255,255,255,0.2)',
             transform: 'perspective(1000px) rotateY(-5deg)',
             zIndex: 3,
@@ -257,7 +265,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
             {!imageUrl && (
               <Box 
                 component="img"
-                src={logo}
+                src={nonamelogo}
                 alt="Logo"
                 sx={{ 
                   width: '70%', 

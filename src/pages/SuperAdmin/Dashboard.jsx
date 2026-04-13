@@ -278,11 +278,11 @@ const Dashboard = () => {
 
   return (
     <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#ffffff', minHeight: '100vh', pb: 6 }}>
-      <Container maxWidth="xl" sx={{ mt: { xs: 1, md: 0 } } }>
-        <Box sx={{ mb: 6 }}>
+      <Container maxWidth="xl" sx={{ mt: { xs: 1, md: 4 } } }>
+        <Box sx={{ mb: 4 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
             <Box>
-              <Typography variant="h3" sx={{ fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px', mt: 5 }}>
+              <Typography variant="h3" sx={{ fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px' }}>
                 DASHBOARD OVERVIEW
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
@@ -322,7 +322,7 @@ const Dashboard = () => {
               sx={{ 
                 width: '100%', 
                 overflowX: isMobile ? 'auto' : 'hidden', 
-                backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+                backgroundColor: '#fff',
                 overflowY: 'hidden',
                 borderRadius: '12px',
                 p: 1,

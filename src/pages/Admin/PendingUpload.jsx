@@ -77,12 +77,36 @@ const PendingUpload = () => {
 
     if (!insertError) {
       await supabase.from('upload_requests').update({ status: 'approved' }).eq('id', req.id);
+      
+      // LOG THE APPROVAL TO audit_logs
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('audit_logs').insert([
+        {
+          user_id: user.id,
+          action_type: 'approved',
+          description: `Admin approved upload request for: "${req.title}" submitted by ${req.profiles?.full_name || 'Unknown'}`
+        }
+      ]);
+
       fetchPendingRequests();
     }
   };
 
   const handleReject = async (reqId) => {
+    const requestToReject = requests.find(r => r.id === reqId);
+    
     await supabase.from('upload_requests').update({ status: 'rejected' }).eq('id', reqId);
+    
+    // LOG THE REJECTION TO audit_logs
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from('audit_logs').insert([
+      {
+        user_id: user.id,
+        action_type: 'rejected',
+        description: `Admin rejected upload request for: "${requestToReject?.title || 'Unknown'}"`
+      }
+    ]);
+
     fetchPendingRequests();
   };
 

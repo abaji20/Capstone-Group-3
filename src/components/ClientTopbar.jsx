@@ -14,6 +14,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { navLinks } from '../navConfig';
 import { LogoutButton } from '../shared';
 import logo from '../assets/logo.png'; 
+import nonamelogo from '../assets/nonamelogo.png'; 
 import { ColorModeContext } from '../App';
 
 const expandedWidth = 280;
@@ -139,13 +140,13 @@ const ClientTopbar = () => {
               </IconButton>
             )}
             <Box 
-              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: { xs: 1, md: 2 } }} 
+              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: { xs: 1, md: 0 } }} 
               onClick={() => navigate('/')}
             >
               <Box 
                 component="img" 
-                src={logo} 
-                sx={{ height: { xs: 35, md: 55 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} 
+                src={nonamelogo} 
+                sx={{ height: { xs: 35, md: 60 },  filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} 
               />
               <Typography 
                 fontFamily="Paytone One"
@@ -159,7 +160,7 @@ const ClientTopbar = () => {
                   textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
                 }}
               >
-                Library Repository
+              Library Repository
               </Typography>
             </Box>
           </Box>
@@ -239,7 +240,7 @@ const ClientTopbar = () => {
             </MenuItem>
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/reset-password'); }} sx={{ py: 1 }}>
               <ListItemIcon><LockReset fontSize="small" /></ListItemIcon> 
-              <ListItemText primary="Security" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem' }} />
+              <ListItemText primary="Manage Account" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem' }} />
             </MenuItem>
             <Divider />
             <Box sx={{ p: 1.5 }}><LogoutButton fullWidth /></Box>

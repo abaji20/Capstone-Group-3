@@ -18,6 +18,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCloudArrowDown, faFilePdf } from '@fortawesome/free-solid-svg-icons';
 // Import your logo
 import logo from '../assets/logo.png'; 
+import nonamelogo from '../assets/nonamelogo.png';
+import clientbackground from '../assets/clientbackground.png'; 
 
 const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
   const theme = useTheme();
@@ -26,6 +28,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
   if (!pdf) return null;
 
   const [open, setOpen] = useState(false);
+  // confirmOpen state is kept to avoid breaking logic, but the dialog is removed
   const [confirmOpen, setConfirmOpen] = useState(false);
   
   const coverUrl = pdf.image_url ? supabase.storage.from('pdfs').getPublicUrl(pdf.image_url).data.publicUrl : null;
@@ -105,10 +108,13 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
             sx={{ objectFit: 'cover' }} 
           />
         ) : ( 
-          /* UPDATED: Replaced PDF Icon with Logo */
           <Box sx={{ 
             height: isSmall ? 200 : 260, 
-            bgcolor: isDarkMode ? '#334155' : '#213C51', 
+            backgroundImage: isDarkMode 
+              ? `linear-gradient(rgba(30, 41, 59, 0.85), rgba(30, 41, 59, 0.85)), url(${clientbackground})`
+              : `linear-gradient(rgba(33, 60, 81, 0.85), rgba(33, 60, 81, 0.85)), url(${clientbackground})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',
@@ -116,7 +122,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
           }}>
             <Box 
               component="img"
-              src={logo}
+              src={nonamelogo}
               alt="Logo Fallback"
               sx={{ 
                 width: '65%', 
@@ -160,12 +166,12 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
             fullWidth 
             variant="contained" 
             startIcon={<DownloadIcon sx={{ fontSize: isSmall ? '1rem' : 'inherit' }} />} 
-            onClick={() => setConfirmOpen(true)} 
+            onClick={handleDownload} 
             sx={{ 
               fontSize: isSmall ? '0.7rem' : '0.8rem', 
               textTransform: 'none',  
               color: '#fff', 
-              bgcolor: isDarkMode ? '#0284c7' : iconColor 
+              bgcolor: isDarkMode ? '#281C59' : iconColor 
             }}
           >
             {downloadLabel}
@@ -173,21 +179,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
         </Stack>
       </Card>
 
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 3, p: 2, ...poppinsFont, bgcolor: isDarkMode ? '#0f172a' : '#fff' } }}>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 'bold' }}>
-          <FontAwesomeIcon icon={faCloudArrowDown} style={{ color: iconColor }} /> Confirm {downloadLabel}
-        </DialogTitle>
-        <DialogContent>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <FontAwesomeIcon icon={faFilePdf} style={{ color: iconColor, fontSize: '40px' }} />
-            <Typography>You are about to download: <br/><strong>"{pdf.title}"</strong></Typography>
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button onClick={handleDownload} variant="contained" sx={{ bgcolor: isDarkMode ? '#0284c7' : iconColor }}>Confirm</Button>
-        </DialogActions>
-      </Dialog>
+      {/* Confirmation Dialog removed here */}
       
       <Dialog 
         open={open} 
@@ -201,20 +193,42 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
         </DialogTitle>
         <DialogContent dividers sx={{ borderColor: isDarkMode ? '#334155' : 'rgba(0,0,0,0.12)' }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} alignItems={{ xs: 'center', sm: 'flex-start' }}>
-            {coverUrl && (
-              <Box sx={{ 
-                width: { xs: '50%', sm: 160 }, 
-                flexShrink: 0,
-                mb: { xs: 1, sm: 0 } 
-              }}>
+            
+            <Box sx={{ 
+              width: { xs: '50%', sm: 160 }, 
+              flexShrink: 0,
+              mb: { xs: 1, sm: 0 },
+              aspectRatio: '3/4',
+              borderRadius: 2,
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              backgroundImage: !coverUrl ? (isDarkMode 
+                ? `linear-gradient(rgba(51, 65, 85, 0.8), rgba(51, 65, 85, 0.8)), url(${clientbackground})`
+                : `linear-gradient(rgba(33, 60, 81, 0.8), rgba(33, 60, 81, 0.8)), url(${clientbackground})`) : 'none',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              bgcolor: coverUrl ? 'transparent' : (isDarkMode ? '#334155' : '#213C51'),
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              {coverUrl ? (
                 <img 
                   src={coverUrl} 
                   alt={pdf.title} 
-                  style={{ width: '100%', borderRadius: 8, boxShadow: '0 4px 8px rgba(0,0,0,0.3)' }} 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                 />
-              </Box>
-            )}
-            <Stack spacing={1.5} sx={{ flexGrow: 1, width: '100%' }}>
+              ) : (
+                <Box 
+                  component="img"
+                  src={nonamelogo}
+                  alt="No Cover Fallback"
+                  sx={{ width: '70%', height: 'auto', opacity: 0.8 }}
+                />
+              )}
+            </Box>
+
+            <Stack spacing={1.5} sx={{ flexGrow: 1, width: 'auto' }}>
               <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <TitleIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Title:</strong> {pdf.title}
               </Typography>
@@ -258,27 +272,13 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
                     textTransform: 'none',
                     fontSize: { xs: '0.75rem', sm: '0.875rem' }, 
                     color: '#fff',  
-                    bgcolor: isDarkMode ? '#059669' : '#2e7d32', 
-                    '&:hover': { bgcolor: isDarkMode ? '#10b981' : '#68976b' }
+                    py: { xs: 0.8, sm: 1.2 },
+                    bgcolor: isDarkMode ? '#281C59' : '#281C59', 
+                    '&:hover': { bgcolor: isDarkMode ? '#180c46' : '#180c46' }
                   }}
                 >
                   Read
                 </Button>
-                <Button 
-                  fullWidth 
-                  variant="contained" 
-                  startIcon={<DownloadIcon />} 
-                  onClick={() => setConfirmOpen(true)}
-                  sx={{ 
-                    textTransform: 'none',
-                    color: '#fff',
-                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                    bgcolor: '#d32f2f', 
-                    '&:hover': { bgcolor: '#b71c1c' }
-                  }}
-                >
-                  Download
-                </Button> 
               </Stack>
             </Stack>
           </Stack>   

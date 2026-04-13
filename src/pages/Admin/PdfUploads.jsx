@@ -3,7 +3,7 @@ import {
   Box, Paper, Typography, Stack, CircularProgress, 
   MenuItem, TextField, useTheme, Button,
   Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert,
-  Avatar, Card, CardContent, Grid
+  Avatar, Card, CardContent, Grid, Divider
 } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
@@ -77,16 +77,28 @@ const PdfUploads = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     
-    // Robust Year Validation: Only allow digits and limit to 4
+    // Genre Validation: Only allow letters and spaces (No numbers)
+    if (name === 'genre') {
+      const onlyLetters = value.replace(/[^a-zA-Z\s]/g, '');
+      setFormData({ ...formData, [name]: onlyLetters });
+      return;
+    }
+
+    // Year Validation: No future years & Max 4 digits
     if (name === 'published_date') {
       const onlyNums = value.replace(/[^0-9]/g, '');
+      const currentYear = new Date().getFullYear();
+      
       if (onlyNums.length <= 4) {
+        if (onlyNums !== '' && parseInt(onlyNums) > currentYear) {
+           showStatus('error', `Year cannot exceed ${currentYear}`);
+           return;
+        }
         setFormData({ ...formData, [name]: onlyNums });
       }
       return;
     }
 
-    // Genre and other fields accept any characters (including numbers)
     setFormData({ ...formData, [name]: value });
   };
 
@@ -190,8 +202,9 @@ const PdfUploads = () => {
                     accept="application/pdf" 
                     onChange={(e) => {
                       const file = e.target.files[0];
+                      // Strict PDF rejection logic
                       if (file && file.type !== 'application/pdf') {
-                        showStatus('error', 'Only PDF files are allowed!');
+                        showStatus('error', 'Only PDF files can be uploaded!');
                         e.target.value = null; 
                         setSelectedFile(null);
                         return;
@@ -297,18 +310,45 @@ const PdfUploads = () => {
       <Dialog 
         open={confirmData.open} 
         onClose={() => setConfirmData({ open: false, record: null })} 
-        PaperProps={{ sx: { borderRadius: 3, bgcolor: cardBg, maxWidth: '400px' } }}
+        PaperProps={{ sx: { borderRadius: 3, bgcolor: cardBg, maxWidth: '450px' } }}
       >
         <DialogTitle sx={{ fontWeight: 900 }}>Duplicate Found</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ mb: 2 }}>This document already exists in the system.</Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>The following document is already registered in the system:</Typography>
           {confirmData.record && (
-            <Box sx={{ p: 2, bgcolor: inputBg, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Avatar variant="rounded" src={getImageUrl(confirmData.record.image_url)} sx={{ width: 50, height: 70 }} />
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{confirmData.record.title}</Typography>
-                <Typography variant="caption" color="text.secondary">{confirmData.record.author}</Typography>
-              </Box>
+            <Box sx={{ p: 2.5, bgcolor: inputBg, borderRadius: 2 }}>
+              <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+                <Avatar variant="rounded" src={getImageUrl(confirmData.record.image_url)} sx={{ width: 60, height: 85, boxShadow: 1 }} />
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 900, lineHeight: 1.2 }}>{confirmData.record.title}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 700 }}>{confirmData.record.author}</Typography>
+                  <Typography variant="caption" sx={{ display: 'block', mt: 0.5, textTransform: 'uppercase', fontWeight: 800, color: '#3b82f6' }}>
+                    {confirmData.record.category} • {confirmData.record.published_date || 'N/A'}
+                  </Typography>
+                </Box>
+              </Stack>
+              
+              <Divider sx={{ my: 1.5, opacity: 0.5 }} />
+              
+              <Stack spacing={1}>
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary' }}>GENRE</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.genre || 'Not specified'}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary' }}>DESCRIPTION</Typography>
+                  <Typography variant="body2" sx={{ 
+                    fontWeight: 500, 
+                    display: '-webkit-box', 
+                    WebkitLineClamp: 3, 
+                    WebkitBoxOrient: 'vertical', 
+                    overflow: 'hidden',
+                    lineHeight: 1.4
+                  }}>
+                    {confirmData.record.description || 'No description available.'}
+                  </Typography>
+                </Box>
+              </Stack>
             </Box>
           )}
         </DialogContent>

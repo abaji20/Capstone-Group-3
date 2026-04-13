@@ -16,7 +16,7 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 
 import EditPdfModal from '../../shared/EditPdfModal';
 import { supabase } from '../../supabaseClient'; 
-import logo from '../../assets/logo.png'; 
+import logo from '../../assets/nonamelogo.png'; 
 
 const SuperAdminEditPDFs = () => {
   const theme = useTheme();
@@ -231,7 +231,7 @@ const SuperAdminEditPDFs = () => {
                       <TableCell>
                         <Stack direction="row" alignItems="center" spacing={2}>
                           <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
-                            {!pdf.image_url && <Box component="img" src={logo} sx={{ width: '60%', opacity: 0.8 }} />}
+                            {!pdf.image_url && <Box component="img" src={logo} sx={{ width: '80%', opacity: 0.8 }} />}
                           </Avatar>
                           <Typography sx={{ fontWeight: 700 }}>{pdf.title}</Typography>
                         </Stack>

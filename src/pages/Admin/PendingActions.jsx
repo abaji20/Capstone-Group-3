@@ -2,16 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, CircularProgress, Typography, Stack, Chip, useTheme, useMediaQuery, 
-  Container, IconButton, Button, Modal, Fade, Backdrop 
+  Container, Button, Modal, Fade, Backdrop 
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
 // Icons
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import SpeakerNotesOffIcon from '@mui/icons-material/SpeakerNotesOff';
-import CloseIcon from '@mui/icons-material/Close'; // Added for cancel icon
+import CloseIcon from '@mui/icons-material/Close';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
 const PendingActions = () => {
   const theme = useTheme();
@@ -45,6 +45,7 @@ const PendingActions = () => {
     } else {
       setRequests(data.map(req => ({
         ...req,
+        // Standardizing status to uppercase for consistent UI logic
         status: req.status ? req.status.toUpperCase() : 'PENDING'
       })));
     }
@@ -53,17 +54,20 @@ const PendingActions = () => {
 
   // --- CANCEL REQUEST FUNCTION ---
   const handleCancelRequest = async (id) => {
+    // We use 'rejected' here because the database constraint 
+    // does not allow the word 'cancelled'
     const { error } = await supabase
       .from('delete_requests')
-      .update({ status: 'REJECTED' }) // Or 'CANCELLED' based on your schema
+      .update({ status: 'rejected' }) 
       .eq('id', id);
 
     if (error) {
       alert("Failed to cancel request: " + error.message);
     } else {
-      // Refresh local state to show updated status
+      // We manually set the local state to 'CANCELLED' 
+      // so the UI shows what you want
       setRequests(requests.map(req => 
-        req.id === id ? { ...req, status: 'REJECTED' } : req
+        req.id === id ? { ...req, status: 'CANCELLED' } : req
       ));
     }
   };
@@ -86,7 +90,8 @@ const PendingActions = () => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'APPROVED': return 'success';
-      case 'REJECTED': return 'error';
+      case 'REJECTED': 
+      case 'CANCELLED': return 'error';
       default: return 'warning';
     }
   };
@@ -149,24 +154,27 @@ const PendingActions = () => {
                           {new Date(req.created_at).toLocaleDateString()}
                         </Typography>
                         <Stack direction="row" spacing={1}>
-                          {req.status === 'PENDING' && (
+                          {req.status === 'PENDING' ? (
                             <Button 
                               size="small" 
                               color="inherit" 
+                              sx={{ fontWeight: 700 }}
                               startIcon={<CloseIcon />}
                               onClick={() => handleCancelRequest(req.id)}
                             >
                               Cancel
                             </Button>
+                          ) : (
+                            <Button 
+                              size="small" 
+                              color="error" 
+                              sx={{ fontWeight: 700 }}
+                              startIcon={<DeleteOutlineIcon />}
+                              onClick={() => setDeleteModal({ open: true, id: req.id })}
+                            >
+                              Delete Log
+                            </Button>
                           )}
-                          <Button 
-                            size="small" 
-                            color="error" 
-                            startIcon={<DeleteOutlineIcon />}
-                            onClick={() => setDeleteModal({ open: true, id: req.id })}
-                          >
-                            Clear
-                          </Button>
                         </Stack>
                       </Stack>
                     </Stack>
@@ -198,14 +206,29 @@ const PendingActions = () => {
                         </TableCell>
                         <TableCell align="center">
                           <Stack direction="row" spacing={1} justifyContent="center">
-                            {req.status === 'PENDING' && (
-                              <IconButton color="default" title="Cancel Request" onClick={() => handleCancelRequest(req.id)}>
-                                <CloseIcon />
-                              </IconButton>
+                            {req.status === 'PENDING' ? (
+                              <Button 
+                                variant="outlined"
+                                size="small" 
+                                color="error" 
+                                startIcon={<CloseIcon />}
+                                sx={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem' }}
+                                onClick={() => handleCancelRequest(req.id)}
+                              >
+                                Cancel Request
+                              </Button>
+                            ) : (
+                              <Button 
+                                variant="text"
+                                size="small" 
+                                color="error" 
+                                startIcon={<DeleteOutlineIcon />}
+                                sx={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem' }}
+                                onClick={() => setDeleteModal({ open: true, id: req.id })}
+                              >
+                                Delete Log
+                              </Button>
                             )}
-                            <IconButton color="error" title="Delete Log" onClick={() => setDeleteModal({ open: true, id: req.id })}>
-                              <DeleteOutlineIcon />
-                            </IconButton>
                           </Stack>
                         </TableCell>
                       </TableRow>
@@ -234,7 +257,7 @@ const PendingActions = () => {
             <WarningAmberIcon sx={{ fontSize: 60, color: '#ef4444', mb: 2 }} />
             <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>Delete Log Entry?</Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-              This will permanently remove this record from the delete request history.
+              This will permanently remove this record from the history.
             </Typography>
             <Stack direction="row" spacing={2}>
               <Button fullWidth onClick={() => setDeleteModal({ open: false, id: null })}>Cancel</Button>

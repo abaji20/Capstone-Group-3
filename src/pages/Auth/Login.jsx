@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { ColorModeContext } from '../../App'; 
 import logo from '../../assets/logo.png'; 
 import coverlogin from '../../assets/coverlogin.png'; 
+import clientbackground from '../../assets/clientbackground.png'; 
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -89,8 +90,8 @@ const Login = () => {
   };
 
   const dynamicPageBg = isDarkMode 
-    ? 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' 
-    : 'linear-gradient(135deg, #025bb4 0%, #e2e8f0 100%)';
+    ? `linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%), url(${clientbackground})` 
+    : `linear-gradient(135deg, rgba(2, 91, 180, 0.8) 0%, rgba(226, 232, 240, 0.8) 100%), url(${clientbackground})`;
 
  return (
     <Box sx={{ 
@@ -99,27 +100,16 @@ const Login = () => {
       alignItems: 'center', 
       justifyContent: 'center', 
       p: 2, 
+      // Background settings to ensure the image covers the page and stays fixed
       background: dynamicPageBg,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundAttachment: 'fixed',
       position: 'relative',
       transition: 'background 0.3s ease'
     }}>
 
-      {/* --- LOGO AT TOP LEFT --- */}
-      <Avatar 
-        src={logo} 
-        variant="square" 
-        sx={{ 
-          position: 'absolute', 
-          top: 20, 
-          left: 20, 
-          opacity: 0.8,
-          width: 80, 
-          height: 80, 
-          bgcolor: 'transparent',
-          // Hide on extra-small/small screens (mobile), show as flex on medium and up
-          display: { xs: 'none', md: 'flex' } 
-        }} 
-      />
+      
     
       {/* Darkmode Toggle */}
       <Box sx={{ position: 'absolute', top: 20, right: 20 }}>
@@ -141,7 +131,7 @@ const Login = () => {
             display: 'flex',
             width: '100%',
             overflow: 'hidden',
-            borderRadius: 4,
+            borderRadius: { xs: 1, sm: 4 },
             bgcolor: isDarkMode ? 'rgba(32, 45, 62, 0.9)' : '#ffffff', 
             backdropFilter: isDarkMode ? 'blur(10px)' : 'none',
             border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',

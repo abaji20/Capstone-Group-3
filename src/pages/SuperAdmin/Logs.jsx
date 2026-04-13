@@ -15,6 +15,7 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import AssignmentLateIcon from '@mui/icons-material/AssignmentLate';
 
 const Logs = () => {
   const theme = useTheme();
@@ -88,6 +89,7 @@ const Logs = () => {
 
   const getTargetName = (log) => {
     if (log.pdfs?.title) return log.pdfs.title;
+    if (log.description?.includes(': ')) return log.description.split(': ').pop();
     const desc = log.description || "";
     if (log.action_type?.toUpperCase().includes('ACCOUNT')) {
       if (desc.includes('account for ')) return desc.split('account for ').pop();
@@ -113,24 +115,41 @@ const Logs = () => {
     }
   };
 
-  const getActionStyles = (action, darkMode) => { 
-    const type = action?.toLowerCase();
-    if (darkMode) {
-        if (type?.includes('upload')) return { bg: 'transparent', text: '#4ade80', label: 'UPLOAD' };
-        if (type?.includes('edit')) return { bg: 'transparent', text: '#facc15', label: 'EDIT' }; 
-        if (type?.includes('delete')) return { bg: 'transparent', text: '#f87171', label: 'DELETE' };
-        if (type?.includes('download')) return { bg: 'transparent', text: '#6171ff', label: 'DOWNLOAD' };
-        if (type?.includes('create')) return { bg: 'transparent', text: '#01a8f0', label: 'CREATE' };
-        return { bg: 'transparent', text: '#94a3b8', label: action?.toUpperCase() };
-    } else {
-        if (type?.includes('upload')) return { bg: '#2F6B3F', text: '#FBF6F6', label: 'UPLOAD' };
-        if (type?.includes('edit')) return { bg: '#ffd500', text: '#7c6800', label: 'EDIT' }; 
-        if (type?.includes('delete')) return { bg: '#A82323', text: '#ffffff', label: 'DELETE' };
-        if (type?.includes('download')) return { bg: '#261CC1', text: '#ffffff', label: 'DOWNLOAD' };
-        if (type?.includes('create')) return { bg: '#003052', text: '#ffffff', label: 'CREATE' };
-        return { bg: '#f1f5f9', text: '#475569', label: action?.toUpperCase() };
-    }
-  };
+ const getActionStyles = (action, darkMode) => { 
+  const type = action?.toLowerCase();
+
+  if (darkMode) {
+    if (type?.includes('upload')) return { bg: 'transparent', text: '#4ade80', label: 'UPLOAD' };
+    if (type?.includes('approved')) return { bg: 'transparent', text: '#4ade80', label: 'APPROVED' };
+    if (type?.includes('rejected')) return { bg: 'transparent', text: '#f87171', label: 'REJECTED' };
+    if (type?.includes('edit')) return { bg: 'transparent', text: '#facc15', label: 'EDIT' }; 
+    if (type?.includes('delete')) return { bg: 'transparent', text: '#f87171', label: 'DELETE' };
+    if (type?.includes('download')) return { bg: 'transparent', text: '#6171ff', label: 'DOWNLOAD' };
+    if (type?.includes('create')) return { bg: 'transparent', text: '#01a8f0', label: 'CREATE' };
+    if (type?.includes('request')) return { bg: 'transparent', text: '#fdfdff', label: 'REQUEST' };
+    
+    // --- NEW ARCHIVE ACTIONS (DARK MODE) ---
+    if (type?.includes('restore')) return { bg: 'transparent', text: '#0ea5e9', label: 'RESTORED' };
+    if (type?.includes('permanently')) return { bg: 'transparent', text: '#f87171', label: 'PURGED' };
+
+    return { bg: 'transparent', text: '#94a3b8', label: action?.toUpperCase() };
+  } else {
+    if (type?.includes('upload')) return { bg: '#2F6B3F', text: '#FBF6F6', label: 'UPLOAD' };
+    if (type?.includes('approved')) return { bg: '#2F6B3F', text: '#FBF6F6', label: 'APPROVED' };
+    if (type?.includes('rejected')) return { bg: '#A82323', text: '#ffffff', label: 'REJECTED' };
+    if (type?.includes('edit')) return { bg: '#ffd500', text: '#7c6800', label: 'EDIT' }; 
+    if (type?.includes('delete')) return { bg: '#A82323', text: '#ffffff', label: 'DELETE' };
+    if (type?.includes('download')) return { bg: '#261CC1', text: '#ffffff', label: 'DOWNLOAD' };
+    if (type?.includes('create')) return { bg: '#003052', text: '#ffffff', label: 'CREATE' };
+    if (type?.includes('request')) return { bg: '#261CC1', text: '#fdfdff', label: 'REQUEST' };
+
+    // --- NEW ARCHIVE ACTIONS (LIGHT MODE) ---
+    if (type?.includes('restore')) return { bg: '#195983', text: '#ffffff', label: 'RESTORED' };
+    if (type?.includes('permanently')) return { bg: '#fee2e2', text: '#b91c1c', label: 'PURGED' };
+
+    return { bg: '#f1f5f9', text: '#475569', label: action?.toUpperCase() };
+  }
+};
 
   const getRoleStyles = (role, darkMode) => {
     const r = role?.toLowerCase();
@@ -177,7 +196,7 @@ const Logs = () => {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 5   }, bgcolor: pageBg, minHeight: '100vh' }}>
+    <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
       <Container maxWidth="xl">
         <Stack 
           direction={{ xs: 'column', sm: 'row' }} 
@@ -263,8 +282,21 @@ const Logs = () => {
           </TextField>
         </Stack>
 
+        {/* LOADING & EMPTY STATE LOGIC INTEGRATED HERE */}
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress color="secondary" /></Box>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+            <CircularProgress color="secondary" />
+          </Box>
+        ) : filteredLogs.length === 0 ? (
+          <Box sx={{ textAlign: 'center', mt: 10 }}>
+            <AssignmentLateIcon sx={{ fontSize: 60, color: 'text.disabled', opacity: 0.3, mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 800, textTransform: 'uppercase' }}>
+              No Activity Logs Found
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Try adjusting your search or filters to find specific records.
+            </Typography>
+          </Box>
         ) : (
           <>
             {!isMobile ? (
@@ -272,13 +304,13 @@ const Logs = () => {
                 <Table>
                   <TableHead sx={{ bgcolor: headerBg }}>
                     <TableRow>
-                      <TableCell sx={{ color: 'white', fontWeight: 700, width: '250px' }}>PERFORMED BY</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700, width: '150px' }} align="center">ROLE</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="center">ACTION</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }}>TARGET</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }}>DETAILS</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }}>DATE</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 700 }} align="center">MANAGE</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800, width: '250px' }}>PERFORMED BY</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800, width: '150px' }} align="center">ROLE</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTION</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>TARGET</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>DETAILS</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">MANAGE</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -300,11 +332,15 @@ const Logs = () => {
                         <TableCell align="center">
                           <ActionButton action={log.action_type} />
                         </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 500, color: isDarkMode ? '#f5f5f5' : '#000000' }}>
-                            {getTargetName(log)}
-                          </Typography>
-                        </TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>
+                                                  {/* 1. Try to show the PDF title first */}
+                                                  {log.pdfs?.title || 
+                                                  /* 2. If it's a delete action, try to extract the name from the description */
+                                                  (log.action_type?.toLowerCase().includes('delete') && log.description?.includes('for ') 
+                                                    ? log.description.split('for ').pop() 
+                                                    : (log.description?.includes(': ') ? log.description.split(': ').pop() : '—'))
+                                                  }
+                                                </TableCell>
                         <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{log.description}</TableCell>
                         <TableCell sx={{ fontSize: '0.85rem' }}>{new Date(log.created_at).toLocaleDateString()}</TableCell>
                         <TableCell align="center">

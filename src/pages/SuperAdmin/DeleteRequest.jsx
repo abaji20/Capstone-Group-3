@@ -61,13 +61,48 @@ const DeleteRequests = () => {
   }, [requests]);
 
   const handleApprove = async (requestId, pdfId) => {
+    // Get the request data for logging before updating
+    const requestData = requests.find(r => r.id === requestId);
+    const pdfTitle = requestData?.pdfs?.title || 'Unknown File';
+
+    // 1. Update status
     await supabase.from('pdfs').update({ is_archived: true }).eq('id', pdfId);
     await supabase.from('delete_requests').update({ status: 'approved' }).eq('id', requestId);
+    
+    // 2. Insert into audit_logs
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('audit_logs').insert({
+        user_id: user.id,
+        action_type: 'APPROVED DELETE REQUEST',
+        pdf_id: pdfId,
+        description: `Approved delete request for: ${pdfTitle}`
+      });
+    }
+
     fetchRequests();
   };
 
   const handleReject = async (requestId) => {
+    // Get the request data for logging
+    const requestData = requests.find(r => r.id === requestId);
+    const pdfTitle = requestData?.pdfs?.title || 'Unknown File';
+    const pdfId = requestData?.pdf_id;
+
+    // 1. Update status
     await supabase.from('delete_requests').update({ status: 'rejected' }).eq('id', requestId);
+    
+    // 2. Insert into audit_logs
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('audit_logs').insert({
+        user_id: user.id,
+        action_type: 'REJECTED DELETE REQUEST',
+        pdf_id: pdfId,
+        description: `Rejected delete request for: ${pdfTitle}`
+      });
+    }
+
     fetchRequests();
   };
 
@@ -88,10 +123,8 @@ const DeleteRequests = () => {
       (req.pdfs?.genre?.toLowerCase() || '').includes(query) ||
       (req.profiles?.full_name?.toLowerCase() || '').includes(query);
 
-    // Support for multiple genres in filter check
     const itemGenres = req.pdfs?.genre ? req.pdfs.genre.split(',').map(g => g.trim()) : [];
     const matchesGenre = genreFilter === 'All Genres' || itemGenres.includes(genreFilter);
-    
     const matchesDate = !dateFilter || createdAt === dateFilter;
     
     return matchesSearch && matchesGenre && matchesDate;

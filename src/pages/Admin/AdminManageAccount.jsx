@@ -93,7 +93,7 @@ const AdminManageAccount = () => {
     }
   };
 
-  // --- HANDLERS (LOGIC UNTOUCHED) ---
+  // --- HANDLERS ---
   const handleCreateAccount = async () => {
     if (!formData.email || !formData.password || !formData.fullName) {
       setNotify({ open: true, message: 'Please fill in all fields!', severity: 'error' });
@@ -114,6 +114,7 @@ const AdminManageAccount = () => {
         }
       });
       if (authError) throw authError;
+      
       const { error: profileError } = await supabase
         .from('profiles')
         .insert([{
@@ -122,14 +123,21 @@ const AdminManageAccount = () => {
           full_name: formData.fullName,
           role: 'client'
         }]);
+      
       if (profileError) throw profileError;
+
       await createAuditLog('Create Client', `Admin created GLC account: ${formData.fullName}`);
       setNotify({ open: true, message: 'Client account created! Verify email to activate.', severity: 'success' });
       setIsCreateModalOpen(false);
       setFormData({ fullName: '', email: '', role: 'client', password: '' });
       fetchClients();
     } catch (err) {
-      setNotify({ open: true, message: 'Error: ' + err.message, severity: 'error' });
+      // Logic to catch existing email/duplicate profiles
+      const errorMessage = err.message?.toLowerCase().includes('unique constraint') || err.message?.toLowerCase().includes('already registered')
+        ? 'This email is already registered!' 
+        : 'Error: ' + err.message;
+        
+      setNotify({ open: true, message: errorMessage, severity: 'error' });
     } finally {
       setLoading(false);
     }
@@ -259,7 +267,6 @@ const AdminManageAccount = () => {
           <CircularProgress color="primary" />
         </Box>
       ) : filteredUsers.length === 0 ? (
-        /* NO ACCOUNTS EMPTY STATE */
         <Box sx={{ textAlign: 'center', mt: 10 }}>
           <PersonOutlineIcon sx={{ fontSize: 60, color: 'text.disabled', opacity: 0.3, mb: 2 }} />
           <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 800, textTransform: 'uppercase' }}>
@@ -270,7 +277,6 @@ const AdminManageAccount = () => {
           </Typography>
         </Box>
       ) : isMobile ? (
-        /* MOBILE VIEW */
         <Stack spacing={2}>
           {filteredUsers.map((user) => (
             <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
@@ -291,7 +297,6 @@ const AdminManageAccount = () => {
           ))}
         </Stack>
       ) : (
-        /* DESKTOP VIEW */
         <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: theme.palette.background.paper, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
           <Table>
             <TableHead sx={{ bgcolor: headerColor }}>

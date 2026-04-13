@@ -115,6 +115,8 @@ const AdminLogs = () => {
     if (type?.includes('edit')) return { bg: '#ffd500', text: '#7c6800', label: 'EDIT' }; 
     if (type?.includes('delete')) return { bg: '#A82323', text: '#ffffff', label: 'DELETE' };
     if (type?.includes('download')) return { bg: '#261CC1', text: '#adc3ff', label: 'DOWNLOAD' };
+    if (type?.includes('request')) return { bg: '#261CC1', text: '#fdfdff', label: 'REQUEST' };
+    if (type?.includes('approved')) return { bg: '#2F6B3F', text: '#fdfdff', label: 'APPROVED' };
     return { bg: '#f1f5f9', text: '#475569', label: action?.toUpperCase() };
   };
 
@@ -240,10 +242,10 @@ const AdminLogs = () => {
                 <Table>
                   <TableHead sx={{ bgcolor: headerBg }}>
                     <TableRow>
-                      <TableCell sx={{ color: 'white', fontWeight: 800, py: 2.5, width: '200px' }}>PERFORMED BY</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800, py: 2.5, width: '220px' }}>PERFORMED BY</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800, width: '150px' }} align="center">ROLE</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTION</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>TARGET PDF</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>TARGET</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>DETAILS</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
                     </TableRow>
@@ -252,9 +254,14 @@ const AdminLogs = () => {
                     {filteredLogs.map((log) => (
                       <TableRow key={log.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
                         <TableCell>
-                          <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
-                            {log.profiles?.full_name || 'System User'}
-                          </Typography>
+                          <Stack spacing={0.2}>
+                            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.2 }}>
+                              {log.profiles?.full_name || 'System User'}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem', display: 'block' }}>
+                              {log.profiles?.email || '—'}
+                            </Typography>
+                          </Stack>
                         </TableCell>
                         <TableCell align="center">
                           <RoleChip role={log.profiles?.role} />
@@ -262,10 +269,17 @@ const AdminLogs = () => {
                         <TableCell align="center">
                           <ActionButton action={log.action_type} />
                         </TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>{log.pdfs?.title || '—'}</TableCell>
+                       <TableCell sx={{ fontWeight: 600 }}>
+                            {/* 1. Try to show the PDF title first */}
+                            {log.pdfs?.title || 
+                            /* 2. If it's a delete action, try to extract the name from the description */
+                            (log.action_type?.toLowerCase().includes('delete') && log.description?.includes('for ') 
+                              ? log.description.split('for ').pop() 
+                              : (log.description?.includes(': ') ? log.description.split(': ').pop() : '—'))
+                            }
+                          </TableCell>
                         <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{log.description || '—'}</TableCell>
                         <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
-                          {/* UPDATED DATE FORMAT */}
                           {formatDate(log.created_at)}
                         </TableCell>
                       </TableRow>
@@ -280,11 +294,15 @@ const AdminLogs = () => {
                 {filteredLogs.map((log) => (
                   <Card key={log.id} sx={{ bgcolor: cardBg, borderRadius: 2, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                     <CardContent>
-                      <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
-                        <Typography sx={{ fontWeight: 700 }}>{log.profiles?.full_name}</Typography>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                        <Box>
+                          <Typography sx={{ fontWeight: 700 }}>{log.profiles?.full_name}</Typography>
+                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                            {log.profiles?.email}
+                          </Typography>
+                        </Box>
                         <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-                           {/* UPDATED DATE FORMAT */}
-                           {formatDate(log.created_at)}
+                            {formatDate(log.created_at)}
                         </Typography>
                       </Stack> 
                       <Stack spacing={2}>
@@ -298,7 +316,9 @@ const AdminLogs = () => {
                         </Box>
                         <Box>
                           <Typography variant="caption" color="text.secondary" fontWeight={700}>TARGET PDF</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{log.pdfs?.title || '—'}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {log.pdfs?.title || (log.description?.includes(': ') ? log.description.split(': ').pop() : '—')}
+                          </Typography>
                         </Box>
                       </Stack>
                     </CardContent>

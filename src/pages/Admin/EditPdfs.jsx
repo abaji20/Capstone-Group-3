@@ -18,7 +18,7 @@ import EditPdfModal from '../../shared/EditPdfModal';
 import { supabase } from '../../supabaseClient'; 
 
 // Import your logo asset
-import logo from '../../assets/logo.png'; 
+import logo from '../../assets/nonamelogo.png'; 
 
 const EditPDFs = () => {
   const theme = useTheme();
@@ -110,12 +110,26 @@ const EditPDFs = () => {
         }
 
         const { data: { user } } = await supabase.auth.getUser();
+        
+        // 1. Submit the delete request
         await submitDeleteRequest(selectedPdf.id, deleteReason, user.id);
+
+        // 2. LOG THE ACTION TO audit_logs
+        await supabase.from('audit_logs').insert([
+          {
+            user_id: user.id,
+            action_type: 'request',
+            pdf_id: selectedPdf.id,
+            description: `User requested deletion for: ${selectedPdf.title}. Reason: ${deleteReason}`
+          }
+        ]);
+
         showStatus('success', "Delete request submitted.");
         setDeleteOpen(false);
         setDeleteReason("");
         loadPdfs(); 
       } catch (error) {
+        console.error("Error during deletion request:", error);
         showStatus('error', "Failed to submit request.");
       }
     }
@@ -219,7 +233,7 @@ const EditPDFs = () => {
                             sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}
                           >
                             {!pdf.image_url && (
-                              <Box component="img" src={logo} sx={{ width: '50%', opacity: 0.8 }} />
+                              <Box component="img" src={logo} sx={{ width: '80%', opacity: 0.8 }} />
                             )}
                           </Avatar>
                           <Typography sx={{ fontWeight: 700 }}>{pdf.title}</Typography>

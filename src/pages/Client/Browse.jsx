@@ -9,6 +9,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { PdfCard } from '../../shared';
 import { fetchPdfs, fetchFeaturedPdfs } from '../../services/pdfService'; 
 import FeaturedBanner from '../../components/FeaturedBanner';
+// Import your background image here
+import clientbackground from '../../assets/clientbackground.png'; 
 
 const MultiRowSection = ({ title, items, onSeeAll }) => {
   const scrollRef = useRef(null);
@@ -83,7 +85,7 @@ const MultiRowSection = ({ title, items, onSeeAll }) => {
   if (items.length === 0) return null; 
 
   return (
-    <Box sx={{ mb: 6 }}>
+    <Box sx={{ mb: 6, position: 'relative', zIndex: 2 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 800, borderLeft: '5px solid #1976d2', pl: 1.5, textTransform: 'uppercase' }}>
           {title}
@@ -142,12 +144,9 @@ const Browse = () => {
   }, []);
 
   const genres = useMemo(() => {
-    // Only "All" is static; everything else is pulled from your documents
     const dbGenres = documents.flatMap(doc => 
       doc.genre ? doc.genre.split(',').map(g => g.trim()) : []
     );
-
-    // Filter out empty strings and create a unique set
     return ['All', ...new Set(dbGenres.filter(Boolean))];
   }, [documents]);
 
@@ -155,11 +154,8 @@ const Browse = () => {
     return documents.filter(doc => {
       const matchesSearch = doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             doc.author?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      // Checks if selectedGenre exists within the split/trimmed genre array
       const matchesGenre = selectedGenre === 'All' || 
                            (doc.genre && doc.genre.split(',').map(g => g.trim()).includes(selectedGenre));
-      
       return matchesSearch && matchesGenre;
     });
   }, [documents, searchQuery, selectedGenre]);
@@ -177,8 +173,31 @@ const Browse = () => {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 4 }, pt: 12, bgcolor: 'background.default', minHeight: '100vh' }}>
-      <Container maxWidth="xl">
+    <Box sx={{ p: { xs: 2, md: 4 }, pt: 12, bgcolor: 'background.default', minHeight: '100vh', position: 'relative' }}>
+      
+      {/* BACKGROUND IMAGE - FITTED TO TOP SECTION ONLY */}
+      {activeView === 'browse' && (
+        <Box 
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '800px', // Fitted height hanggang filter area
+            backgroundImage: `url(${clientbackground})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            zIndex: 0,
+            opacity: 0.4, // Adjust transparency as needed
+            pointerEvents: 'none',
+            // Fade out effect para hindi biglang putol sa filter area
+            maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 70%, rgba(0,0,0,0) 100%)',
+          }}
+        />
+      )}
+
+      <Container maxWidth="xl" sx={{ position: 'relative', zIndex: 1 }}>
         
         {activeView === 'browse' ? (
           <>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Dialog, DialogTitle, DialogContent, DialogActions, 
-  Button, TextField, Stack, useTheme, MenuItem, Box, Typography, Avatar 
+  Button, TextField, Stack, useTheme, MenuItem, Box, Typography, Avatar, FormHelperText 
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { supabase } from '../supabaseClient'; 
 
 const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
@@ -17,6 +18,8 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [newImageFile, setNewImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [newPdfFile, setNewPdfFile] = useState(null);
+  const [error, setError] = useState(''); // New state for error messages
 
   const categories = [
     { value: 'book', label: 'Book' },
@@ -28,6 +31,8 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
       setFormData({ ...pdf });
       setImagePreview(getImageUrl(pdf.image_url));
       setNewImageFile(null);
+      setNewPdfFile(null);
+      setError(''); // Clear error on open
     }
   }, [pdf]);
 
@@ -39,16 +44,21 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    setError(''); // Clear error when typing
 
     // Validation para sa Genre (Bawal ang numbers)
     if (name === 'genre') {
-      const regex = /^[a-zA-Z\s,]*$/; // Tinatanggap lang ang letters, spaces, at commas
+      const regex = /^[a-zA-Z\s,]*$/; 
       if (!regex.test(value)) return;
     }
 
-    // Validation para sa Year (Limit to 4 characters)
+    // Validation para sa Year (Limit to 4 characters and cannot exceed current year)
     if (name === 'published_date') {
       if (value.length > 4) return;
+      const currentYear = new Date().getFullYear();
+      if (value && parseInt(value) > currentYear) {
+        setError(`Year cannot exceed ${currentYear}`);
+      }
     }
 
     setFormData({ ...formData, [name]: value });
@@ -62,22 +72,47 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
     }
   };
 
+  const handlePdfChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // PDF Type validation - using internal error state instead of alert
+      if (file.type !== 'application/pdf') {
+        setError("Only PDF files are allowed!");
+        e.target.value = null; 
+        return;
+      }
+      setNewPdfFile(file);
+    }
+  };
+
   const handleSave = async () => {
+    const currentYear = new Date().getFullYear();
+    if (parseInt(formData.published_date) > currentYear) {
+      setError(`Please enter a valid year (up to ${currentYear})`);
+      return;
+    }
+
     setLoading(true);
     try {
       let finalImageUrl = pdf.image_url;
+      let finalFileUrl = pdf.file_url;
 
       if (newImageFile) {
         const fileExt = newImageFile.name.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
         const filePath = `covers/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('pdfs')
-          .upload(filePath, newImageFile);
-
+        const { error: uploadError } = await supabase.storage.from('pdfs').upload(filePath, newImageFile);
         if (uploadError) throw uploadError;
         finalImageUrl = filePath;
+      }
+
+      if (newPdfFile) {
+        const fileExt = newPdfFile.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `files/${fileName}`;
+        const { error: uploadError } = await supabase.storage.from('pdfs').upload(filePath, newPdfFile);
+        if (uploadError) throw uploadError;
+        finalFileUrl = filePath;
       }
 
       const { error: updateError } = await supabase
@@ -89,7 +124,8 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
           category: formData.category,
           published_date: formData.published_date,
           description: formData.description,
-          image_url: finalImageUrl
+          image_url: finalImageUrl,
+          file_url: finalFileUrl
         })
         .eq('id', pdf.id);
 
@@ -107,7 +143,6 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
         ];
 
         const logEntries = [];
-
         fields.forEach(({ key, label }) => {
           if (formData[key]?.toString() !== pdf[key]?.toString()) {
             logEntries.push({
@@ -119,14 +154,8 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
           }
         });
 
-        if (newImageFile) {
-          logEntries.push({
-            user_id: user.id,
-            pdf_id: pdf.id,
-            action_type: 'Edit',
-            description: "Updated Cover Image"
-          });
-        }
+        if (newImageFile) logEntries.push({ user_id: user.id, pdf_id: pdf.id, action_type: 'Edit', description: "Updated Cover Image" });
+        if (newPdfFile) logEntries.push({ user_id: user.id, pdf_id: pdf.id, action_type: 'Edit', description: "Updated PDF File" });
 
         if (logEntries.length > 0) {
           await supabase.from('audit_logs').insert(logEntries);
@@ -158,14 +187,28 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
 
       <DialogContent>
         <Stack spacing={2.5} sx={{ mt: 1 }}>
+          {/* Internal Error Indicator */}
+          {error && (
+            <Box sx={{ bgcolor: 'error.main', color: 'white', p: 1, borderRadius: 1, textAlign: 'center' }}>
+              <Typography variant="caption" sx={{ fontWeight: 700 }}>{error}</Typography>
+            </Box>
+          )}
+
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, p: 2, borderRadius: 2, border: `1px dashed ${isDarkMode ? '#475569' : '#cbd5e1'}` }}>
             <Avatar variant="rounded" src={imagePreview} sx={{ width: 80, height: 110, boxShadow: 3 }} />
-            <Box>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Cover Photo</Typography>
-              <Button component="label" variant="outlined" size="small" startIcon={<CloudUploadIcon />} sx={{ textTransform: 'none', borderRadius: '10px' }}>
-                Upload New
-                <input type="file" hidden accept="image/*" onChange={handleFileChange} />
-              </Button>
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Manage Files</Typography>
+              <Stack direction="row" spacing={1}>
+                <Button component="label" variant="outlined" size="small" startIcon={<CloudUploadIcon />} sx={{ textTransform: 'none', borderRadius: '10px', fontSize: '0.75rem' }}>
+                  New Cover
+                  <input type="file" hidden accept="image/*" onChange={handleFileChange} />
+                </Button>
+                <Button component="label" variant="outlined" size="small" color="secondary" startIcon={<PictureAsPdfIcon />} sx={{ textTransform: 'none', borderRadius: '10px', fontSize: '0.75rem' }}>
+                  {newPdfFile ? "PDF Ready" : "Update PDF"}
+                  <input type="file" hidden accept="application/pdf" onChange={handlePdfChange} />
+                </Button>
+              </Stack>
+              {newPdfFile && <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'success.main' }}>{newPdfFile.name}</Typography>}
             </Box>
           </Box>
 
@@ -180,15 +223,8 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
             </TextField>
           </Stack>
 
-          <TextField 
-            fullWidth 
-            label="Genre" 
-            name="genre" 
-            value={formData.genre} 
-            onChange={handleChange} 
-            sx={inputStyle} 
-            InputLabelProps={{ shrink: true }} 
-          />
+          <TextField fullWidth label="Genre" name="genre" value={formData.genre} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
+          
           <TextField 
             fullWidth 
             label="Year" 
@@ -196,9 +232,11 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
             value={formData.published_date} 
             onChange={handleChange} 
             sx={inputStyle} 
-            InputLabelProps={{ shrink: true }}
-            inputProps={{ maxLength: 4 }} // Karagdagang safety para sa max length
+            InputLabelProps={{ shrink: true }} 
+            inputProps={{ maxLength: 4 }}
+            error={error.includes("Year")} // Visual indicator for year error
           />
+          
           <TextField fullWidth label="Description" name="description" multiline rows={3} value={formData.description} onChange={handleChange} sx={inputStyle} InputLabelProps={{ shrink: true }} />
         </Stack>
       </DialogContent>

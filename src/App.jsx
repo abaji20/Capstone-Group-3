@@ -160,7 +160,7 @@ function App() {
               </Route>
             )}
 
-            {role === 'client' && (
+            {(role === 'client' || role === 'superadmin')&& (
               <Route element={<ClientLayout />}>
                 <Route path="/browse" element={<Browse />} />
                 <Route path="/my-downloads" element={<MyDownloads />} />

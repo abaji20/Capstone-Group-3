@@ -30,8 +30,8 @@ export const navLinks = {
     { name: 'Pending Request', path: '/pending', icon: <PendingActionsIcon /> },  
   ],
   client: [ 
-    { name: 'BROWSE', path: '/browse', icon: <LibraryBooksIcon /> },
-    { name: 'UPLOAD', path: '/request-upload', icon: <PublishIcon /> },
+    { name: 'Library', path: '/browse', icon: <LibraryBooksIcon /> },
+    { name: 'Request', path: '/request-upload', icon: <PublishIcon /> },
     { name: 'Downloads', path: '/my-downloads', icon: <HistoryIcon /> },
   ]
 };
