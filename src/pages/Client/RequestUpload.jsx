@@ -11,7 +11,7 @@ import {
   PictureAsPdf, Image as ImageIcon, Add as AddIcon, 
   Close as CloseIcon, ErrorOutline, DeleteForever as DeleteIcon,
   WarningAmber, Send as SendIcon, Edit as EditIcon,
-  CalendarMonth, Person, Description
+  CalendarMonth, Person, Description, Comment
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 import { checkDuplicate } from '../../services/pdfService'; 
@@ -303,7 +303,7 @@ const RequestUpload = () => {
               fontWeight: 800, 
               borderRadius: 1.5, 
               fontSize: '0.75rem',
-              minWidth: '85px', // Ginawang fixed ang minimum width
+              minWidth: '85px', 
               px: 2 
             }}
           >
@@ -319,7 +319,7 @@ const RequestUpload = () => {
               fontWeight: 800, 
               borderRadius: 1.5, 
               fontSize: '0.75rem',  
-              minWidth: '85px', // Ginawang fixed ang minimum width
+              minWidth: '85px', 
               px: 2 
             }}
           >
@@ -328,8 +328,6 @@ const RequestUpload = () => {
         </Stack>
       );
     }
-
-    
 
     if (req.status === 'approved') {
       if (delStatus === 'pending') return <Typography sx={{ fontWeight: 800, color: '#ed6c02', fontSize: '0.75rem', letterSpacing: 1 }}>PENDING DELETION</Typography>;
@@ -381,8 +379,9 @@ const RequestUpload = () => {
                   <Table>
                     <TableHead sx={headerStyle}>
                       <TableRow>
-                        <TableCell>Target Document</TableCell>
-                        <TableCell>Upload Reason</TableCell>
+                        <TableCell>Target</TableCell>
+                        <TableCell>Reason</TableCell>
+                        <TableCell>Remarks</TableCell>
                         <TableCell align="center">Status</TableCell>
                         <TableCell align="center">Date</TableCell>
                         <TableCell align="center">Action</TableCell>
@@ -396,6 +395,9 @@ const RequestUpload = () => {
                             <Typography variant="caption" display="block" sx={{ color: 'text.secondary', fontWeight: 500 }}>{req.author}</Typography>
                           </TableCell>
                           <TableCell sx={cellStyle}>{req.upload_reason}</TableCell>
+                          <TableCell sx={{ ...cellStyle, color: req.remarks ? 'text.primary' : 'text.disabled', fontStyle: req.remarks ? 'normal' : 'italic' }}>
+                            {req.remarks || 'No remarks yet'}
+                          </TableCell>
                           <TableCell align="center" sx={cellStyle}><Chip label={req.status.toUpperCase()} sx={chipStyle(req.status)} /></TableCell>
                           <TableCell align="center" sx={cellStyle}>{new Date(req.created_at).toLocaleDateString()}</TableCell>
                           <TableCell align="center" sx={cellStyle}>{renderActionButtons(req)}</TableCell>
@@ -429,6 +431,12 @@ const RequestUpload = () => {
                           <Description sx={{ fontSize: 16, color: 'text.disabled' }} />
                           <Typography variant="body2" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
                             "{req.upload_reason}"
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                          <Comment sx={{ fontSize: 16, color: 'text.disabled', mt: 0.3 }} />
+                          <Typography variant="body2" sx={{ fontSize: '0.8rem', color: req.remarks ? 'text.primary' : 'text.disabled', fontStyle: req.remarks ? 'normal' : 'italic' }}>
+                            {req.remarks || 'No admin remarks'}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>

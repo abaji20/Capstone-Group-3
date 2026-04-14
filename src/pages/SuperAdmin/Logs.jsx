@@ -332,15 +332,18 @@ const Logs = () => {
                         <TableCell align="center">
                           <ActionButton action={log.action_type} />
                         </TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>
-                                                  {/* 1. Try to show the PDF title first */}
-                                                  {log.pdfs?.title || 
-                                                  /* 2. If it's a delete action, try to extract the name from the description */
-                                                  (log.action_type?.toLowerCase().includes('delete') && log.description?.includes('for ') 
-                                                    ? log.description.split('for ').pop() 
-                                                    : (log.description?.includes(': ') ? log.description.split(': ').pop() : '—'))
-                                                  }
-                                                </TableCell>
+                     <TableCell sx={{ fontWeight: 600 }}>
+  {/* 1. Try to show the PDF title first */}
+  {log.pdfs?.title || 
+    /* 2. Check for "Created client account for" and extract the name */
+    (log.description?.includes('Created client account for ') 
+      ? log.description.split('Created client account for ').pop()
+      : /* 3. Existing logic for delete actions and other descriptions */
+      (log.action_type?.toLowerCase().includes('delete') && log.description?.includes('for ') 
+        ? log.description.split('for ').pop() 
+        : (log.description?.includes(': ') ? log.description.split(': ').pop() : '—')))
+  }
+</TableCell>
                         <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{log.description}</TableCell>
                         <TableCell sx={{ fontSize: '0.85rem' }}>{new Date(log.created_at).toLocaleDateString()}</TableCell>
                         <TableCell align="center">

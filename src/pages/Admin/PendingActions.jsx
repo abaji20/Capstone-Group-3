@@ -35,27 +35,30 @@ const PendingActions = () => {
 
   const fetchPendingRequests = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('delete_requests')
-      .select(`id, reason, status, created_at, pdfs(title)`)
-      .order('created_at', { ascending: false });
+    
+    // Get current user to filter logs
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      const { data, error } = await supabase
+        .from('delete_requests')
+        .select(`id, reason, status, created_at, remarks, pdfs(title)`) // Added remarks
+        .eq('requested_by', user.id)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error("Error fetching:", error);
-    } else {
-      setRequests(data.map(req => ({
-        ...req,
-        // Standardizing status to uppercase for consistent UI logic
-        status: req.status ? req.status.toUpperCase() : 'PENDING'
-      })));
+      if (error) {
+        console.error("Error fetching:", error);
+      } else {
+        setRequests(data.map(req => ({
+          ...req,
+          status: req.status ? req.status.toUpperCase() : 'PENDING'
+        })));
+      }
     }
     setLoading(false);
   };
 
-  // --- CANCEL REQUEST FUNCTION ---
   const handleCancelRequest = async (id) => {
-    // We use 'rejected' here because the database constraint 
-    // does not allow the word 'cancelled'
     const { error } = await supabase
       .from('delete_requests')
       .update({ status: 'rejected' }) 
@@ -64,15 +67,12 @@ const PendingActions = () => {
     if (error) {
       alert("Failed to cancel request: " + error.message);
     } else {
-      // We manually set the local state to 'CANCELLED' 
-      // so the UI shows what you want
       setRequests(requests.map(req => 
         req.id === id ? { ...req, status: 'CANCELLED' } : req
       ));
     }
   };
 
-  // --- DELETE FUNCTION ---
   const handleDelete = async () => {
     const { error } = await supabase
       .from('delete_requests')
@@ -147,8 +147,19 @@ const PendingActions = () => {
                         <Chip label={req.status} color={getStatusColor(req.status)} size="small" />
                       </Stack>
                       <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
-                        "{req.reason}"
+                        "Your Reason: {req.reason}"
                       </Typography>
+                      {/* Separate Remarks Box for Mobile */}
+                      {req.remarks && (
+                        <Box sx={{ mt: 1, p: 1.5, bgcolor: isDarkMode ? 'rgba(239, 68, 68, 0.05)' : '#fff5f5', borderRadius: 1, border: `1px solid ${isDarkMode ? 'rgba(239, 68, 68, 0.2)' : '#feb2b2'}` }}>
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: '#ef4444', display: 'block', textTransform: 'uppercase', mb: 0.5 }}>
+                            Remarks
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 500, color: isDarkMode ? '#fca5a5' : '#c53030' }}>
+                            {req.remarks}
+                          </Typography>
+                        </Box>
+                      )}
                       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 1, borderTop: `1px solid ${borderCol}` }}>
                         <Typography variant="caption" sx={{ color: '#94a3b8' }}>
                           {new Date(req.created_at).toLocaleDateString()}
@@ -188,6 +199,7 @@ const PendingActions = () => {
                     <TableRow>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 800 }}>REMARKS</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">STATUS</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTIONS</TableCell>
@@ -197,7 +209,19 @@ const PendingActions = () => {
                     {requests.map((req) => (
                       <TableRow key={req.id} hover>
                         <TableCell sx={{ fontWeight: 700 }}>{req.pdfs?.title}</TableCell>
-                        <TableCell sx={{ color: 'text.secondary' }}>{req.reason}</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', maxWidth: 250 }}>{req.reason}</TableCell>
+                        {/* Separate Remarks Column for Desktop */}
+                        <TableCell sx={{ maxWidth: 250 }}>
+                          {req.remarks ? (
+                            <Typography variant="body2" sx={{ color: '#ef4444', fontWeight: 600 }}>
+                              {req.remarks}
+                            </Typography>
+                          ) : (
+                            <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+                              No remarks yet
+                            </Typography>
+                          )}
+                        </TableCell>
                         <TableCell align="center">
                           <Chip label={req.status} color={getStatusColor(req.status)} size="small" sx={{ fontWeight: 900, fontSize: '0.65rem' }} />
                         </TableCell>

@@ -19,7 +19,7 @@ export const navLinks = {
     { name: 'Activity Logs', path: '/logs', icon: <HistoryIcon /> },
     { name: 'Delete Requests', path: '/delete-requests', icon: <DeleteSweepIcon /> },
     { name: 'Client Requests', path: '/pending-upload', icon: <PendingActionsIcon /> },
-    { name: 'Archived/Restore', path: '/archived', icon: <ArchiveIcon /> },
+    { name: 'Archived', path: '/archived', icon: <ArchiveIcon /> },
   ],
   admin: [
     { name: 'Upload PDFs', path: '/upload', icon: <UploadFileIcon /> },
@@ -31,7 +31,7 @@ export const navLinks = {
   ],
   client: [ 
     { name: 'Library', path: '/browse', icon: <LibraryBooksIcon /> },
-    { name: 'Request', path: '/request-upload', icon: <PublishIcon /> },
+    { name: 'Request Upload', path: '/request-upload', icon: <PublishIcon /> },
     { name: 'Downloads', path: '/my-downloads', icon: <HistoryIcon /> },
   ]
 };

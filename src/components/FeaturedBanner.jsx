@@ -128,7 +128,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
               color: '#fff', 
               px: 2, py: 1, 
               borderRadius: '4px', 
-              fontWeight: '900', 
+              fontWeight: '600', 
               fontSize: '0.65rem', 
               width: 'fit-content', 
               height: 'fit-content',
@@ -136,7 +136,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
               textTransform: 'uppercase',
               letterSpacing: 1
             }}>
-              #{displayRank} Spotlight ({doc.download_count || 0} Downloads)
+              #{displayRank} Spotlight
             </Box>
             
             <Typography 

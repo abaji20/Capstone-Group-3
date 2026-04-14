@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { 
   Box, Paper, TextField, Button, Typography, 
-  Stack, Alert, InputAdornment, useTheme 
+  Stack, Alert, InputAdornment, useTheme, IconButton 
 } from '@mui/material';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { supabase } from '../../supabaseClient';
 
 const ResetPassword = () => {
@@ -13,8 +15,11 @@ const ResetPassword = () => {
   
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false); 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
+
+  const handleClickShowPassword = () => setShowPassword(!showPassword);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,11 +35,14 @@ const ResetPassword = () => {
       setMessage({ type: 'error', text: error.message });
     } else {
       setMessage({ type: 'success', text: "Password updated successfully!" });
+      // SUCCESS: Clear the fields here
+      setPassword('');
+      setConfirmPassword('');
+      setShowPassword(false); // Optional: reset visibility to hidden
     }
     setLoading(false);
   };
 
-  // Styles for the text fields to match your Library Repository UI
   const inputStyle = {
     '& .MuiOutlinedInput-root': {
       borderRadius: '12px',
@@ -54,53 +62,56 @@ const ResetPassword = () => {
       justifyContent: 'center', 
       alignItems: 'center', 
       minHeight: '100vh', 
-      p: 2, 
-      bgcolor: 'background.default', // Automatically switches based on theme
+      p: 3, 
+      bgcolor: 'background.default',
       transition: 'background-color 0.3s ease'
     }}>
-      <Paper elevation={0} sx={{ 
-        p: 4, 
-        width: '100%', 
-        maxWidth: 400, 
-        borderRadius: 2.5, 
-        textAlign: 'center', 
-        bgcolor: 'background.paper',
-        border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid #e2e8f0',
-        boxShadow: isDarkMode 
-          ? '0 20px 25px -5px rgba(0, 0, 0, 0.5)' 
-          : '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
-      }}>
-        {/* Icon Container */}
+      <Paper 
+        elevation={isDarkMode ? 0 : 3} 
+        sx={{ 
+          p: { xs: 4, md: 6 }, 
+          width: '100%', 
+          maxWidth: 480, 
+          borderRadius: 4, 
+          textAlign: 'center', 
+          bgcolor: 'background.paper',
+          border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid #eef2f6',
+          boxShadow: isDarkMode 
+            ? '0 25px 50px -12px rgba(0, 0, 0, 0.7)' 
+            : '0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+        }}
+      >
         <Box sx={{ 
           bgcolor: isDarkMode ? 'rgba(144, 202, 249, 0.1)' : '#e1effe', 
-          width: 64, 
-          height: 64, 
-          borderRadius: '50%', 
+          width: 72, 
+          height: 72, 
+          borderRadius: '20px', 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center', 
-          margin: '0 auto 24px' 
+          margin: '0 auto 28px',
+          transform: 'rotate(-5deg)' 
         }}>
-          <LockResetIcon sx={{ fontSize: 32, color: theme.palette.primary.main }} />
+          <LockResetIcon sx={{ fontSize: 38, color: theme.palette.primary.main }} />
         </Box>
         
-        <Typography variant="h5" sx={{ fontWeight: 800, mb: 1, color: 'text.primary' }}>
+        <Typography variant="h4" sx={{ fontWeight: 900, mb: 1.5, color: 'text.primary', letterSpacing: '-0.5px' }}>
           Reset Password
         </Typography>
-        <Typography variant="body2" sx={{ mb: 4, color: 'text.secondary' }}>
-          Enter your new secure password below to regain access.
+        <Typography variant="body1" sx={{ mb: 5, color: 'text.secondary', px: 2 }}>
+          Create a new strong password to keep your account safe.
         </Typography>
         
         {message && (
-          <Alert severity={message.type} sx={{ mb: 3, borderRadius: 3 }}>
+          <Alert severity={message.type} sx={{ mb: 4, borderRadius: 3, fontWeight: 600 }}>
             {message.text}
           </Alert>
         )}
 
-        <Stack component="form" onSubmit={handleSubmit} spacing={2.5}>
+        <Stack component="form" onSubmit={handleSubmit} spacing={3}>
           <TextField 
             label="New Password *" 
-            type="password" 
+            type={showPassword ? 'text' : 'password'} 
             fullWidth 
             required 
             value={password} 
@@ -111,12 +122,19 @@ const ResetPassword = () => {
                 <InputAdornment position="start">
                   <LockOutlinedIcon sx={{ color: 'text.secondary' }} />
                 </InputAdornment>
-              ) 
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton onClick={handleClickShowPassword} edge="end">
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              )
             }}
           />
           <TextField 
             label="Confirm Password *" 
-            type="password" 
+            type={showPassword ? 'text' : 'password'} 
             fullWidth 
             required 
             value={confirmPassword} 
@@ -127,7 +145,14 @@ const ResetPassword = () => {
                 <InputAdornment position="start">
                   <LockOutlinedIcon sx={{ color: 'text.secondary' }} />
                 </InputAdornment>
-              ) 
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton onClick={handleClickShowPassword} edge="end">
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              )
             }}
           />
           <Button 
@@ -137,18 +162,20 @@ const ResetPassword = () => {
             disabled={loading}
             sx={{ 
               mt: 2, 
-              borderRadius: 4, 
-              py: 1.8, 
+              borderRadius: '12px', 
+              py: 2, 
               fontWeight: 800,
               fontSize: '1rem',
-              textTransform: 'uppercase',
-              boxShadow: '0 4px 14px 0 rgba(0,118,255,0.39)',
+              textTransform: 'none', 
+              boxShadow: '0 10px 15px -3px rgba(0,118,255,0.3)',
               '&:hover': {
-                boxShadow: '0 6px 20px rgba(0,118,255,0.23)',
-              }
+                boxShadow: '0 20px 25px -5px rgba(0,118,255,0.2)',
+                transform: 'translateY(-1px)'
+              },
+              transition: 'all 0.2s ease'
             }}
           >
-            {loading ? "Updating..." : "Update Password"}
+            {loading ? "Updating Securely..." : "Update Password"}
           </Button>
         </Stack>
       </Paper>

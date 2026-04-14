@@ -3,9 +3,10 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Stack, Typography, MenuItem, TextField, InputAdornment, Avatar,
   IconButton, Chip, useTheme, useMediaQuery, Divider, Snackbar, Alert,
-  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button
+  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button,
+  Tabs, Tab
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom'; // Import para sa redirection
+import { useNavigate } from 'react-router-dom';
 import { PageHeader, PrimaryButton, DeleteButton, ActionModal, FormInput } from '../../shared';
 import { supabase } from '../../supabaseClient';
 
@@ -21,11 +22,14 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import { color } from 'framer-motion';
+import BusinessIcon from '@mui/icons-material/Business'; 
+import FingerprintIcon from '@mui/icons-material/Fingerprint';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
 
 const ManageAccount = () => {
   const theme = useTheme();
-  const navigate = useNavigate(); // Hook para sa navigation
+  const navigate = useNavigate();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isDarkMode = theme.palette.mode === 'dark';
   
@@ -33,7 +37,10 @@ const ManageAccount = () => {
 
   // States
   const [users, setUsers] = useState([]);
+  const [roleRequests, setRoleRequests] = useState([]);
+  const [activeTab, setActiveTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [requestSearch, setRequestSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
   const [dateFilter, setDateFilter] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,11 +50,20 @@ const ManageAccount = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   
   // Data States
   const [selectedUser, setSelectedUser] = useState(null);
-  const [formData, setFormData] = useState({ fullName: '', email: '', role: 'client', password: '' });
-  const [editData, setEditData] = useState({ id: '', fullName: '', role: '', oldName: '', oldRole: '' });
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [rejectionRemarks, setRejectionRemarks] = useState('');
+  const [formData, setFormData] = useState({ 
+    fullName: '', email: '', role: 'client', password: '', 
+    department: '', idNumber: '' 
+  });
+  const [editData, setEditData] = useState({ 
+    id: '', fullName: '', role: '', department: '', idNumber: '',
+    oldName: '', oldRole: '', oldDept: '', oldIdNum: '' 
+  });
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
   // Route Protection & Initial Fetch
@@ -55,9 +71,10 @@ const ManageAccount = () => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        navigate('/login'); // Redirect sa login kung walang session
+        navigate('/login');
       } else {
         fetchUsers();
+        fetchRoleRequests();
       }
     };
     checkUser();
@@ -67,6 +84,15 @@ const ManageAccount = () => {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
     if (error) console.error("Error fetching users:", error);
     else setUsers(data || []);
+  };
+
+  const fetchRoleRequests = async () => {
+    const { data, error } = await supabase
+      .from('role_requests')
+      .select('*, profiles(full_name, email)')
+      .eq('status', 'pending');
+    if (error) console.error("Error fetching role requests:", error);
+    else setRoleRequests(data || []);
   };
 
   const createAuditLog = async (action, description) => {
@@ -92,11 +118,61 @@ const ManageAccount = () => {
     }
   };
 
-  // --- HANDLERS ---
+  // --- ROLE REQUEST HANDLERS ---
+
+  const handleApproveRole = async (req) => {
+    setLoading(true);
+    try {
+      const { error: profErr } = await supabase
+        .from('profiles')
+        .update({ role: req.requested_role })
+        .eq('id', req.requested_by);
+      
+      if (profErr) throw profErr;
+
+      await supabase.from('role_requests')
+        .update({ status: 'approved', remarks: 'Approved by administrator' })
+        .eq('id', req.id);
+
+      await createAuditLog('Role Approval', `Approved ${req.requested_role} role for ${req.profiles.full_name}`);
+      setNotify({ open: true, message: 'Role upgrade approved!', severity: 'success' });
+      fetchRoleRequests();
+      fetchUsers();
+    } catch (err) {
+      setNotify({ open: true, message: 'Approval failed', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectRole = async () => {
+    if (!rejectionRemarks) {
+      setNotify({ open: true, message: 'Please provide a reason for rejection', severity: 'warning' });
+      return;
+    }
+    setLoading(true);
+    try {
+      await supabase.from('role_requests')
+        .update({ status: 'rejected', remarks: rejectionRemarks })
+        .eq('id', selectedRequest.id);
+
+      await createAuditLog('Role Rejection', `Rejected role request for ${selectedRequest.profiles.full_name}. Reason: ${rejectionRemarks}`);
+      setNotify({ open: true, message: 'Request rejected', severity: 'info' });
+      setIsRejectModalOpen(false);
+      setRejectionRemarks('');
+      fetchRoleRequests();
+    } catch (err) {
+      setNotify({ open: true, message: 'Rejection failed', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- EXISTING HANDLERS (UNCHANGED) ---
 
   const handleCreateAccount = async () => {
     if (!formData.email || !formData.password || !formData.fullName) {
-      setNotify({ open: true, message: 'Please fill in all fields!', severity: 'error' });
+      setNotify({ open: true, message: 'Please fill in required fields!', severity: 'error' });
       return;
     }
 
@@ -126,13 +202,17 @@ const ManageAccount = () => {
         return;
       }
 
-      // REGISTER WITH REDIRECT URL
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
-          data: { full_name: formData.fullName, role: formData.role },
-          emailRedirectTo: 'https://capstone-group-3-swart.vercel.app/login' // URL redirection after email confirmation
+          data: { 
+            full_name: formData.fullName, 
+            role: formData.role,
+            department: formData.department,
+            id_number: formData.idNumber
+          },
+          emailRedirectTo: 'https://capstone-group-3-swart.vercel.app/login'
         }
       });
 
@@ -145,7 +225,9 @@ const ManageAccount = () => {
           id: authData.user.id,
           email: formData.email,
           full_name: formData.fullName,
-          role: formData.role
+          role: formData.role,
+          department: formData.department,
+          id_number: formData.idNumber
         }]);
 
       if (profileError) {
@@ -156,7 +238,7 @@ const ManageAccount = () => {
       }
 
       setIsCreateModalOpen(false);
-      setFormData({ fullName: '', email: '', role: 'client', password: '' });
+      setFormData({ fullName: '', email: '', role: 'client', password: '', department: '', idNumber: '' });
       fetchUsers();
 
     } catch (err) {
@@ -171,23 +253,50 @@ const ManageAccount = () => {
         id: user.id, 
         fullName: user.full_name, 
         role: user.role,
+        department: user.department || '',
+        idNumber: user.id_number || '',
         oldName: user.full_name,
-        oldRole: user.role 
+        oldRole: user.role,
+        oldDept: user.department || 'N/A',
+        oldIdNum: user.id_number || 'N/A'
     });
     setIsEditModalOpen(true);
   };
 
   const handleUpdateAccount = async () => {
     setLoading(true);
-    const { error } = await supabase.from('profiles').update({ full_name: editData.fullName, role: editData.role }).eq('id', editData.id);
+    const { error } = await supabase.from('profiles').update({ 
+      full_name: editData.fullName, 
+      role: editData.role,
+      department: editData.department,
+      id_number: editData.idNumber 
+    }).eq('id', editData.id);
     
-    if (error) setNotify({ open: true, message: 'Update failed', severity: 'error' });
-    else {
-      let changes = [];
-      if (editData.oldName !== editData.fullName) changes.push(`name to ${editData.fullName}`);
-      if (editData.oldRole !== editData.role) changes.push(`role to ${editData.role}`);
+    if (error) {
+      setNotify({ open: true, message: 'Update failed', severity: 'error' });
+    } else {
+      if (editData.oldName !== editData.fullName) {
+        await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed name from "${editData.oldName}" to "${editData.fullName}"`);
+      }
       
-      await createAuditLog('Edit Account', `Updated ${editData.fullName}: ${changes.join(', ') || 'profile details'}`);
+      if (editData.oldRole !== editData.role) {
+        await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed role from "${editData.oldRole}" to "${editData.role}"`);
+      }
+      
+      const currentDept = editData.department || 'N/A';
+      if (editData.oldDept !== currentDept) {
+        await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed department from "${editData.oldDept}" to "${currentDept}"`);
+      }
+      
+      const currentIdNum = editData.idNumber || 'N/A';
+      if (editData.oldIdNum !== currentIdNum) {
+        await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed ID number from "${editData.oldIdNum}" to "${currentIdNum}"`);
+      }
+
+      if (editData.oldName === editData.fullName && editData.oldRole === editData.role && editData.oldDept === currentDept && editData.oldIdNum === currentIdNum) {
+        await createAuditLog('Edit Account', `Updated profile for ${editData.fullName} (no changes recorded)`);
+      }
+      
       setNotify({ open: true, message: 'Updated successfully!', severity: 'success' });
       setIsEditModalOpen(false);
       fetchUsers();
@@ -238,7 +347,9 @@ const ManageAccount = () => {
   };
 
   const filteredUsers = users.filter((u) => {
-    const matchesSearch = (u.full_name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) || (u.email?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+    const matchesSearch = (u.full_name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) || 
+                          (u.email?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+                          (u.id_number?.toLowerCase() || "").includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === 'All Roles' || u.role?.toLowerCase() === roleFilter.toLowerCase();
     
     let matchesDate = true;
@@ -248,6 +359,13 @@ const ManageAccount = () => {
     }
 
     return matchesSearch && matchesRole && matchesDate;
+  });
+
+  const filteredRequests = roleRequests.filter((req) => {
+    const name = req.profiles?.full_name?.toLowerCase() || '';
+    const email = req.profiles?.email?.toLowerCase() || '';
+    const term = requestSearch.toLowerCase();
+    return name.includes(term) || email.includes(term);
   });
 
   return (
@@ -265,109 +383,271 @@ const ManageAccount = () => {
         </Stack>
       </Box>
 
+      <Tabs 
+        value={activeTab} 
+        onChange={(e, v) => setActiveTab(v)} 
+        sx={{ 
+          mb: 3, 
+          '& .MuiTab-root': { fontWeight: 800, fontSize: '0.9rem', color: isDarkMode ? 'rgba(255,255,255,0.5)' : '#213C51' },
+          '& .Mui-selected': { color: '#3b82f6 !important' }
+        }}
+      >
+        <Tab label={`User List (${users.length})`} />
+        <Tab label={`Role Requests (${roleRequests.length})`} />
+      </Tabs>
+
       <Snackbar open={notify.open} autoHideDuration={4000} onClose={() => setNotify({ ...notify, open: false })} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
         <Alert severity={notify.severity} variant="filled">{notify.message}</Alert>
       </Snackbar>
 
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 4 }}>
-        <TextField 
-          placeholder="Search accounts..." size="medium" fullWidth={isMobile} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
-          sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
-          InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
-        />
-        
-        <TextField
-          type="date"
-          size="medium"
-          label="Date" 
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-          sx={{ 
-            minWidth: 180, 
-            bgcolor: isDarkMode ? '#28334e' : '#ffffff', 
-            borderRadius: 0.5,
-            // Target the native calendar picker icon in some browsers
-            '& input::-webkit-calendar-picker-indicator': {
-              filter: isDarkMode ? 'invert(1)' : 'none',
-            },
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <CalendarTodayIcon 
-                  fontSize="small" 
-                  sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} 
-                />
-              </InputAdornment>
-            )
-          }}
-/>
+      {activeTab === 0 ? (
+        <>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 4 }}>
+            <TextField 
+              placeholder="Search accounts or ID..." size="medium" fullWidth={isMobile} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
+              sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
+              InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
+            />
+            
+            <TextField
+              type="date"
+              size="medium"
+              label="Date" 
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              sx={{ 
+                minWidth: 180, 
+                bgcolor: isDarkMode ? '#28334e' : '#ffffff', 
+                borderRadius: 0.5,
+                '& input::-webkit-calendar-picker-indicator': {
+                  filter: isDarkMode ? 'invert(1)' : 'none',
+                },
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <CalendarTodayIcon 
+                      fontSize="small" 
+                      sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} 
+                    />
+                  </InputAdornment>
+                )
+              }}
+            />
 
-        <TextField select size="medium" label="Filter Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} sx={{ minWidth: 200, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
-          <MenuItem value="All Roles">All Roles</MenuItem>
-          <MenuItem value="superadmin">Superadmin</MenuItem>
-          <MenuItem value="admin">Admin</MenuItem>
-          <MenuItem value="client">Client</MenuItem>
-        </TextField>
+            <TextField select size="medium" label="Filter Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} sx={{ minWidth: 200, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="All Roles">All Roles</MenuItem>
+              <MenuItem value="superadmin">Superadmin</MenuItem>
+              <MenuItem value="admin">Admin</MenuItem>
+              <MenuItem value="client">Client</MenuItem>
+            </TextField>
 
-        <PrimaryButton fullWidth={isMobile} sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: isDarkMode ? '#28334e' : '#28334e'}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}>
-          New Account
-        </PrimaryButton>
-      </Stack>  
+            <PrimaryButton fullWidth={isMobile} sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: isDarkMode ? '#28334e' : '#28334e'}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}>
+              New Account
+            </PrimaryButton>
+          </Stack>   
 
-      {isMobile ? (
-        <Stack spacing={2} alignItems="center">
-          {filteredUsers.map((user) => (
-            <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
-              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={user} size={40} /></Box>
-              <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{user.email}</Typography>
-              <Box sx={{ mb: 2 }}><RoleChip role={user.role} /></Box>
-              <Divider sx={{ mb: 2 }} />
-              <Stack direction="row" spacing={2} justifyContent="center">
-                <IconButton onClick={() => handleOpenEdit(user)} sx={{ color: theme.palette.primary.main }}><EditIcon /></IconButton>
-                <DeleteButton onClick={() => handleDeleteTrigger(user)} />
-              </Stack>
-            </Paper>
-          ))}
-        </Stack>
-      ) : (
-        <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
-          <Table>
-            <TableHead sx={{ bgcolor: isDarkMode ? '#0f172a' : '#213C51' }}>
-              <TableRow>
-                <TableCell sx={{ color: 'white', fontWeight: 750 }}>USER DETAILS</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ROLE</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center"> JOINED DATE</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 750 }} align="right">ACTIONS</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
+          {isMobile ? (
+            <Stack spacing={2} alignItems="center">
               {filteredUsers.map((user) => (
-                <TableRow key={user.id} hover>
-                  <TableCell>
-                    <Stack direction="row" spacing={2} alignItems="center">
-                      <StyledAvatar user={user} />
-                      <Box>
-                        <Typography fontWeight={700}>{user.full_name}</Typography>
-                        <Typography variant="caption" color="text.secondary">{user.email}</Typography>
-                      </Box>
-                    </Stack>
-                  </TableCell>
-                  <TableCell align="center"><RoleChip role={user.role} /></TableCell>
-                  <TableCell align="center">{new Date(user.created_at).toLocaleDateString()}</TableCell>
-                  <TableCell align="right">
-                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                      <IconButton onClick={() => handleOpenEdit(user)} size="small" color="primary"><EditIcon fontSize="small" /></IconButton>
-                      <DeleteButton onClick={() => handleDeleteTrigger(user)} />
-                    </Stack>
-                  </TableCell>
-                </TableRow>
+                <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={user} size={40} /></Box>
+                  <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
+                  <Typography variant="body2" color="text.secondary">{user.email}</Typography>
+                  <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 600 }}>ID: {user.id_number || 'N/A'} | {user.department || 'N/A'}</Typography>
+                  <Box sx={{ mb: 2 }}><RoleChip role={user.role} /></Box>
+                  <Divider sx={{ mb: 2 }} />
+                  <Stack direction="row" spacing={2} justifyContent="center">
+                    <IconButton onClick={() => handleOpenEdit(user)} sx={{ color: theme.palette.primary.main }}><EditIcon /></IconButton>
+                    <DeleteButton onClick={() => handleDeleteTrigger(user)} />
+                  </Stack>
+                </Paper>
               ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+            </Stack>
+          ) : (
+            <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
+              <Table>
+                <TableHead sx={{ bgcolor: isDarkMode ? '#0f172a' : '#213C51' }}>
+                  <TableRow>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }}>USER DETAILS</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ID NUMBER</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">DEPARTMENT</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ROLE</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">JOINED DATE</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="right">ACTIONS</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredUsers.map((user) => (
+                    <TableRow key={user.id} hover>
+                      <TableCell>
+                        <Stack direction="row" spacing={2} alignItems="center">
+                          <StyledAvatar user={user} />
+                          <Box>
+                            <Typography fontWeight={700}>{user.full_name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{user.email}</Typography>
+                          </Box>
+                        </Stack>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Typography variant="body2" fontWeight={600}>{user.id_number || '—'}</Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Typography variant="body2" fontWeight={600}>{user.department || '—'}</Typography>
+                      </TableCell>
+                      <TableCell align="center"><RoleChip role={user.role} /></TableCell>
+                      <TableCell align="center">{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <IconButton onClick={() => handleOpenEdit(user)} size="small" color="primary"><EditIcon fontSize="small" /></IconButton>
+                          <DeleteButton onClick={() => handleDeleteTrigger(user)} />
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Search bar for Role Requests tab */}
+          <Stack direction="row" sx={{ mb: 3 }}>
+            <TextField
+              placeholder="Search by name or email..."
+              size="medium"
+              fullWidth={isMobile}
+              value={requestSearch}
+              onChange={(e) => setRequestSearch(e.target.value)}
+              sx={{ flexGrow: 1, maxWidth: isMobile ? '100%' : 400, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
+              InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
+            />
+          </Stack>
+
+          {/* Mobile card view for Role Requests */}
+          {isMobile ? (
+            <Stack spacing={2} alignItems="center">
+              {filteredRequests.length === 0 ? (
+                <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600, py: 8 }}>
+                  No pending role requests found.
+                </Typography>
+              ) : (
+                filteredRequests.map((req) => (
+                  <Paper key={req.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                      <StyledAvatar user={{ role: req.current_role, full_name: req.profiles?.full_name }} size={40} />
+                    </Box>
+                    <Typography variant="h6" fontWeight={800}>{req.profiles?.full_name}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{req.profiles?.email}</Typography>
+                    <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
+                      <RoleChip role={req.current_role} />
+                      <Chip
+                        label={req.requested_role}
+                        sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }}
+                      />
+                    </Stack>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', mb: 2 }}>
+                      "{req.reason || 'No reason provided'}"
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    <Stack direction="row" spacing={1.5} justifyContent="center">
+                      <Button
+                        variant="contained" color="success" size="small" startIcon={<CheckCircleIcon />}
+                        onClick={() => handleApproveRole(req)}
+                        sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(0.9)' } }}
+                      >
+                        APPROVE
+                      </Button>
+                      <Button
+                        variant="contained" color="error" size="small" startIcon={<CancelIcon />}
+                        onClick={() => { setSelectedRequest(req); setIsRejectModalOpen(true); }}
+                        sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(0.9)' } }}
+                      >
+                        REJECT
+                      </Button>
+                    </Stack>
+                  </Paper>
+                ))
+              )}
+            </Stack>
+          ) : (
+            /* Desktop table for Role Requests */
+            <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
+              <Table>
+                <TableHead sx={{ bgcolor: isDarkMode ? '#0f172a' : '#213C51' }}>
+                  <TableRow>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }}>REQUESTER DETAILS</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">CURRENT ROLE</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">REQUESTED ROLE</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }}>REASON FOR REQUEST</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="right">ACTIONS</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredRequests.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
+                        <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                          No pending role requests found.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredRequests.map((req) => (
+                      <TableRow key={req.id} hover>
+                        <TableCell>
+                          <Stack direction="row" spacing={2} alignItems="center">
+                            <StyledAvatar user={{ role: req.current_role, full_name: req.profiles?.full_name }} />
+                            <Box>
+                              <Typography fontWeight={700}>{req.profiles?.full_name}</Typography>
+                              <Typography variant="caption" color="text.secondary">{req.profiles?.email}</Typography>
+                            </Box>
+                          </Stack>
+                        </TableCell>
+                        <TableCell align="center">
+                          <RoleChip role={req.current_role} />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip
+                            label={req.requested_role}
+                            sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ maxWidth: 250 }}>
+                          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, fontStyle: 'italic' }}>
+                            "{req.reason || 'No reason provided'}"
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Stack direction="row" spacing={1.5} justifyContent="flex-end">
+                            <Button
+                              variant="contained" color="success" size="small" startIcon={<CheckCircleIcon />}
+                              onClick={() => handleApproveRole(req)}
+                              sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(0.9)' } }}
+                            >
+                              APPROVE
+                            </Button>
+                            <Button
+                              variant="contained" color="error" size="small" startIcon={<CancelIcon />}
+                              onClick={() => { setSelectedRequest(req); setIsRejectModalOpen(true); }}
+                              sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(0.9)' } }}
+                            >
+                              REJECT
+                            </Button>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </>
       )}
+
+      {/* --- ALL MODALS --- */}
 
       <Dialog open={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 3, p: 1, width: '400px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -386,9 +666,23 @@ const ManageAccount = () => {
         </DialogActions>
       </Dialog>
 
+      <ActionModal open={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Role Request" onConfirm={handleRejectRole} confirmText={loading ? "Rejecting..." : "Confirm Reject"}>
+        <Stack spacing={2} sx={{ mt: 2 }}>
+          <Typography variant="body2" color="text.secondary">Provide a reason for rejecting the request from <b>{selectedRequest?.profiles?.full_name}</b>:</Typography>
+          <TextField 
+            fullWidth multiline rows={3} 
+            placeholder="e.g. Unauthorized access, please verify department..." 
+            value={rejectionRemarks} 
+            onChange={(e) => setRejectionRemarks(e.target.value)} 
+          />
+        </Stack>
+      </ActionModal>
+
       <ActionModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Account" onConfirm={handleCreateAccount} confirmText={loading ? "Creating..." : "Create Account"}>
         <Stack spacing={2} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          <FormInput label="ID Number (Student/Staff)" value={formData.idNumber} onChange={(e) => setFormData({...formData, idNumber: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          <FormInput label="Department" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           <FormInput label="Email" placeholder="example@goldenlink.ph" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} InputProps={{ startAdornment: <EmailIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           <FormInput label="Default Password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} InputProps={{ startAdornment: <KeyIcon sx={{ mr: 1, opacity: 0.7 }} />, endAdornment: ( <InputAdornment position="end"> <IconButton onClick={() => setShowPassword(!showPassword)} edge="end"> {showPassword ? <VisibilityOff /> : <Visibility />} </IconButton> </InputAdornment> ) }} />
           <TextField select label="Role" fullWidth value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})}>
@@ -402,6 +696,8 @@ const ManageAccount = () => {
       <ActionModal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Account" onConfirm={handleUpdateAccount} confirmText={loading ? "Saving..." : "Update"}>
         <Stack spacing={2} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={editData.fullName} onChange={(e) => setEditData({...editData, fullName: e.target.value})} />
+          <FormInput label="ID Number" value={editData.idNumber} onChange={(e) => setEditData({...editData, idNumber: e.target.value})} />
+          <FormInput label="Department" value={editData.department} onChange={(e) => setEditData({...editData, department: e.target.value})} />
           <TextField select label="Role" fullWidth value={editData.role} onChange={(e) => setEditData({...editData, role: e.target.value})}>
             <MenuItem value="superadmin">Superadmin</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>

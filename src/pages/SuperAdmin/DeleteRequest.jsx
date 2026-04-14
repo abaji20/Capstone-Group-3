@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Typography, CircularProgress, Stack, IconButton, Avatar,
-  useTheme, useMediaQuery, Card, CardContent, Button, Divider, TextField, MenuItem, InputAdornment
+  useTheme, useMediaQuery, Card, CardContent, Button, Divider, TextField, MenuItem, InputAdornment,
+  Dialog, DialogTitle, DialogContent, DialogActions // Added for Remarks
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
@@ -33,6 +34,10 @@ const DeleteRequests = () => {
   const [genreFilter, setGenreFilter] = useState('All Genres'); 
   const [dateFilter, setDateFilter] = useState('');
 
+  // New State for Remarks Modal
+  const [remarkModal, setRemarkModal] = useState({ open: false, requestId: null });
+  const [remarks, setRemarks] = useState('');
+
   useEffect(() => { fetchRequests(); }, []);
 
   const fetchRequests = async () => {
@@ -52,7 +57,6 @@ const DeleteRequests = () => {
     setLoading(false);
   };
 
-  // --- DYNAMIC GENRE LIST (WITH SPLIT & TRIM) ---
   const genres = useMemo(() => {
     const allGenres = requests.flatMap(r => 
       r.pdfs?.genre ? r.pdfs.genre.split(',').map(g => g.trim()) : []
@@ -61,15 +65,12 @@ const DeleteRequests = () => {
   }, [requests]);
 
   const handleApprove = async (requestId, pdfId) => {
-    // Get the request data for logging before updating
     const requestData = requests.find(r => r.id === requestId);
     const pdfTitle = requestData?.pdfs?.title || 'Unknown File';
 
-    // 1. Update status
     await supabase.from('pdfs').update({ is_archived: true }).eq('id', pdfId);
     await supabase.from('delete_requests').update({ status: 'approved' }).eq('id', requestId);
     
-    // 2. Insert into audit_logs
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from('audit_logs').insert({
@@ -83,14 +84,20 @@ const DeleteRequests = () => {
     fetchRequests();
   };
 
-  const handleReject = async (requestId) => {
-    // Get the request data for logging
+  const handleReject = async () => {
+    const requestId = remarkModal.requestId;
     const requestData = requests.find(r => r.id === requestId);
     const pdfTitle = requestData?.pdfs?.title || 'Unknown File';
     const pdfId = requestData?.pdf_id;
 
-    // 1. Update status
-    await supabase.from('delete_requests').update({ status: 'rejected' }).eq('id', requestId);
+    // 1. Update status and Add Remarks
+    await supabase
+      .from('delete_requests')
+      .update({ 
+        status: 'rejected',
+        remarks: remarks // This column must exist in your DB
+      })
+      .eq('id', requestId);
     
     // 2. Insert into audit_logs
     const { data: { user } } = await supabase.auth.getUser();
@@ -99,10 +106,12 @@ const DeleteRequests = () => {
         user_id: user.id,
         action_type: 'REJECTED DELETE REQUEST',
         pdf_id: pdfId,
-        description: `Rejected delete request for: ${pdfTitle}`
+        description: `Rejected delete request for: ${pdfTitle}. Remarks: ${remarks}`
       });
     }
 
+    setRemarkModal({ open: false, requestId: null });
+    setRemarks('');
     fetchRequests();
   };
 
@@ -112,7 +121,6 @@ const DeleteRequests = () => {
     return data.publicUrl;
   };
 
-  // --- UPDATED FILTERING LOGIC ---
   const filteredRequests = requests.filter(req => {
     const createdAt = new Date(req.created_at).toISOString().split('T')[0];
     const query = searchTerm.toLowerCase();
@@ -238,7 +246,7 @@ const DeleteRequests = () => {
                       <TableCell align="center">
                         <Stack direction="row" justifyContent="center" spacing={1}>
                           <IconButton onClick={() => handleApprove(req.id, req.pdfs.id)} sx={{ color: '#16a34a' }}><CheckCircleOutlineIcon sx={{ fontSize: 32 }} /></IconButton>
-                          <IconButton onClick={() => handleReject(req.id)} sx={{ color: '#dc2626' }}><HighlightOffIcon sx={{ fontSize: 32 }} /></IconButton>
+                          <IconButton onClick={() => setRemarkModal({ open: true, requestId: req.id })} sx={{ color: '#dc2626' }}><HighlightOffIcon sx={{ fontSize: 32 }} /></IconButton>
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -267,7 +275,7 @@ const DeleteRequests = () => {
                     <Divider sx={{ mb: 2 }} />
                     <Stack direction="row" spacing={2}>
                       <Button fullWidth variant="contained" color="success" onClick={() => handleApprove(req.id, req.pdfs.id)}>Approve</Button>
-                      <Button fullWidth variant="outlined" color="error" onClick={() => handleReject(req.id)}>Reject</Button>
+                      <Button fullWidth variant="outlined" color="error" onClick={() => setRemarkModal({ open: true, requestId: req.id })}>Reject</Button>
                     </Stack>
                   </CardContent>
                 </Card> 
@@ -276,6 +284,46 @@ const DeleteRequests = () => {
           )}
         </>
       )}
+
+      {/* REMARKS MODAL */}
+      <Dialog 
+        open={remarkModal.open} 
+        onClose={() => setRemarkModal({ open: false, requestId: null })}
+        PaperProps={{ sx: { bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}` } }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51' }}>
+          REJECTION REMARKS
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            Please provide a reason why this delete request is being rejected.
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            variant="outlined"
+            placeholder="Enter reason here..."
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            sx={{ bgcolor: inputBg }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={() => setRemarkModal({ open: false, requestId: null })} sx={{ fontWeight: 700 }}>
+            Cancel
+          </Button>
+          <Button 
+            variant="contained" 
+            color="error" 
+            onClick={handleReject} 
+            disabled={!remarks.trim()}
+            sx={{ fontWeight: 700 }}
+          >
+            Confirm Rejection
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
