@@ -113,5 +113,5 @@ export const fetchFeaturedPdfs = async () => {
     console.error("Error fetching spotlight PDFs:", error);
     return [];
   }
-  return data || [];
+  return (data || []).filter(pdf => !pdf.is_archived); // 👈 filter here
 };
