@@ -45,6 +45,8 @@ const ManageAccount = () => {
   const [dateFilter, setDateFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [requestRoleFilter, setRequestRoleFilter] = useState('All Roles');
+  const [requestDateFilter, setRequestDateFilter] = useState('');
   
   // Modal/Dialog States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -362,11 +364,26 @@ const ManageAccount = () => {
   });
 
   const filteredRequests = roleRequests.filter((req) => {
-    const name = req.profiles?.full_name?.toLowerCase() || '';
-    const email = req.profiles?.email?.toLowerCase() || '';
-    const term = requestSearch.toLowerCase();
-    return name.includes(term) || email.includes(term);
-  });
+  const name = req.profiles?.full_name?.toLowerCase() || '';
+  const email = req.profiles?.email?.toLowerCase() || '';
+  const term = requestSearch.toLowerCase();
+  
+  // Search filter
+  const matchesSearch = name.includes(term) || email.includes(term);
+  
+  // Role Requested filter
+  const matchesRole = requestRoleFilter === 'All Roles' || 
+                      req.requested_role?.toLowerCase() === requestRoleFilter.toLowerCase();
+  
+  // Date filter (base sa created_at ng request)
+  let matchesDate = true;
+  if (requestDateFilter) {
+    const requestDate = new Date(req.created_at).toISOString().split('T')[0];
+    matchesDate = requestDate === requestDateFilter;
+  }
+
+  return matchesSearch && matchesRole && matchesDate;
+});
 
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, minHeight: '100vh', bgcolor: pageBg }}>
@@ -512,18 +529,73 @@ const ManageAccount = () => {
         </>
       ) : (
         <>
-          {/* Search bar for Role Requests tab */}
-          <Stack direction="row" sx={{ mb: 3 }}>
-            <TextField
-              placeholder="Search by name or email..."
-              size="medium"
-              fullWidth={isMobile}
-              value={requestSearch}
-              onChange={(e) => setRequestSearch(e.target.value)}
-              sx={{ flexGrow: 1, maxWidth: isMobile ? '100%' : 400, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
-              InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
-            />
-          </Stack>
+        {/* Search bar for Role Requests tab */}
+<Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
+  <TextField
+    placeholder="Search by name or email..."
+    size="medium"
+    fullWidth={isMobile}
+    value={requestSearch}
+    onChange={(e) => setRequestSearch(e.target.value)}
+    sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
+    InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
+  />
+
+  {/* Date Filter */}
+  <TextField
+    type="date"
+    size="medium"
+    label="Request Date"
+    InputLabelProps={{ shrink: true }}
+    value={requestDateFilter}
+    onChange={(e) => setRequestDateFilter(e.target.value)}
+    sx={{ 
+      minWidth: 180, 
+      bgcolor: isDarkMode ? '#28334e' : '#ffffff', 
+      borderRadius: 0.5,
+      '& input::-webkit-calendar-picker-indicator': {
+        filter: isDarkMode ? 'invert(1)' : 'none',
+      },
+    }}
+    InputProps={{
+      startAdornment: (
+        <InputAdornment position="start">
+          <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} />
+        </InputAdornment>
+      )
+    }}
+  />
+
+  {/* Role Filter */}
+  <TextField
+    select
+    size="medium"
+    label="Requested Role"
+    value={requestRoleFilter}
+    onChange={(e) => setRequestRoleFilter(e.target.value)}
+    sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
+  >
+    <MenuItem value="All Roles">All Roles</MenuItem>
+    <MenuItem value="superadmin">Superadmin</MenuItem>
+    <MenuItem value="admin">Admin</MenuItem>
+    <MenuItem value="client">Client</MenuItem>
+  </TextField>
+
+  {/* Reset Button (Optional pero helpful) */}
+  {(requestSearch || requestDateFilter || requestRoleFilter !== 'All Roles') && (
+    <Button 
+      variant="text" 
+      onClick={() => {
+        setRequestSearch('');
+        setRequestDateFilter('');
+        setRequestRoleFilter('All Roles');
+      }}
+      sx={{ fontWeight: 700 }}
+    >
+      RESET
+    </Button>
+  )}
+</Stack>
 
           {/* Mobile card view for Role Requests */}
           {isMobile ? (
