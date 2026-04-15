@@ -37,7 +37,7 @@ const AdminManageAccount = () => {
   const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
 
   // Departments List
-  const departments = ["BSIT", "BSBA", "BS-ENG", "BSAIS", "BSMATH", "BSPSYCH", "BEED"];
+  const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
 
   // States
   const [users, setUsers] = useState([]);

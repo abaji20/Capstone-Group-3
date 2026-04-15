@@ -35,6 +35,9 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const [fullName, setFullName] = useState('Loading...');
   const [isHovered, setIsHovered] = useState(false);
 
+  // Departments List
+  const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
+
   // PROFILE SETTINGS STATES
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '', role: '' });
@@ -172,7 +175,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
               <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.7rem', display: 'block' }}>
                 Administrator
               </Typography>
-              {/* LABEL PARA SA PAG-CHANGE NG PROFILE */}
               <Typography variant="caption" sx={{ color: '#3b82f6', fontSize: '0.65rem', fontWeight: 600, display: 'block' }}>
                 Manage Profile
               </Typography>
@@ -313,7 +315,20 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       >
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          <FormInput label="Department" value={userData.department} onChange={(e) => setUserData({...userData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          
+          {/* Department Dropdown */}
+          <FormInput 
+            select 
+            label="Department" 
+            value={userData.department} 
+            onChange={(e) => setUserData({...userData, department: e.target.value})} 
+            InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+          >
+            {departments.map((dept) => (
+              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </FormInput>
+
           <FormInput label="Employee / ID Number" value={userData.id_number} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
 
           {latestRequest?.status === 'rejected' && (

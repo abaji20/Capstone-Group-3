@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { 
   Drawer, List, ListItem, ListItemButton, ListItemIcon, 
   ListItemText, Typography, Box, useTheme, useMediaQuery, 
-  Avatar, Tooltip, Stack, Divider, Alert, Snackbar
+  Avatar, Tooltip, Stack, Divider, Alert, Snackbar, MenuItem
 } from '@mui/material';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -32,6 +32,9 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const [fullName, setFullName] = useState('Loading...');
   const [isHovered, setIsHovered] = useState(false);
 
+  // Departments List
+  const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
+
   // PROFILE SETTINGS STATES
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '' });
@@ -55,6 +58,8 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
   const handleUpdateProfile = async () => {
     setLoading(true);
+    
+    // 1. UPDATE PROFILE IN SUPABASE
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ 
@@ -65,8 +70,25 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       .eq('id', userData.id);
 
     if (profileError) {
+      console.error("Error updating profile:", profileError);
       setNotify({ open: true, message: 'Update failed!', severity: 'error' });
     } else {
+      // 2. INSERT TO ACTIVITY LOGS
+      // Note: Siguraduhin na 'details' ang column name mo sa table. 
+      // Kung 'description' ang gamit mo, palitan ang key sa baba.
+      const { error: logError } = await supabase
+        .from('activity_logs')
+        .insert([{
+          user_id: userData.id,
+          action: 'Update Profile',
+          details: `Super Admin updated their profile: ${userData.full_name}`,
+          created_at: new Date().toISOString()
+        }]);
+
+      if (logError) {
+        console.error("Error inserting to activity_logs:", logError);
+      }
+
       setNotify({ open: true, message: 'Profile updated successfully!', severity: 'success' });
       setFullName(userData.full_name);
       setIsProfileModalOpen(false);
@@ -145,7 +167,6 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       <List sx={{ px: 1.5, flexGrow: 1 }}>
         {navLinks.superadmin.map((item) => {
           const isActive = location.pathname === item.path;
-          
           const buttonContent = (
             <ListItemButton 
               component={Link} 
@@ -153,8 +174,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
               onClick={() => isMobile && handleDrawerToggle()}
               sx={{ 
                 borderRadius: '8px',
-                py: 1.2,
-                mb: 0.5,
+                py: 1.2, mb: 0.5,
                 justifyContent: isMini ? 'center' : 'flex-start',
                 backgroundColor: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
                 '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.05)' },
@@ -166,34 +186,16 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
               <ListItemIcon sx={{ 
                 color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)', 
                 minWidth: isMini ? 0 : 40, 
-                display: 'flex',
-                justifyContent: 'center' 
+                display: 'flex', justifyContent: 'center' 
               }}>
-                {React.isValidElement(item.icon) 
-                  ? React.cloneElement(item.icon, { sx: { fontSize: 22 } }) 
-                  : null}
+                {React.isValidElement(item.icon) ? React.cloneElement(item.icon, { sx: { fontSize: 22 } }) : null}
               </ListItemIcon>
-              {!isMini && (
-                <ListItemText 
-                  primary={item.name} 
-                  primaryTypographyProps={{ 
-                    fontSize: '0.85rem', 
-                    fontWeight: isActive ? 600 : 400,
-                    color: isActive ? 'white' : 'rgba(255,255,255,0.7)',
-                    whiteSpace: 'nowrap'
-                  }} 
-                />
-              )}
+              {!isMini && <ListItemText primary={item.name} primaryTypographyProps={{ fontSize: '0.85rem', fontWeight: isActive ? 600 : 400, color: isActive ? 'white' : 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap' }} />}
             </ListItemButton>
           );
-
           return (
             <ListItem key={item.name} disablePadding>
-              {isMini ? (
-                <Tooltip title={item.name} placement="right" arrow>
-                  {buttonContent}
-                </Tooltip>
-              ) : buttonContent}
+              {isMini ? <Tooltip title={item.name} placement="right" arrow>{buttonContent}</Tooltip> : buttonContent}
             </ListItem>
           );
         })}
@@ -201,24 +203,14 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
       {/* BOTTOM TOOLS */}
       <Box sx={{ p: 2, mt: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <ListItemButton 
-          onClick={colorMode.toggleColorMode}
-          sx={{ borderRadius: '8px', justifyContent: isMini ? 'center' : 'flex-start', mb: 1 }}
-        >
+        <ListItemButton onClick={colorMode.toggleColorMode} sx={{ borderRadius: '8px', justifyContent: isMini ? 'center' : 'flex-start', mb: 1 }}>
           <ListItemIcon sx={{ color: 'rgba(255,255,255,0.7)', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
             {theme.palette.mode === 'dark' ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}
           </ListItemIcon>
           {!isMini && <ListItemText primary="Appearance" primaryTypographyProps={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }} />}
         </ListItemButton>
 
-        <ListItemButton 
-          onClick={handleLogout}
-          sx={{ 
-            borderRadius: '8px', 
-            color: '#ff5252', 
-            justifyContent: isMini ? 'center' : 'flex-start'
-          }}
-        >
+        <ListItemButton onClick={handleLogout} sx={{ borderRadius: '8px', color: '#ff5252', justifyContent: isMini ? 'center' : 'flex-start' }}>
           <ListItemIcon sx={{ color: 'inherit', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
             <LogoutIcon fontSize="small" />
           </ListItemIcon>
@@ -234,53 +226,26 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         <Alert severity={notify.severity} variant="filled">{notify.message}</Alert>
       </Snackbar>
 
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={handleDrawerToggle}
-        ModalProps={{ keepMounted: true }}
-        sx={{
-          display: { xs: 'block', md: 'none' },
-          zIndex: theme.zIndex.drawer + 2, 
-          '& .MuiDrawer-paper': { 
-            width: expandedWidth, 
-            border: 'none', 
-            bgcolor: theme.palette.mode === 'dark' ? '#111827' : '#213C51' 
-          },
-        }}
-      >
+      <Drawer variant="temporary" open={mobileOpen} onClose={handleDrawerToggle} ModalProps={{ keepMounted: true }} sx={{ display: { xs: 'block', md: 'none' }, zIndex: theme.zIndex.drawer + 2, '& .MuiDrawer-paper': { width: expandedWidth, border: 'none', bgcolor: theme.palette.mode === 'dark' ? '#111827' : '#213C51' } }}>
         {drawerContent}
       </Drawer>
 
-      <Drawer
-        variant="permanent"
-        sx={{
-          display: { xs: 'none', md: 'block' },
-          '& .MuiDrawer-paper': { 
-            width: isMini ? collapsedWidth : expandedWidth, 
-            border: 'none',
-            overflowX: 'hidden',
-            transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-            zIndex: theme.zIndex.drawer + 1,
-          },
-        }}
-      >
+      <Drawer variant="permanent" sx={{ display: { xs: 'none', md: 'block' }, '& .MuiDrawer-paper': { width: isMini ? collapsedWidth : expandedWidth, border: 'none', overflowX: 'hidden', transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)', zIndex: theme.zIndex.drawer + 1 } }}>
         {drawerContent}
       </Drawer>
 
       {/* PROFILE SETTINGS MODAL */}
-      <ActionModal 
-        open={isProfileModalOpen} 
-        onClose={() => setIsProfileModalOpen(false)} 
-        title="Edit Super Admin Profile" 
-        onConfirm={handleUpdateProfile} 
-        confirmText={loading ? "Saving..." : "Save Changes"}
-      >
+      <ActionModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} title="Edit Super Admin Profile" onConfirm={handleUpdateProfile} confirmText={loading ? "Saving..." : "Save Changes"}>
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          <FormInput label="Department" value={userData.department} onChange={(e) => setUserData({...userData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          
+          <FormInput select label="Department" value={userData.department} onChange={(e) => setUserData({...userData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            {departments.map((dept) => (
+              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </FormInput>
+
           <FormInput label="Employee / ID Number" value={userData.id_number} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          {/* Tinanggal ang Request Role Section dito */}
         </Stack>
       </ActionModal>
     </Box>

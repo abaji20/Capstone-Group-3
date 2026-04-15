@@ -40,13 +40,15 @@ const ClientTopbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [username, setUsername] = useState('Loading...');
   
+  // Departments List
+  const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
+
   const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '', role: '' });
   const [requestData, setRequestData] = useState({ role: '', reason: '' });
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
-  // NEW STATE PARA SA REJECTION REMARKS
   const [latestRequest, setLatestRequest] = useState(null);
 
   const navigate = useNavigate();
@@ -63,7 +65,6 @@ const ClientTopbar = () => {
         setUsername(data.full_name);
         setUserData(data);
 
-        // FETCH LATEST ROLE REQUEST PARA SA STATUS AT REMARKS
         const { data: lastRequest } = await supabase
           .from('role_requests')
           .select('status, remarks, requested_role')
@@ -91,6 +92,7 @@ const ClientTopbar = () => {
   const handleUpdateProfile = async () => {
     setLoading(true);
     
+    // 1. UPDATE PROFILE
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ 
@@ -106,6 +108,19 @@ const ClientTopbar = () => {
       return;
     }
 
+    // 2. INSERT ACTIVITY LOG
+    const { error: logError } = await supabase
+      .from('activity_logs')
+      .insert([{
+        user_id: userData.id,
+        action: 'Update Profile',
+        details: `Client updated profile info: ${userData.full_name}`,
+        created_at: new Date().toISOString()
+      }]);
+
+    if (logError) console.error("Activity Log Error:", logError);
+
+    // 3. ROLE REQUEST LOGIC
     if (requestData.role) {
       const { error: roleError } = await supabase
         .from('role_requests')
@@ -121,7 +136,7 @@ const ClientTopbar = () => {
         setNotify({ open: true, message: 'Role request failed!', severity: 'error' });
       } else {
         setNotify({ open: true, message: 'Profile updated and role request sent!', severity: 'success' });
-        fetchUser(); // Refresh data para maging 'pending' ang UI status
+        fetchUser(); 
       }
     } else {
       setNotify({ open: true, message: 'Profile updated successfully!', severity: 'success' });
@@ -281,10 +296,22 @@ const ClientTopbar = () => {
       <ActionModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} title="Edit User Information" onConfirm={handleUpdateProfile} confirmText={loading ? "Saving..." : "Save Changes"}>
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          <FormInput label="Department" value={userData.department} onChange={(e) => setUserData({...userData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          
+          {/* Department Dropdown */}
+          <FormInput 
+            select 
+            label="Department" 
+            value={userData.department} 
+            onChange={(e) => setUserData({...userData, department: e.target.value})} 
+            InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+          >
+            {departments.map((dept) => (
+              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </FormInput>
+
           <FormInput label="Student / Staff Number" value={userData.id_number} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
 
-          {/* DITO LALABAS ANG STATUS/REJECTION ALERT */}
           {latestRequest?.status === 'rejected' && (
             <Alert severity="error" variant="outlined" sx={{ borderRadius: '8px', borderLeft: '5px solid' }}>
               <Typography variant="caption" sx={{ fontWeight: 900, display: 'block', textTransform: 'uppercase' }}>Request Rejected ({latestRequest.requested_role})</Typography>

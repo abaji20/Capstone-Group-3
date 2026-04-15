@@ -111,9 +111,8 @@ const Dashboard = () => {
     };
     fetchData();
   }, [selectedYear]);
-
   const handleExportExcel = async () => {
-    // 1. Fetch data para sa sheets
+    // 1. Fetch data for sheets - ensuring we get the new columns
     const { data: allPDFs } = await supabase
       .from('pdfs')
       .select('*')
@@ -152,7 +151,7 @@ const Dashboard = () => {
     XLSX.utils.book_append_sheet(wb, wsDashboard, "Dashboard Summary");
 
 
-    // --- SHEET 2: ACCOUNTS (Categorized by Role) ---
+    // --- SHEET 2: ACCOUNTS (Updated with ID Number and Department) ---
     let accountsSheetData = [
       ["USER ACCOUNTS CATEGORIZED BY ROLE"],
       ["Generated on:", dateString],
@@ -165,11 +164,13 @@ const Dashboard = () => {
       accountsSheetData.push([`${role.toUpperCase()} ACCOUNTS`]);
       
       if (filtered.length > 0) {
-        accountsSheetData.push(["ID", "Full Name", "Email", "Role", "Created At"]);
+        // Added ID Number and Department to the header row
+        accountsSheetData.push(["Full Name", "ID Number", "Department", "Email", "Role", "Created At"]);
         filtered.forEach(item => {
           accountsSheetData.push([
-            item.id,
             item.full_name || 'N/A',
+            item.id_number || 'N/A', // New Column
+            item.department || 'N/A', // New Column
             item.email || 'N/A',
             item.role,
             new Date(item.created_at).toLocaleDateString()

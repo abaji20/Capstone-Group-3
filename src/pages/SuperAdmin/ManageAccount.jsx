@@ -35,6 +35,9 @@ const ManageAccount = () => {
   
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff';
 
+  // Departments List
+  const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
+
   // States
   const [users, setUsers] = useState([]);
   const [roleRequests, setRoleRequests] = useState([]);
@@ -121,7 +124,6 @@ const ManageAccount = () => {
   };
 
   // --- ROLE REQUEST HANDLERS ---
-
   const handleApproveRole = async (req) => {
     setLoading(true);
     try {
@@ -170,40 +172,28 @@ const ManageAccount = () => {
     }
   };
 
-  // --- EXISTING HANDLERS (UNCHANGED) ---
-
   const handleCreateAccount = async () => {
     if (!formData.email || !formData.password || !formData.fullName) {
       setNotify({ open: true, message: 'Please fill in required fields!', severity: 'error' });
       return;
     }
-
     if (!formData.email.toLowerCase().endsWith('@goldenlink.ph')) {
       setNotify({ open: true, message: 'Only @goldenlink.ph accounts are allowed!', severity: 'error' });
       return;
     }
-
     setLoading(true);
-
     try {
       const { data: existingUser, error: existingError } = await supabase
         .from('profiles')
         .select('id')
         .eq('email', formData.email)
         .single();
-
       if (existingError && existingError.code !== 'PGRST116') throw existingError;
-
       if (existingUser) {
-        setNotify({
-          open: true,
-          message: 'Email already registered. Please check inbox or try another.',
-          severity: 'warning'
-        });
+        setNotify({ open: true, message: 'Email already registered. Please check inbox or try another.', severity: 'warning' });
         setLoading(false);
         return;
       }
-
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -217,10 +207,8 @@ const ManageAccount = () => {
           emailRedirectTo: 'https://capstone-group-3-swart.vercel.app/login'
         }
       });
-
       if (authError) throw authError;
       if (!authData.user) throw new Error("User creation failed.");
-
       const { error: profileError } = await supabase
         .from('profiles')
         .insert([{
@@ -231,18 +219,15 @@ const ManageAccount = () => {
           department: formData.department,
           id_number: formData.idNumber
         }]);
-
       if (profileError) {
         setNotify({ open: true, message: 'Account created, but profile sync delayed.', severity: 'warning' });
       } else {
         await createAuditLog('Create Account', `Created ${formData.role} account for ${formData.fullName}`);
         setNotify({ open: true, message: 'Account created! Please check email to confirm.', severity: 'success' });
       }
-
       setIsCreateModalOpen(false);
       setFormData({ fullName: '', email: '', role: 'client', password: '', department: '', idNumber: '' });
       fetchUsers();
-
     } catch (err) {
       setNotify({ open: true, message: 'Error: ' + err.message, severity: 'error' });
     } finally {
@@ -273,32 +258,23 @@ const ManageAccount = () => {
       department: editData.department,
       id_number: editData.idNumber 
     }).eq('id', editData.id);
-    
     if (error) {
       setNotify({ open: true, message: 'Update failed', severity: 'error' });
     } else {
       if (editData.oldName !== editData.fullName) {
         await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed name from "${editData.oldName}" to "${editData.fullName}"`);
       }
-      
       if (editData.oldRole !== editData.role) {
         await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed role from "${editData.oldRole}" to "${editData.role}"`);
       }
-      
       const currentDept = editData.department || 'N/A';
       if (editData.oldDept !== currentDept) {
         await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed department from "${editData.oldDept}" to "${currentDept}"`);
       }
-      
       const currentIdNum = editData.idNumber || 'N/A';
       if (editData.oldIdNum !== currentIdNum) {
         await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed ID number from "${editData.oldIdNum}" to "${currentIdNum}"`);
       }
-
-      if (editData.oldName === editData.fullName && editData.oldRole === editData.role && editData.oldDept === currentDept && editData.oldIdNum === currentIdNum) {
-        await createAuditLog('Edit Account', `Updated profile for ${editData.fullName} (no changes recorded)`);
-      }
-      
       setNotify({ open: true, message: 'Updated successfully!', severity: 'success' });
       setIsEditModalOpen(false);
       fetchUsers();
@@ -315,7 +291,6 @@ const ManageAccount = () => {
     setLoading(true);
     const userId = selectedUser?.id;
     const deletedUserName = selectedUser?.full_name;
-
     try {
       await supabase.from('audit_logs').delete().eq('user_id', userId);
       const { error } = await supabase.from('profiles').delete().eq('id', userId);
@@ -353,37 +328,27 @@ const ManageAccount = () => {
                           (u.email?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
                           (u.id_number?.toLowerCase() || "").includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === 'All Roles' || u.role?.toLowerCase() === roleFilter.toLowerCase();
-    
     let matchesDate = true;
     if (dateFilter) {
       const userDate = new Date(u.created_at).toISOString().split('T')[0];
       matchesDate = userDate === dateFilter;
     }
-
     return matchesSearch && matchesRole && matchesDate;
   });
 
   const filteredRequests = roleRequests.filter((req) => {
-  const name = req.profiles?.full_name?.toLowerCase() || '';
-  const email = req.profiles?.email?.toLowerCase() || '';
-  const term = requestSearch.toLowerCase();
-  
-  // Search filter
-  const matchesSearch = name.includes(term) || email.includes(term);
-  
-  // Role Requested filter
-  const matchesRole = requestRoleFilter === 'All Roles' || 
-                      req.requested_role?.toLowerCase() === requestRoleFilter.toLowerCase();
-  
-  // Date filter (base sa created_at ng request)
-  let matchesDate = true;
-  if (requestDateFilter) {
-    const requestDate = new Date(req.created_at).toISOString().split('T')[0];
-    matchesDate = requestDate === requestDateFilter;
-  }
-
-  return matchesSearch && matchesRole && matchesDate;
-});
+    const name = req.profiles?.full_name?.toLowerCase() || '';
+    const email = req.profiles?.email?.toLowerCase() || '';
+    const term = requestSearch.toLowerCase();
+    const matchesSearch = name.includes(term) || email.includes(term);
+    const matchesRole = requestRoleFilter === 'All Roles' || req.requested_role?.toLowerCase() === requestRoleFilter.toLowerCase();
+    let matchesDate = true;
+    if (requestDateFilter) {
+      const requestDate = new Date(req.created_at).toISOString().split('T')[0];
+      matchesDate = requestDate === requestDateFilter;
+    }
+    return matchesSearch && matchesRole && matchesDate;
+  });
 
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, minHeight: '100vh', bgcolor: pageBg }}>
@@ -420,48 +385,15 @@ const ManageAccount = () => {
       {activeTab === 0 ? (
         <>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 4 }}>
-            <TextField 
-              placeholder="Search accounts or ID..." size="medium" fullWidth={isMobile} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
-              sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
-              InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
-            />
-            
-            <TextField
-              type="date"
-              size="medium"
-              label="Date" 
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              sx={{ 
-                minWidth: 180, 
-                bgcolor: isDarkMode ? '#28334e' : '#ffffff', 
-                borderRadius: 0.5,
-                '& input::-webkit-calendar-picker-indicator': {
-                  filter: isDarkMode ? 'invert(1)' : 'none',
-                },
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <CalendarTodayIcon 
-                      fontSize="small" 
-                      sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} 
-                    />
-                  </InputAdornment>
-                )
-              }}
-            />
-
+            <TextField placeholder="Search accounts or ID..." size="medium" fullWidth={isMobile} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
+            <TextField type="date" size="medium" label="Date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5, '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' } }} InputProps={{ startAdornment: ( <InputAdornment position="start"> <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} /> </InputAdornment> ) }} />
             <TextField select size="medium" label="Filter Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} sx={{ minWidth: 200, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
               <MenuItem value="All Roles">All Roles</MenuItem>
               <MenuItem value="superadmin">Superadmin</MenuItem>
               <MenuItem value="admin">Admin</MenuItem>
               <MenuItem value="client">Client</MenuItem>
             </TextField>
-
-            <PrimaryButton fullWidth={isMobile} sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: isDarkMode ? '#28334e' : '#28334e'}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}>
-              New Account
-            </PrimaryButton>
+            <PrimaryButton fullWidth={isMobile} sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: isDarkMode ? '#28334e' : '#28334e'}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}> New Account </PrimaryButton>
           </Stack>   
 
           {isMobile ? (
@@ -506,12 +438,8 @@ const ManageAccount = () => {
                           </Box>
                         </Stack>
                       </TableCell>
-                      <TableCell align="center">
-                        <Typography variant="body2" fontWeight={600}>{user.id_number || '—'}</Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Typography variant="body2" fontWeight={600}>{user.department || '—'}</Typography>
-                      </TableCell>
+                      <TableCell align="center"><Typography variant="body2" fontWeight={600}>{user.id_number || '—'}</Typography></TableCell>
+                      <TableCell align="center"><Typography variant="body2" fontWeight={600}>{user.department || '—'}</Typography></TableCell>
                       <TableCell align="center"><RoleChip role={user.role} /></TableCell>
                       <TableCell align="center">{new Date(user.created_at).toLocaleDateString()}</TableCell>
                       <TableCell align="right">
@@ -529,122 +457,42 @@ const ManageAccount = () => {
         </>
       ) : (
         <>
-        {/* Search bar for Role Requests tab */}
-<Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
-  <TextField
-    placeholder="Search by name or email..."
-    size="medium"
-    fullWidth={isMobile}
-    value={requestSearch}
-    onChange={(e) => setRequestSearch(e.target.value)}
-    sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
-    InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
-  />
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
+            <TextField placeholder="Search by name or email..." size="medium" fullWidth={isMobile} value={requestSearch} onChange={(e) => setRequestSearch(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
+            <TextField type="date" size="medium" label="Request Date" InputLabelProps={{ shrink: true }} value={requestDateFilter} onChange={(e) => setRequestDateFilter(e.target.value)} sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5, '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' } }} InputProps={{ startAdornment: ( <InputAdornment position="start"> <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} /> </InputAdornment> ) }} />
+            <TextField select size="medium" label="Requested Role" value={requestRoleFilter} onChange={(e) => setRequestRoleFilter(e.target.value)} sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="All Roles">All Roles</MenuItem>
+              <MenuItem value="superadmin">Superadmin</MenuItem>
+              <MenuItem value="admin">Admin</MenuItem>
+              <MenuItem value="client">Client</MenuItem>
+            </TextField>
+            {(requestSearch || requestDateFilter || requestRoleFilter !== 'All Roles') && (
+              <Button variant="text" onClick={() => { setRequestSearch(''); setRequestDateFilter(''); setRequestRoleFilter('All Roles'); }} sx={{ fontWeight: 700 }}> RESET </Button>
+            )}
+          </Stack>
 
-  {/* Date Filter */}
-  <TextField
-    type="date"
-    size="medium"
-    label="Request Date"
-    InputLabelProps={{ shrink: true }}
-    value={requestDateFilter}
-    onChange={(e) => setRequestDateFilter(e.target.value)}
-    sx={{ 
-      minWidth: 180, 
-      bgcolor: isDarkMode ? '#28334e' : '#ffffff', 
-      borderRadius: 0.5,
-      '& input::-webkit-calendar-picker-indicator': {
-        filter: isDarkMode ? 'invert(1)' : 'none',
-      },
-    }}
-    InputProps={{
-      startAdornment: (
-        <InputAdornment position="start">
-          <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} />
-        </InputAdornment>
-      )
-    }}
-  />
-
-  {/* Role Filter */}
-  <TextField
-    select
-    size="medium"
-    label="Requested Role"
-    value={requestRoleFilter}
-    onChange={(e) => setRequestRoleFilter(e.target.value)}
-    sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}
-  >
-    <MenuItem value="All Roles">All Roles</MenuItem>
-    <MenuItem value="superadmin">Superadmin</MenuItem>
-    <MenuItem value="admin">Admin</MenuItem>
-    <MenuItem value="client">Client</MenuItem>
-  </TextField>
-
-  {/* Reset Button (Optional pero helpful) */}
-  {(requestSearch || requestDateFilter || requestRoleFilter !== 'All Roles') && (
-    <Button 
-      variant="text" 
-      onClick={() => {
-        setRequestSearch('');
-        setRequestDateFilter('');
-        setRequestRoleFilter('All Roles');
-      }}
-      sx={{ fontWeight: 700 }}
-    >
-      RESET
-    </Button>
-  )}
-</Stack>
-
-          {/* Mobile card view for Role Requests */}
           {isMobile ? (
             <Stack spacing={2} alignItems="center">
               {filteredRequests.length === 0 ? (
-                <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600, py: 8 }}>
-                  No pending role requests found.
-                </Typography>
+                <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600, py: 8 }}> No pending role requests found. </Typography>
               ) : (
                 filteredRequests.map((req) => (
                   <Paper key={req.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-                      <StyledAvatar user={{ role: req.current_role, full_name: req.profiles?.full_name }} size={40} />
-                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={{ role: req.current_role, full_name: req.profiles?.full_name }} size={40} /></Box>
                     <Typography variant="h6" fontWeight={800}>{req.profiles?.full_name}</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{req.profiles?.email}</Typography>
-                    <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
-                      <RoleChip role={req.current_role} />
-                      <Chip
-                        label={req.requested_role}
-                        sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }}
-                      />
-                    </Stack>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', mb: 2 }}>
-                      "{req.reason || 'No reason provided'}"
-                    </Typography>
+                    <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}><RoleChip role={req.current_role} /><Chip label={req.requested_role} sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} /></Stack>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', mb: 2 }}> "{req.reason || 'No reason provided'}" </Typography>
                     <Divider sx={{ mb: 2 }} />
                     <Stack direction="row" spacing={1.5} justifyContent="center">
-                      <Button
-                        variant="contained" color="success" size="small" startIcon={<CheckCircleIcon />}
-                        onClick={() => handleApproveRole(req)}
-                        sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(0.9)' } }}
-                      >
-                        APPROVE
-                      </Button>
-                      <Button
-                        variant="contained" color="error" size="small" startIcon={<CancelIcon />}
-                        onClick={() => { setSelectedRequest(req); setIsRejectModalOpen(true); }}
-                        sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(0.9)' } }}
-                      >
-                        REJECT
-                      </Button>
+                      <Button variant="contained" color="success" size="small" startIcon={<CheckCircleIcon />} onClick={() => handleApproveRole(req)} sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { filter: 'brightness(0.9)' } }}> APPROVE </Button>
+                      <Button variant="contained" color="error" size="small" startIcon={<CancelIcon />} onClick={() => { setSelectedRequest(req); setIsRejectModalOpen(true); }} sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { filter: 'brightness(0.9)' } }}> REJECT </Button>
                     </Stack>
                   </Paper>
                 ))
               )}
             </Stack>
           ) : (
-            /* Desktop table for Role Requests */
             <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
               <Table>
                 <TableHead sx={{ bgcolor: isDarkMode ? '#0f172a' : '#213C51' }}>
@@ -658,55 +506,23 @@ const ManageAccount = () => {
                 </TableHead>
                 <TableBody>
                   {filteredRequests.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
-                        <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                          No pending role requests found.
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
+                    <TableRow><TableCell colSpan={5} align="center" sx={{ py: 8 }}><Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}> No pending role requests found. </Typography></TableCell></TableRow>
                   ) : (
                     filteredRequests.map((req) => (
                       <TableRow key={req.id} hover>
                         <TableCell>
                           <Stack direction="row" spacing={2} alignItems="center">
                             <StyledAvatar user={{ role: req.current_role, full_name: req.profiles?.full_name }} />
-                            <Box>
-                              <Typography fontWeight={700}>{req.profiles?.full_name}</Typography>
-                              <Typography variant="caption" color="text.secondary">{req.profiles?.email}</Typography>
-                            </Box>
+                            <Box><Typography fontWeight={700}>{req.profiles?.full_name}</Typography><Typography variant="caption" color="text.secondary">{req.profiles?.email}</Typography></Box>
                           </Stack>
                         </TableCell>
-                        <TableCell align="center">
-                          <RoleChip role={req.current_role} />
-                        </TableCell>
-                        <TableCell align="center">
-                          <Chip
-                            label={req.requested_role}
-                            sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ maxWidth: 250 }}>
-                          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, fontStyle: 'italic' }}>
-                            "{req.reason || 'No reason provided'}"
-                          </Typography>
-                        </TableCell>
+                        <TableCell align="center"><RoleChip role={req.current_role} /></TableCell>
+                        <TableCell align="center"><Chip label={req.requested_role} sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} /></TableCell>
+                        <TableCell sx={{ maxWidth: 250 }}><Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, fontStyle: 'italic' }}> "{req.reason || 'No reason provided'}" </Typography></TableCell>
                         <TableCell align="right">
                           <Stack direction="row" spacing={1.5} justifyContent="flex-end">
-                            <Button
-                              variant="contained" color="success" size="small" startIcon={<CheckCircleIcon />}
-                              onClick={() => handleApproveRole(req)}
-                              sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(0.9)' } }}
-                            >
-                              APPROVE
-                            </Button>
-                            <Button
-                              variant="contained" color="error" size="small" startIcon={<CancelIcon />}
-                              onClick={() => { setSelectedRequest(req); setIsRejectModalOpen(true); }}
-                              sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { boxShadow: 'none', filter: 'brightness(0.9)' } }}
-                            >
-                              REJECT
-                            </Button>
+                            <Button variant="contained" color="success" size="small" startIcon={<CheckCircleIcon />} onClick={() => handleApproveRole(req)} sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { filter: 'brightness(0.9)' } }}> APPROVE </Button>
+                            <Button variant="contained" color="error" size="small" startIcon={<CancelIcon />} onClick={() => { setSelectedRequest(req); setIsRejectModalOpen(true); }} sx={{ borderRadius: '8px', fontWeight: 600, fontSize: '0.80rem', px: 1, boxShadow: 'none', '&:hover': { filter: 'brightness(0.9)' } }}> REJECT </Button>
                           </Stack>
                         </TableCell>
                       </TableRow>
@@ -720,33 +536,19 @@ const ManageAccount = () => {
       )}
 
       {/* --- ALL MODALS --- */}
-
       <Dialog open={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 3, p: 1, width: '400px' } }}>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <WarningAmberIcon color="error" /> Confirm Deletion
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText sx={{ fontWeight: 500 }}>
-            Delete <b>{selectedUser?.full_name}</b>? This cannot be undone.
-          </DialogContentText>
-        </DialogContent>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}> <WarningAmberIcon color="error" /> Confirm Deletion </DialogTitle>
+        <DialogContent> <DialogContentText sx={{ fontWeight: 500 }}> Delete <b>{selectedUser?.full_name}</b>? This cannot be undone. </DialogContentText> </DialogContent>
         <DialogActions sx={{ pb: 2, px: 3 }}>
           <Button onClick={() => setIsConfirmOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button>
-          <Button onClick={handleDeleteAccount} variant="contained" color="error" sx={{ borderRadius: 2 }}>
-            {loading ? "Deleting..." : "Confirm Delete"}
-          </Button>
+          <Button onClick={handleDeleteAccount} variant="contained" color="error" sx={{ borderRadius: 2 }}> {loading ? "Deleting..." : "Confirm Delete"} </Button>
         </DialogActions>
       </Dialog>
 
       <ActionModal open={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Role Request" onConfirm={handleRejectRole} confirmText={loading ? "Rejecting..." : "Confirm Reject"}>
         <Stack spacing={2} sx={{ mt: 2 }}>
           <Typography variant="body2" color="text.secondary">Provide a reason for rejecting the request from <b>{selectedRequest?.profiles?.full_name}</b>:</Typography>
-          <TextField 
-            fullWidth multiline rows={3} 
-            placeholder="e.g. Unauthorized access, please verify department..." 
-            value={rejectionRemarks} 
-            onChange={(e) => setRejectionRemarks(e.target.value)} 
-          />
+          <TextField fullWidth multiline rows={3} placeholder="e.g. Unauthorized access, please verify department..." value={rejectionRemarks} onChange={(e) => setRejectionRemarks(e.target.value)} />
         </Stack>
       </ActionModal>
 
@@ -754,7 +556,14 @@ const ManageAccount = () => {
         <Stack spacing={2} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           <FormInput label="ID Number (Student/Staff)" value={formData.idNumber} onChange={(e) => setFormData({...formData, idNumber: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          <FormInput label="Department" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          
+          {/* DEPARTMENT DROPDOWN INTEGRATED */}
+          <FormInput select label="Department" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            {departments.map((dept) => (
+              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </FormInput>
+
           <FormInput label="Email" placeholder="example@goldenlink.ph" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} InputProps={{ startAdornment: <EmailIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           <FormInput label="Default Password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} InputProps={{ startAdornment: <KeyIcon sx={{ mr: 1, opacity: 0.7 }} />, endAdornment: ( <InputAdornment position="end"> <IconButton onClick={() => setShowPassword(!showPassword)} edge="end"> {showPassword ? <VisibilityOff /> : <Visibility />} </IconButton> </InputAdornment> ) }} />
           <TextField select label="Role" fullWidth value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})}>
@@ -769,7 +578,14 @@ const ManageAccount = () => {
         <Stack spacing={2} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={editData.fullName} onChange={(e) => setEditData({...editData, fullName: e.target.value})} />
           <FormInput label="ID Number" value={editData.idNumber} onChange={(e) => setEditData({...editData, idNumber: e.target.value})} />
-          <FormInput label="Department" value={editData.department} onChange={(e) => setEditData({...editData, department: e.target.value})} />
+          
+          {/* DEPARTMENT DROPDOWN INTEGRATED */}
+          <FormInput select label="Department" value={editData.department} onChange={(e) => setEditData({...editData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            {departments.map((dept) => (
+              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </FormInput>
+
           <TextField select label="Role" fullWidth value={editData.role} onChange={(e) => setEditData({...editData, role: e.target.value})}>
             <MenuItem value="superadmin">Superadmin</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
