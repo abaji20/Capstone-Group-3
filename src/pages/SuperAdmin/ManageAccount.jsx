@@ -26,6 +26,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
+import SchoolIcon from '@mui/icons-material/School'; // Added for Year Level icon
 
 const ManageAccount = () => {
   const theme = useTheme();
@@ -37,6 +38,8 @@ const ManageAccount = () => {
 
   // Departments List
   const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
+  // Year Levels List
+  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "Highschool", "Senior Highschool", "Staff", "N/A"];
 
   // States
   const [users, setUsers] = useState([]);
@@ -63,11 +66,11 @@ const ManageAccount = () => {
   const [rejectionRemarks, setRejectionRemarks] = useState('');
   const [formData, setFormData] = useState({ 
     fullName: '', email: '', role: 'client', password: '', 
-    department: '', idNumber: '' 
+    department: '', idNumber: '', yearLevel: '' // Added yearLevel
   });
   const [editData, setEditData] = useState({ 
-    id: '', fullName: '', role: '', department: '', idNumber: '',
-    oldName: '', oldRole: '', oldDept: '', oldIdNum: '' 
+    id: '', fullName: '', role: '', department: '', idNumber: '', yearLevel: '', // Added yearLevel
+    oldName: '', oldRole: '', oldDept: '', oldIdNum: '', oldYear: '' // Added oldYear
   });
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
@@ -202,7 +205,8 @@ const ManageAccount = () => {
             full_name: formData.fullName, 
             role: formData.role,
             department: formData.department,
-            id_number: formData.idNumber
+            id_number: formData.idNumber,
+            year_level: formData.yearLevel // Added year_level
           },
           emailRedirectTo: 'https://capstone-group-3-swart.vercel.app/login'
         }
@@ -217,7 +221,8 @@ const ManageAccount = () => {
           full_name: formData.fullName,
           role: formData.role,
           department: formData.department,
-          id_number: formData.idNumber
+          id_number: formData.idNumber,
+          year_level: formData.yearLevel // Added year_level
         }]);
       if (profileError) {
         setNotify({ open: true, message: 'Account created, but profile sync delayed.', severity: 'warning' });
@@ -226,7 +231,7 @@ const ManageAccount = () => {
         setNotify({ open: true, message: 'Account created! Please check email to confirm.', severity: 'success' });
       }
       setIsCreateModalOpen(false);
-      setFormData({ fullName: '', email: '', role: 'client', password: '', department: '', idNumber: '' });
+      setFormData({ fullName: '', email: '', role: 'client', password: '', department: '', idNumber: '', yearLevel: '' });
       fetchUsers();
     } catch (err) {
       setNotify({ open: true, message: 'Error: ' + err.message, severity: 'error' });
@@ -242,10 +247,12 @@ const ManageAccount = () => {
         role: user.role,
         department: user.department || '',
         idNumber: user.id_number || '',
+        yearLevel: user.year_level || '', // Added yearLevel
         oldName: user.full_name,
         oldRole: user.role,
         oldDept: user.department || 'N/A',
-        oldIdNum: user.id_number || 'N/A'
+        oldIdNum: user.id_number || 'N/A',
+        oldYear: user.year_level || 'N/A' // Added oldYear
     });
     setIsEditModalOpen(true);
   };
@@ -256,7 +263,8 @@ const ManageAccount = () => {
       full_name: editData.fullName, 
       role: editData.role,
       department: editData.department,
-      id_number: editData.idNumber 
+      id_number: editData.idNumber,
+      year_level: editData.yearLevel // Added year_level
     }).eq('id', editData.id);
     if (error) {
       setNotify({ open: true, message: 'Update failed', severity: 'error' });
@@ -274,6 +282,10 @@ const ManageAccount = () => {
       const currentIdNum = editData.idNumber || 'N/A';
       if (editData.oldIdNum !== currentIdNum) {
         await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed ID number from "${editData.oldIdNum}" to "${currentIdNum}"`);
+      }
+      const currentYear = editData.yearLevel || 'N/A';
+      if (editData.oldYear !== currentYear) {
+        await createAuditLog('Edit Account', `Updated ${editData.fullName}: Changed year level from "${editData.oldYear}" to "${currentYear}"`);
       }
       setNotify({ open: true, message: 'Updated successfully!', severity: 'success' });
       setIsEditModalOpen(false);
@@ -393,7 +405,7 @@ const ManageAccount = () => {
               <MenuItem value="admin">Admin</MenuItem>
               <MenuItem value="client">Client</MenuItem>
             </TextField>
-            <PrimaryButton fullWidth={isMobile} sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: isDarkMode ? '#28334e' : '#28334e'}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}> New Account </PrimaryButton>
+            <PrimaryButton fullWidth={isMobile} sx={{color: '#ffffff', bgcolor: '#28334e', '&:hover': { bgcolor: '#1e293b' }}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}> New Account </PrimaryButton>
           </Stack>   
 
           {isMobile ? (
@@ -403,7 +415,7 @@ const ManageAccount = () => {
                   <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={user} size={40} /></Box>
                   <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
                   <Typography variant="body2" color="text.secondary">{user.email}</Typography>
-                  <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 600 }}>ID: {user.id_number || 'N/A'} | {user.department || 'N/A'}</Typography>
+                  <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 600 }}>ID: {user.id_number || 'N/A'} | {user.department || 'N/A'} | {user.year_level || 'N/A'}</Typography>
                   <Box sx={{ mb: 2 }}><RoleChip role={user.role} /></Box>
                   <Divider sx={{ mb: 2 }} />
                   <Stack direction="row" spacing={2} justifyContent="center">
@@ -420,7 +432,7 @@ const ManageAccount = () => {
                   <TableRow>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }}>USER DETAILS</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ID NUMBER</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">DEPARTMENT</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">DEPT / YEAR</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ROLE</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">JOINED DATE</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="right">ACTIONS</TableCell>
@@ -439,7 +451,10 @@ const ManageAccount = () => {
                         </Stack>
                       </TableCell>
                       <TableCell align="center"><Typography variant="body2" fontWeight={600}>{user.id_number || '—'}</Typography></TableCell>
-                      <TableCell align="center"><Typography variant="body2" fontWeight={600}>{user.department || '—'}</Typography></TableCell>
+                      <TableCell align="center">
+                        <Typography variant="body2" fontWeight={600}>{user.department || '—'}</Typography>
+                        <Typography variant="caption" color="primary" sx={{ fontWeight: 700 }}>{user.year_level || ''}</Typography>
+                      </TableCell>
                       <TableCell align="center"><RoleChip role={user.role} /></TableCell>
                       <TableCell align="center">{new Date(user.created_at).toLocaleDateString()}</TableCell>
                       <TableCell align="right">
@@ -456,6 +471,7 @@ const ManageAccount = () => {
           )}
         </>
       ) : (
+        /* ROLE REQUEST SECTION - UNCHANGED DESIGN */
         <>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
             <TextField placeholder="Search by name or email..." size="medium" fullWidth={isMobile} value={requestSearch} onChange={(e) => setRequestSearch(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
@@ -557,10 +573,16 @@ const ManageAccount = () => {
           <FormInput label="Full Name" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           <FormInput label="ID Number (Student/Staff)" value={formData.idNumber} onChange={(e) => setFormData({...formData, idNumber: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           
-          {/* DEPARTMENT DROPDOWN INTEGRATED */}
           <FormInput select label="Department" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
             {departments.map((dept) => (
               <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </FormInput>
+
+          {/* YEAR LEVEL DROPDOWN IN CREATE */}
+          <FormInput select label="Year Level" value={formData.yearLevel} onChange={(e) => setFormData({...formData, yearLevel: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            {yearLevels.map((year) => (
+              <MenuItem key={year} value={year}>{year}</MenuItem>
             ))}
           </FormInput>
 
@@ -579,10 +601,16 @@ const ManageAccount = () => {
           <FormInput label="Full Name" value={editData.fullName} onChange={(e) => setEditData({...editData, fullName: e.target.value})} />
           <FormInput label="ID Number" value={editData.idNumber} onChange={(e) => setEditData({...editData, idNumber: e.target.value})} />
           
-          {/* DEPARTMENT DROPDOWN INTEGRATED */}
           <FormInput select label="Department" value={editData.department} onChange={(e) => setEditData({...editData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
             {departments.map((dept) => (
               <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </FormInput>
+
+          {/* YEAR LEVEL DROPDOWN IN EDIT */}
+          <FormInput select label="Year Level" value={editData.yearLevel} onChange={(e) => setEditData({...editData, yearLevel: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            {yearLevels.map((year) => (
+              <MenuItem key={year} value={year}>{year}</MenuItem>
             ))}
           </FormInput>
 

@@ -36,8 +36,9 @@ const AdminManageAccount = () => {
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
   const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
 
-  // Departments List
+  // Constants
   const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
+  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "High School", "Senior High", "Staff"];
 
   // States
   const [users, setUsers] = useState([]);
@@ -51,8 +52,8 @@ const AdminManageAccount = () => {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   
   const [selectedUser, setSelectedUser] = useState(null);
-  const [formData, setFormData] = useState({ fullName: '', email: '', role: 'client', password: '', idNumber: '', department: '' });
-  const [editData, setEditData] = useState({ id: '', fullName: '', role: 'client', oldName: '', idNumber: '', department: '' });
+  const [formData, setFormData] = useState({ fullName: '', email: '', role: 'client', password: '', idNumber: '', department: '', yearLevel: '' });
+  const [editData, setEditData] = useState({ id: '', fullName: '', role: 'client', oldName: '', idNumber: '', department: '', yearLevel: '' });
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
   useEffect(() => { 
@@ -95,7 +96,7 @@ const AdminManageAccount = () => {
   };
 
   const handleCreateAccount = async () => {
-    if (!formData.email || !formData.password || !formData.fullName || !formData.idNumber || !formData.department) {
+    if (!formData.email || !formData.password || !formData.fullName || !formData.idNumber || !formData.department || !formData.yearLevel) {
       setNotify({ open: true, message: 'Please fill in all fields!', severity: 'error' });
       return;
     }
@@ -123,15 +124,16 @@ const AdminManageAccount = () => {
           full_name: formData.fullName,
           id_number: formData.idNumber,
           department: formData.department,
+          year_level: formData.yearLevel,
           role: 'client'
         }]);
       
       if (profileError) throw profileError;
 
-      await createAuditLog('Create Client', `Admin created GLC account: ${formData.fullName}`);
+      await createAuditLog('Create Client', `Created GLC account: ${formData.fullName}`);
       setNotify({ open: true, message: 'Client account created! Verify email to activate.', severity: 'success' });
       setIsCreateModalOpen(false);
-      setFormData({ fullName: '', email: '', role: 'client', password: '', idNumber: '', department: '' });
+      setFormData({ fullName: '', email: '', role: 'client', password: '', idNumber: '', department: '', yearLevel: '' });
       fetchClients();
     } catch (err) {
       const errorMessage = err.message?.toLowerCase().includes('unique constraint') || err.message?.toLowerCase().includes('already registered')
@@ -142,21 +144,56 @@ const AdminManageAccount = () => {
       setLoading(false);
     }
   };
-
-  const handleUpdateAccount = async () => {
+const handleUpdateAccount = async () => {
     setLoading(true);
+    
+    // Hanapin ang original data para sa comparison
+    const originalUser = users.find(u => u.id === editData.id);
+    
     const { error } = await supabase
       .from('profiles')
       .update({ 
         full_name: editData.fullName,
         id_number: editData.idNumber,
-        department: editData.department
+        department: editData.department,
+        year_level: editData.yearLevel
       })
       .eq('id', editData.id);
+
     if (error) {
       setNotify({ open: true, message: 'Update failed', severity: 'error' });
     } else {
-      await createAuditLog('Edit Client', `Updated client info for: ${editData.fullName}`);
+      const targetName = editData.fullName;
+
+      // 1. I-collect ang bawat pagbabago bilang magkakahiwalay na entries
+      let changes = [];
+      if (originalUser) {
+        if (originalUser.full_name !== editData.fullName) 
+          changes.push(`Name: [${originalUser.full_name}] -> [${editData.fullName}]`);
+        
+        if (originalUser.id_number !== editData.idNumber) 
+          changes.push(`ID: [${originalUser.id_number || 'None'}] -> [${editData.idNumber}]`);
+        
+        if (originalUser.department !== editData.department) 
+          changes.push(`Dept: [${originalUser.department || 'None'}] -> [${editData.department}]`);
+        
+        if (originalUser.year_level !== editData.yearLevel) 
+          changes.push(`Year: [${originalUser.year_level || 'None'}] -> [${editData.yearLevel}]`);
+      }
+
+      // 2. I-save sa Audit Logs nang magkakahiwalay (Individual Rows)
+      if (changes.length > 0) {
+        // Gagamit tayo ng Promise.all para sabay-sabay i-insert pero separate rows
+        await Promise.all(
+          changes.map(detail => 
+            createAuditLog('Edit Client', `Updated client info for: ${targetName} : ${detail}`)
+          )
+        );
+      } else {
+        // Optional: Log lang kung walang binago talaga
+        await createAuditLog('Edit Client', `Updated client info for: ${targetName} : No changes made`);
+      }
+      
       setNotify({ open: true, message: 'Updated successfully!', severity: 'success' });
       setIsEditModalOpen(false);
       fetchClients();
@@ -181,9 +218,14 @@ const AdminManageAccount = () => {
   };
 
   const filteredUsers = users.filter((u) => {
-    const matchesSearch = (u.full_name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) || 
-                          (u.email?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-                          (u.id_number?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = 
+      (u.full_name || "").toLowerCase().includes(term) || 
+      (u.email || "").toLowerCase().includes(term) ||
+      (u.id_number || "").toLowerCase().includes(term) ||
+      (u.department || "").toLowerCase().includes(term) ||
+      (u.year_level || "").toLowerCase().includes(term);
+
     let matchesDate = true;
     if (dateFilter) {
       const userDate = new Date(u.created_at).toISOString().split('T')[0];
@@ -209,7 +251,7 @@ const AdminManageAccount = () => {
       </Snackbar>
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
-        <TextField fullWidth placeholder="Search by name, email, or ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ bgcolor: inputBg, borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
+        <TextField fullWidth placeholder="Search by name, email, ID, dept, or year..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ bgcolor: inputBg, borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
         <TextField type="date" label="Date Joined" size="medium" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5, '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' } }} InputProps={{ startAdornment: ( <InputAdornment position="start"> <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} /> </InputAdornment> ) }} />
         <PrimaryButton sx={{ bgcolor: '#213C51', height: '56px', minWidth: 180, borderRadius: 0.5, '&:hover': { bgcolor: '#1a3041' } }} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}> New Client </PrimaryButton>
       </Stack>
@@ -231,11 +273,12 @@ const AdminManageAccount = () => {
               <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 700 }}>ID: {user.id_number}</Typography>
               <Box sx={{ mb: 2 }}>
                 <Chip label={user.department?.toUpperCase() || "NO DEPT"} size="small" variant="outlined" sx={{ mb: 1, mr: 1 }} />
+                <Chip label={user.year_level?.toUpperCase() || "NO YEAR"} size="small" variant="outlined" sx={{ mb: 1, mr: 1 }} />
                 <Chip label="CLIENT" variant="outlined" sx={{ borderColor: theme.palette.primary.main, color: theme.palette.primary.main, fontWeight: 800, borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} />
               </Box>
               <Divider sx={{ mb: 2 }} />
               <Stack direction="row" spacing={2} justifyContent="center">
-                <IconButton onClick={() => { setEditData({ id: user.id, fullName: user.full_name, idNumber: user.id_number, department: user.department }); setIsEditModalOpen(true); }} sx={{ color: theme.palette.primary.main }}><EditIcon /></IconButton>
+                <IconButton onClick={() => { setEditData({ id: user.id, fullName: user.full_name, idNumber: user.id_number, department: user.department, yearLevel: user.year_level }); setIsEditModalOpen(true); }} sx={{ color: theme.palette.primary.main }}><EditIcon /></IconButton>
                 <DeleteButton onClick={() => { setSelectedUser(user); setIsConfirmOpen(true); }} />
               </Stack>
             </Paper>
@@ -248,7 +291,7 @@ const AdminManageAccount = () => {
               <TableRow>
                 <TableCell sx={{ color: 'white', fontWeight: 800 }}>CLIENT DETAILS</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ID NUMBER</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">DEPARTMENT</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">DEPT / YEAR</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">JOINED DATE</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 800 }} align="right">ACTIONS</TableCell>
               </TableRow>
@@ -263,11 +306,14 @@ const AdminManageAccount = () => {
                     </Stack>
                   </TableCell>
                   <TableCell align="center"> <Typography variant="body2" sx={{ fontWeight: 600 }}>{user.id_number || '---'}</Typography> </TableCell>
-                  <TableCell align="center"> <Chip label={user.department?.toUpperCase() || 'N/A'} size="small" sx={{ fontWeight: 700, borderRadius: 1, bgcolor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }} /> </TableCell>
+                  <TableCell align="center"> 
+                    <Typography variant="body2" fontWeight={700}>{user.department || '---'}</Typography>
+                    <Typography variant="caption" color="primary" fontWeight={800}>{user.year_level || '---'}</Typography>
+                  </TableCell>
                   <TableCell align="center">{new Date(user.created_at).toLocaleDateString()}</TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
-                      <IconButton onClick={() => { setEditData({ id: user.id, fullName: user.full_name, idNumber: user.id_number, department: user.department }); setIsEditModalOpen(true); }} size="small" color="primary"><EditIcon fontSize="small" /></IconButton>
+                      <IconButton onClick={() => { setEditData({ id: user.id, fullName: user.full_name, idNumber: user.id_number, department: user.department, yearLevel: user.year_level }); setIsEditModalOpen(true); }} size="small" color="primary"><EditIcon fontSize="small" /></IconButton>
                       <DeleteButton onClick={() => { setSelectedUser(user); setIsConfirmOpen(true); }} />
                     </Stack>
                   </TableCell>
@@ -294,12 +340,15 @@ const AdminManageAccount = () => {
           <FormInput label="Full Name" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           <FormInput label="ID Number" placeholder="e.g. 2024-0001" value={formData.idNumber} onChange={(e) => setFormData({...formData, idNumber: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           
-          {/* DEPARTMENT DROPDOWN */}
-          <FormInput select label="Department" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
-            {departments.map((dept) => (
-              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
-            ))}
-          </FormInput>
+          <Stack direction="row" spacing={2}>
+            <FormInput select label="Department" fullWidth value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+              {departments.map((dept) => <MenuItem key={dept} value={dept}>{dept}</MenuItem>)}
+            </FormInput>
+
+            <FormInput select label="Year Level" fullWidth value={formData.yearLevel} onChange={(e) => setFormData({...formData, yearLevel: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+              {yearLevels.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+            </FormInput>
+          </Stack>
 
           <FormInput label="Email" placeholder="example@goldenlink.ph" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} InputProps={{ startAdornment: <EmailIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           <FormInput label="Default Password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} InputProps={{ startAdornment: <KeyIcon sx={{ mr: 1, opacity: 0.7 }} />, endAdornment: ( <InputAdornment position="end"> <IconButton onClick={() => setShowPassword(!showPassword)} edge="end"> {showPassword ? <VisibilityOff /> : <Visibility />} </IconButton> </InputAdornment> ) }} />
@@ -313,12 +362,15 @@ const AdminManageAccount = () => {
           <FormInput label="Full Name" value={editData.fullName} onChange={(e) => setEditData({...editData, fullName: e.target.value})} InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           <FormInput label="ID Number" value={editData.idNumber} onChange={(e) => setEditData({...editData, idNumber: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           
-          {/* DEPARTMENT DROPDOWN EDIT */}
-          <FormInput select label="Department" value={editData.department} onChange={(e) => setEditData({...editData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
-            {departments.map((dept) => (
-              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
-            ))}
-          </FormInput>
+          <Stack direction="row" spacing={2}>
+            <FormInput select label="Department" fullWidth value={editData.department} onChange={(e) => setEditData({...editData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+              {departments.map((dept) => <MenuItem key={dept} value={dept}>{dept}</MenuItem>)}
+            </FormInput>
+
+            <FormInput select label="Year Level" fullWidth value={editData.yearLevel} onChange={(e) => setEditData({...editData, yearLevel: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+              {yearLevels.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+            </FormInput>
+          </Stack>
         </Stack>
       </ActionModal>
     </Box>
