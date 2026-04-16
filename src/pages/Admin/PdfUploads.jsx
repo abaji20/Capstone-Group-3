@@ -77,12 +77,16 @@ const PdfUploads = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     
-    // Genre Validation: Only allow letters and spaces (No numbers)
     if (name === 'genre') {
-      const onlyLetters = value.replace(/[^a-zA-Z\s]/g, '');
-      setFormData({ ...formData, [name]: onlyLetters });
-      return;
-    }
+  // Tatanggalin lahat MALIBAN sa letters, spaces, at commas
+  const filteredValue = value.replace(/[^a-zA-Z\s,]/g, '');
+  
+  setFormData({ 
+    ...formData, 
+    [name]: filteredValue 
+  });
+  return;
+}
 
     // Year Validation: No future years & Max 4 digits
     if (name === 'published_date') {

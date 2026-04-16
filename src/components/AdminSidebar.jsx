@@ -35,12 +35,20 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const [fullName, setFullName] = useState('Loading...');
   const [isHovered, setIsHovered] = useState(false);
 
-  // Departments List
+  // Lists for Dropdowns
   const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
+  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 
   // PROFILE SETTINGS STATES
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '', role: '' });
+  const [userData, setUserData] = useState({ 
+    id: '', 
+    full_name: '', 
+    department: '', 
+    id_number: '', 
+    role: '',
+    year_level: '' 
+  });
   const [requestData, setRequestData] = useState({ role: '', reason: '' });
   const [latestRequest, setLatestRequest] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -79,7 +87,8 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       .update({ 
         full_name: userData.full_name, 
         department: userData.department, 
-        id_number: userData.id_number 
+        id_number: userData.id_number,
+        year_level: userData.year_level 
       })
       .eq('id', userData.id);
 
@@ -140,7 +149,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         overflow: 'visible', 
       }}
     >
-      {/* PROFILE SECTION - CLICKABLE TO OPEN MODAL */}
+      {/* PROFILE SECTION */}
       <Tooltip title={isMini ? "Profile Settings" : ""} placement="right">
         <Box 
           onClick={() => setIsProfileModalOpen(true)}
@@ -316,7 +325,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           
-          {/* Department Dropdown */}
           <FormInput 
             select 
             label="Department" 
@@ -326,6 +334,19 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           >
             {departments.map((dept) => (
               <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </FormInput>
+
+          {/* Year Level Dropdown Added Here */}
+          <FormInput 
+            select 
+            label="Year Level" 
+            value={userData.year_level || ''} 
+            onChange={(e) => setUserData({...userData, year_level: e.target.value})} 
+            InputProps={{ startAdornment: <AssignmentIndIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+          >
+            {yearLevels.map((year) => (
+              <MenuItem key={year} value={year}>{year}</MenuItem>
             ))}
           </FormInput>
 

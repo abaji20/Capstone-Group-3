@@ -12,7 +12,8 @@ import {
   Brightness7 as Brightness7Icon,
   Person as PersonIcon,
   Business as BusinessIcon,
-  Fingerprint as FingerprintIcon
+  Fingerprint as FingerprintIcon,
+  School as SchoolIcon
 } from '@mui/icons-material';
 import { navLinks } from '../navConfig';
 import { supabase } from '../supabaseClient';
@@ -32,12 +33,13 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const [fullName, setFullName] = useState('Loading...');
   const [isHovered, setIsHovered] = useState(false);
 
-  // Departments List
+  // Constants
   const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
+  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "High School", "Senior High", "Staff"];
 
   // PROFILE SETTINGS STATES
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '' });
+  const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '', year_level: '' });
   const [loading, setLoading] = useState(false);
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
@@ -65,7 +67,8 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       .update({ 
         full_name: userData.full_name, 
         department: userData.department, 
-        id_number: userData.id_number 
+        id_number: userData.id_number,
+        year_level: userData.year_level // Sinisiguro na kasama ito sa update
       })
       .eq('id', userData.id);
 
@@ -74,19 +77,18 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       setNotify({ open: true, message: 'Update failed!', severity: 'error' });
     } else {
       // 2. INSERT TO ACTIVITY LOGS
-      // Note: Siguraduhin na 'details' ang column name mo sa table. 
-      // Kung 'description' ang gamit mo, palitan ang key sa baba.
+      // Idinagdag ang year_level sa details para ma-record sa logs
       const { error: logError } = await supabase
-        .from('activity_logs')
+        .from('audit_logs')
         .insert([{
           user_id: userData.id,
           action: 'Update Profile',
-          details: `Super Admin updated their profile: ${userData.full_name}`,
+          details: `Super Admin updated their profile: ${userData.full_name} (${userData.department} - ${userData.year_level || 'N/A'})`,
           created_at: new Date().toISOString()
         }]);
 
       if (logError) {
-        console.error("Error inserting to activity_logs:", logError);
+        console.error("Error inserting to audit_logs:", logError);
       }
 
       setNotify({ open: true, message: 'Profile updated successfully!', severity: 'success' });
@@ -169,6 +171,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           const isActive = location.pathname === item.path;
           const buttonContent = (
             <ListItemButton 
+              key={item.name}
               component={Link} 
               to={item.path}
               onClick={() => isMobile && handleDrawerToggle()}
@@ -239,11 +242,19 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           
-          <FormInput select label="Department" value={userData.department} onChange={(e) => setUserData({...userData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
-            {departments.map((dept) => (
-              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
-            ))}
-          </FormInput>
+          <Stack direction="row" spacing={2}>
+            <FormInput select label="Department" fullWidth value={userData.department} onChange={(e) => setUserData({...userData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+              {departments.map((dept) => (
+                <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+              ))}
+            </FormInput>
+
+            <FormInput select label="Year Level" fullWidth value={userData.year_level} onChange={(e) => setUserData({...userData, year_level: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+              {yearLevels.map((year) => (
+                <MenuItem key={year} value={year}>{year}</MenuItem>
+              ))}
+            </FormInput>
+          </Stack>
 
           <FormInput label="Employee / ID Number" value={userData.id_number} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
         </Stack>

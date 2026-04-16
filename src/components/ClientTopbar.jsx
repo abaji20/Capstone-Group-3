@@ -40,10 +40,18 @@ const ClientTopbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [username, setUsername] = useState('Loading...');
   
-  // Departments List
+  // Lists for Dropdowns
   const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
+  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 
-  const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '', role: '' });
+  const [userData, setUserData] = useState({ 
+    id: '', 
+    full_name: '', 
+    department: '', 
+    id_number: '', 
+    role: '',
+    year_level: '' 
+  });
   const [requestData, setRequestData] = useState({ role: '', reason: '' });
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -92,13 +100,14 @@ const ClientTopbar = () => {
   const handleUpdateProfile = async () => {
     setLoading(true);
     
-    // 1. UPDATE PROFILE
+    // 1. UPDATE PROFILE (Including Year Level)
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ 
         full_name: userData.full_name, 
         department: userData.department, 
-        id_number: userData.id_number 
+        id_number: userData.id_number,
+        year_level: userData.year_level
       })
       .eq('id', userData.id);
 
@@ -222,7 +231,7 @@ const ClientTopbar = () => {
               </IconButton>
             )}
             <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: { xs: 1, md: 0 } }} onClick={() => navigate('/')}>
-              <Box component="img" src={nonamelogo} sx={{ height: { xs: 35, md: 60 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} />
+              <Box component="img" src={nonamelogo} sx={{ height: { xs: 35, md: 45 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} />
               <Typography fontFamily="Paytone One" sx={{ fontStyle: 'italic', fontWeight: 200, color: 'white', fontSize: { xs: '0.85rem', sm: '1.1rem', md: '1.25rem' }, letterSpacing: { xs: 1, md: 2 }, display: 'block', whiteSpace: 'nowrap', textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}>
                 Library Repository
               </Typography>
@@ -297,7 +306,6 @@ const ClientTopbar = () => {
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           
-          {/* Department Dropdown */}
           <FormInput 
             select 
             label="Department" 
@@ -307,6 +315,19 @@ const ClientTopbar = () => {
           >
             {departments.map((dept) => (
               <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </FormInput>
+
+          {/* Year Level Dropdown Added Here */}
+          <FormInput 
+            select 
+            label="Year Level" 
+            value={userData.year_level || ''} 
+            onChange={(e) => setUserData({...userData, year_level: e.target.value})} 
+            InputProps={{ startAdornment: <AssignmentIndIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+          >
+            {yearLevels.map((year) => (
+              <MenuItem key={year} value={year}>{year}</MenuItem>
             ))}
           </FormInput>
 
