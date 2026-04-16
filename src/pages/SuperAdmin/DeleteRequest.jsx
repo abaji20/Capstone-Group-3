@@ -3,7 +3,7 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Typography, CircularProgress, Stack, IconButton, Avatar,
   useTheme, useMediaQuery, Card, CardContent, Button, Divider, TextField, MenuItem, InputAdornment,
-  Dialog, DialogTitle, DialogContent, DialogActions // Added for Remarks
+  Dialog, DialogTitle, DialogContent, DialogActions 
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
@@ -34,7 +34,6 @@ const DeleteRequests = () => {
   const [genreFilter, setGenreFilter] = useState('All Genres'); 
   const [dateFilter, setDateFilter] = useState('');
 
-  // New State for Remarks Modal
   const [remarkModal, setRemarkModal] = useState({ open: false, requestId: null });
   const [remarks, setRemarks] = useState('');
 
@@ -68,9 +67,20 @@ const DeleteRequests = () => {
     const requestData = requests.find(r => r.id === requestId);
     const pdfTitle = requestData?.pdfs?.title || 'Unknown File';
 
+    // 1. Archive the PDF
     await supabase.from('pdfs').update({ is_archived: true }).eq('id', pdfId);
+    
+    // 2. Approve the delete request
     await supabase.from('delete_requests').update({ status: 'approved' }).eq('id', requestId);
     
+    // 3. Update the original upload request remarks to show it was deleted
+    if (pdfTitle) {
+        await supabase
+          .from('upload_requests')
+          .update({ remarks: 'Document successfully removed from library.' })
+          .eq('title', pdfTitle);
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from('audit_logs').insert({
@@ -88,18 +98,30 @@ const DeleteRequests = () => {
     const requestId = remarkModal.requestId;
     const requestData = requests.find(r => r.id === requestId);
     const pdfTitle = requestData?.pdfs?.title || 'Unknown File';
+    const pdfAuthor = requestData?.pdfs?.author;
     const pdfId = requestData?.pdf_id;
 
-    // 1. Update status and Add Remarks
+    // 1. Update status in delete_requests
     await supabase
       .from('delete_requests')
       .update({ 
         status: 'rejected',
-        remarks: remarks // This column must exist in your DB
+        remarks: remarks 
       })
       .eq('id', requestId);
+
+    // 2. Update remarks in upload_requests so client sees it
+    if (pdfTitle && pdfAuthor) {
+      await supabase
+        .from('upload_requests')
+        .update({ 
+          remarks: `${remarks}` 
+        })
+        .eq('title', pdfTitle)
+        .eq('author', pdfAuthor);
+    }
     
-    // 2. Insert into audit_logs
+    // 3. Audit log
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from('audit_logs').insert({
@@ -141,7 +163,6 @@ const DeleteRequests = () => {
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, background: pageBg, minHeight: '100vh', transition: 'all 0.3s ease' }}>
       
-      {/* HEADER SECTION */}
       <Box sx={{ mb: 4 }}>
         <Typography 
           variant="h3" 
@@ -157,29 +178,21 @@ const DeleteRequests = () => {
         </Typography>
       </Box>
 
-      {/* FILTER BAR */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
         <TextField 
           fullWidth 
-          placeholder="Search by title, author, requester, or genre..." 
+          placeholder="Search by title, author, requester..." 
           value={searchTerm} 
           onChange={(e) => setSearchTerm(e.target.value)} 
-          sx={{ flexGrow: 1, bgcolor: inputBg, borderRadius: 0.5 }}
+          sx={{ flexGrow: 1, bgcolor: inputBg }}
           InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
         />
         
         <TextField
           type="date"
-          size="medium"
-          label="Date"
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
-          sx={{ 
-            minWidth: 180, 
-            bgcolor: inputBg, 
-            borderRadius: 0.5,
-            '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' },
-          }}
+          sx={{ minWidth: 180, bgcolor: inputBg }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -191,11 +204,10 @@ const DeleteRequests = () => {
 
         <TextField 
           select 
-          size="medium" 
           label="Genre" 
           value={genreFilter} 
           onChange={(e) => setGenreFilter(e.target.value)} 
-          sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5 }}
+          sx={{ minWidth: 200, bgcolor: inputBg }}
         >
           {genres.map((g) => (
             <MenuItem key={g} value={g}>{g}</MenuItem>
@@ -206,97 +218,62 @@ const DeleteRequests = () => {
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress color="secondary" /></Box>
       ) : filteredRequests.length === 0 ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', mt: 12, textAlign: 'center' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 12 }}>
           <HourglassEmptyIcon sx={{ fontSize: 50, color: 'text.disabled', mb: 2, opacity: 0.4 }} />
-          <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.secondary', letterSpacing: '1px' }}>NO REQUESTS FOUND</Typography>
+          <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.secondary' }}>NO REQUESTS FOUND</Typography>
         </Box>
       ) : (
-        <>
-          {!isMobile ? (
-            <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
-              <Table sx={{ minWidth: 650 }}>
-                <TableHead sx={{ bgcolor: headerColor }}>
-                  <TableRow>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }}>REQUESTED BY</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTION</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredRequests.map((req) => (
-                    <TableRow key={req.id} hover>
-                      <TableCell>
-                        <Stack direction="row" alignItems="center" spacing={2}>
-                          <Avatar variant="rounded" src={getImageUrl(req.pdfs?.image_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
-                            <PictureAsPdfIcon fontSize="small" sx={{ color: '#ef4444' }} />
-                          </Avatar>
-                          <Box>
-                            <Typography sx={{ fontWeight: 700 }}>{req.pdfs?.title || 'Unknown File'}</Typography>
-                            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>{req.pdfs?.genre || 'Academic'}</Typography>
-                          </Box>
-                        </Stack>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{req.profiles?.full_name}</Typography>
-                      </TableCell>
-                      <TableCell sx={{ maxWidth: '250px' }}><Typography variant="body2" noWrap>{req.reason}</Typography></TableCell>
-                      <TableCell><Typography variant="body2">{new Date(req.created_at).toLocaleDateString()}</Typography></TableCell>
-                      <TableCell align="center">
-                        <Stack direction="row" justifyContent="center" spacing={1}>
-                          <IconButton onClick={() => handleApprove(req.id, req.pdfs.id)} sx={{ color: '#16a34a' }}><CheckCircleOutlineIcon sx={{ fontSize: 32 }} /></IconButton>
-                          <IconButton onClick={() => setRemarkModal({ open: true, requestId: req.id })} sx={{ color: '#dc2626' }}><HighlightOffIcon sx={{ fontSize: 32 }} /></IconButton>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          ) : (
-            <Stack spacing={2}>
+        <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
+          <Table sx={{ minWidth: 650 }}>
+            <TableHead sx={{ bgcolor: headerColor }}>
+              <TableRow>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }}>REQUESTED BY</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTION</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {filteredRequests.map((req) => (
-                <Card key={req.id} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
-                  <CardContent sx={{ p: 2 }}>
-                    <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-                        <Avatar variant="rounded" src={getImageUrl(req.pdfs?.image_url)} sx={{ width: 50, height: 65, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
-                          <PictureAsPdfIcon sx={{ color: '#ef4444' }} />
-                        </Avatar>
-                        <Box sx={{ flex: 1 }}>
-                          <Typography sx={{ fontWeight: 800 }}>{req.pdfs?.title}</Typography>
-                          <Typography variant="caption" sx={{ display: 'block' }}>By: {req.profiles?.full_name}</Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main' }}>{req.pdfs?.genre || 'Academic'}</Typography>
-                        </Box>
+                <TableRow key={req.id} hover>
+                  <TableCell>
+                    <Stack direction="row" alignItems="center" spacing={2}>
+                      <Avatar variant="rounded" src={getImageUrl(req.pdfs?.image_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}` }}>
+                        <PictureAsPdfIcon fontSize="small" sx={{ color: '#ef4444' }} />
+                      </Avatar>
+                      <Box>
+                        <Typography sx={{ fontWeight: 700 }}>{req.pdfs?.title || 'Unknown File'}</Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>{req.pdfs?.author}</Typography>
+                      </Box>
                     </Stack>
-                    <Box sx={{ bgcolor: isDarkMode ? 'rgba(0,0,0,0.2)' : '#f8fafc', p: 1.5, mb: 2 }}>
-                      <Typography variant="body2" sx={{ fontStyle: 'italic' }}>"{req.reason}"</Typography>
-                    </Box>
-                    <Divider sx={{ mb: 2 }} />
-                    <Stack direction="row" spacing={2}>
-                      <Button fullWidth variant="contained" color="success" onClick={() => handleApprove(req.id, req.pdfs.id)}>Approve</Button>
-                      <Button fullWidth variant="outlined" color="error" onClick={() => setRemarkModal({ open: true, requestId: req.id })}>Reject</Button>
+                  </TableCell>
+                  <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{req.profiles?.full_name}</Typography></TableCell>
+                  <TableCell sx={{ maxWidth: '250px' }}><Typography variant="body2" noWrap>{req.reason}</Typography></TableCell>
+                  <TableCell><Typography variant="body2">{new Date(req.created_at).toLocaleDateString()}</Typography></TableCell>
+                  <TableCell align="center">
+                    <Stack direction="row" justifyContent="center" spacing={1}>
+                      <IconButton onClick={() => handleApprove(req.id, req.pdfs.id)} sx={{ color: '#16a34a' }}><CheckCircleOutlineIcon sx={{ fontSize: 32 }} /></IconButton>
+                      <IconButton onClick={() => setRemarkModal({ open: true, requestId: req.id })} sx={{ color: '#dc2626' }}><HighlightOffIcon sx={{ fontSize: 32 }} /></IconButton>
                     </Stack>
-                  </CardContent>
-                </Card> 
+                  </TableCell>
+                </TableRow>
               ))}
-            </Stack>
-          )}
-        </>
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
 
       {/* REMARKS MODAL */}
       <Dialog 
         open={remarkModal.open} 
         onClose={() => setRemarkModal({ open: false, requestId: null })}
-        PaperProps={{ sx: { bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}` } }}
+        PaperProps={{ sx: { bgcolor: cardBg, borderRadius: 1 } }}
       >
-        <DialogTitle sx={{ fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51' }}>
-          REJECTION REMARKS
-        </DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>REJECTION REMARKS</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            Please provide a reason why this delete request is being rejected.
+            Explain to the user why their deletion request was rejected.
           </Typography>
           <TextField
             fullWidth
@@ -310,16 +287,8 @@ const DeleteRequests = () => {
           />
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setRemarkModal({ open: false, requestId: null })} sx={{ fontWeight: 700 }}>
-            Cancel
-          </Button>
-          <Button 
-            variant="contained" 
-            color="error" 
-            onClick={handleReject} 
-            disabled={!remarks.trim()}
-            sx={{ fontWeight: 700 }}
-          >
+          <Button onClick={() => setRemarkModal({ open: false, requestId: null })}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleReject} disabled={!remarks.trim()} sx={{ fontWeight: 700 }}>
             Confirm Rejection
           </Button>
         </DialogActions>
