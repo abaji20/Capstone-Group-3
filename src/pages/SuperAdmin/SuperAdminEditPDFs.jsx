@@ -4,7 +4,7 @@ import {
   TableRow, IconButton, CircularProgress, Typography, Dialog, 
   DialogTitle, DialogContent, DialogActions, Button, 
   Chip, Stack, Avatar, useTheme, useMediaQuery, Snackbar, Alert,
-  MenuItem, InputAdornment, TextField 
+  MenuItem, InputAdornment, TextField, Tooltip 
 } from '@mui/material';
 
 // Icons
@@ -13,6 +13,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 import EditPdfModal from '../../shared/EditPdfModal';
 import { supabase } from '../../supabaseClient'; 
@@ -65,6 +66,20 @@ const SuperAdminEditPDFs = () => {
     }
   };
 
+  // --- VIEW PDF FUNCTION (Strictly no audit logging) ---
+  const handleViewPdf = (pdf) => {
+    const fileUrl = pdf.file_url || pdf.pdf_url;
+    if (!fileUrl) {
+      showStatus('error', 'No PDF file linked to this record.');
+      return;
+    }
+
+    const { data } = supabase.storage.from('pdfs').getPublicUrl(fileUrl);
+    if (data?.publicUrl) {
+      window.open(data.publicUrl, '_blank');
+    }
+  };
+
   const genres = useMemo(() => {
     const allGenres = pdfs.flatMap(p => 
       p.genre ? p.genre.split(',').map(g => g.trim()) : []
@@ -72,7 +87,6 @@ const SuperAdminEditPDFs = () => {
     return ["All", ...new Set(allGenres)].sort();
   }, [pdfs]);
 
-  // --- ENHANCED FILTER LOGIC (Title, Author, Genre) ---
   const filteredPdfs = useMemo(() => {
     return pdfs.filter(pdf => {
       const query = searchQuery.toLowerCase();
@@ -102,14 +116,12 @@ const SuperAdminEditPDFs = () => {
 
   const showStatus = (type, message) => setStatus({ open: true, type, message });
 
-  // --- ARCHIVE LOGIC (Clears Delete Requests Automatically) ---
   const handleArchiveDocument = async () => {
     if (!selectedPdf) return;
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // 1. Move to Archive
       const { error: archiveError } = await supabase
         .from('pdfs')
         .update({ is_archived: true })
@@ -117,19 +129,17 @@ const SuperAdminEditPDFs = () => {
 
       if (archiveError) throw archiveError;
 
-      // 2. Clear associated delete requests
       await supabase
         .from('delete_requests')
         .delete()
         .eq('pdf_id', selectedPdf.id);
 
-      // 3. Audit Log
       if (user) {
         await supabase.from('audit_logs').insert([{
           user_id: user.id,
           pdf_id: selectedPdf.id,
           action_type: 'Delete',
-          description: `Archived PDF: "${selectedPdf.title}"`
+          description: `Archived PDF: "${selectedPdf.title}" : Permanent archive action`
         }]);
       }
 
@@ -245,6 +255,11 @@ const SuperAdminEditPDFs = () => {
                       </TableCell>
                       <TableCell align="center">
                         <Stack direction="row" justifyContent="center" spacing={1}>
+                          <Tooltip title="View PDF">
+                            <IconButton onClick={() => handleViewPdf(pdf)} color="primary">
+                              <VisibilityIcon />
+                            </IconButton>
+                          </Tooltip>
                           <IconButton onClick={() => { setSelectedPdf(pdf); setEditOpen(true); }} color="info"><EditIcon /></IconButton>
                           <IconButton onClick={() => { setSelectedPdf(pdf); setDeleteOpen(true); }} color="error"><DeleteIcon /></IconButton>
                         </Stack>
@@ -257,17 +272,18 @@ const SuperAdminEditPDFs = () => {
           ) : (
             <Stack spacing={2}>
               {filteredPdfs.map((pdf) => (
-                <Paper key={pdf.id} sx={{ p: 3, bgcolor: cardBg, borderRadius: 4, border: `1px solid ${borderCol}`, textAlign: 'center' }}>
+                <Paper key={pdf.id} sx={{ p: 2, bgcolor: cardBg, borderRadius: 4, border: `1px solid ${borderCol}`, textAlign: 'center' }}>
                   <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 90, height: 120, mx: 'auto', mb: 2, bgcolor: 'transparent' }}>
                     {!pdf.image_url && <Box component="img" src={logo} sx={{ width: '70%', opacity: 0.8 }} />}
-                  </Avatar>
+                  </Avatar> 
                   <Typography variant="h6" sx={{ fontWeight: 800 }}>{pdf.title}</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{pdf.author || 'Unknown Author'}</Typography>
                   <Typography variant="caption" sx={{ display: 'block', mb: 2, color: 'text.secondary' }}>
                     Uploaded: {pdf.created_at ? new Date(pdf.created_at).toLocaleDateString() : 'N/A'}
                   </Typography>
                   <Chip label={pdf.genre || 'Academic'} variant="outlined" sx={{ color: '#3b82f6', borderColor: '#3b82f6', fontWeight: 700, mb: 3 }} />
-                  <Stack direction="row" spacing={2}>
+                  <Stack direction="row" spacing={1}>
+                    <Button fullWidth variant="outlined" startIcon={<VisibilityIcon />} onClick={() => handleViewPdf(pdf)} sx={{ fontWeight: 700 }}>View</Button>
                     <Button fullWidth variant="contained" color="info" startIcon={<EditIcon />} onClick={() => { setSelectedPdf(pdf); setEditOpen(true); }}>Edit</Button>
                     <Button fullWidth variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => { setSelectedPdf(pdf); setDeleteOpen(true); }}>Archive</Button>
                   </Stack>

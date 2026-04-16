@@ -262,11 +262,6 @@ const PendingUpload = () => {
                               <Box>
                                 <Stack direction="row" spacing={1} alignItems="center">
                                   <Typography sx={{ fontWeight: 700 }}>{req.title}</Typography>
-                                  <Tooltip title="View PDF">
-                                    <IconButton size="small" color="primary" onClick={() => handleViewPdf(req.pdf_url)}>
-                                      <VisibilityIcon sx={{ fontSize: '1.2rem' }} />
-                                    </IconButton>
-                                  </Tooltip>
                                 </Stack>
                                 <Button size="small" onClick={() => setExpandedId(expandedId === req.id ? null : req.id)} startIcon={expandedId === req.id ? <ExpandLessIcon /> : <ExpandMoreIcon />} sx={{ textTransform: 'none', fontSize: '0.7rem', p: 0 }}>Details</Button>
                               </Box>
@@ -278,6 +273,13 @@ const PendingUpload = () => {
                           <TableCell><Typography variant="body2" sx={{ fontWeight: 800, color: isDarkMode ? '#cbd5e1' : '#475569', letterSpacing: '0.5px' }}>{req.category?.toUpperCase() || 'N/A'}</Typography></TableCell>
                           <TableCell align="center">
                             <Stack direction="row" justifyContent="center" spacing={1}>
+                              {/* VIEW PDF BUTTON */}
+                              <Tooltip title="View PDF">
+                                <IconButton onClick={() => handleViewPdf(req.pdf_url)} sx={{ color: '#0ea5e9' }}>
+                                  <VisibilityIcon sx={{ fontSize: 28 }} />
+                                </IconButton>
+                              </Tooltip>
+                              
                               <IconButton onClick={() => handleApprove(req)} sx={{ color: '#16a34a' }}><CheckCircleIcon sx={{ fontSize: 30 }} /></IconButton>
                               <IconButton onClick={() => handleRejectClick(req)} sx={{ color: '#dc2626' }}><HighlightOffIcon sx={{ fontSize: 30 }} /></IconButton>
                             </Stack>

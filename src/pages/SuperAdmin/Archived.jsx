@@ -3,7 +3,7 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Typography, CircularProgress, Stack, IconButton, Avatar,
   useTheme, useMediaQuery, Card, CardContent, Button, Divider, TextField, 
-  MenuItem, InputAdornment, Modal, Fade, Backdrop, Container
+  MenuItem, InputAdornment, Modal, Fade, Backdrop, Container, Tooltip
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
@@ -15,6 +15,7 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import PdfIcon from '@mui/icons-material/PictureAsPdf';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import VisibilityIcon from '@mui/icons-material/Visibility'; // Inimport ang View icon
 
 const Archived = () => {
   const theme = useTheme();
@@ -50,6 +51,16 @@ const Archived = () => {
     if (error) console.error("Error fetching archives:", error);
     else setArchivedFiles(data || []);
     setLoading(false);
+  };
+
+  // --- NEW VIEW PDF FUNCTION ---
+  const handleViewPdf = (file) => {
+    const filePath = file?.file_url || file?.pdf_url;
+    if (!filePath) return;
+    const { data } = supabase.storage.from('pdfs').getPublicUrl(filePath);
+    if (data?.publicUrl) {
+      window.open(data.publicUrl, '_blank');
+    }
   };
 
   // --- BULK ACTION HANDLERS ---
@@ -341,6 +352,11 @@ const Archived = () => {
                         </TableCell>
                         <TableCell align="center">
                           <Stack direction="row" justifyContent="center" spacing={1}>
+                            <Tooltip title="View PDF">
+                              <IconButton onClick={() => handleViewPdf(file)} sx={{ color: '#0ea5e9' }}>
+                                <VisibilityIcon />
+                              </IconButton>
+                            </Tooltip>
                             <IconButton onClick={() => handleOpenConfirm('restore', file)} color="info"><RestoreFromTrashIcon /></IconButton>
                             <IconButton onClick={() => handleOpenConfirm('purge', file)} color="error"><DeleteForeverIcon /></IconButton>
                           </Stack>
@@ -371,6 +387,18 @@ const Archived = () => {
                         </Box>
                       </Stack>
                       <Divider sx={{ mb: 2 }} />
+
+                      {/* MOBILE VIEW PDF BUTTON */}
+                      <Button 
+                        fullWidth 
+                        variant="outlined" 
+                        startIcon={<VisibilityIcon />} 
+                        onClick={() => handleViewPdf(file)}
+                        sx={{ mb: 1, color: '#0ea5e9', borderColor: '#0ea5e9', fontWeight: 700 }}
+                      >
+                        View PDF
+                      </Button>
+
                       <Stack direction="row" spacing={2}>
                         <Button fullWidth variant="contained" color="info" startIcon={<RestoreFromTrashIcon />} onClick={() => handleOpenConfirm('restore', file)}>Restore</Button>
                         <Button fullWidth variant="outlined" color="error" startIcon={<DeleteForeverIcon />} onClick={() => handleOpenConfirm('purge', file)}>Purge</Button>

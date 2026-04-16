@@ -3,7 +3,7 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Typography, CircularProgress, Stack, IconButton, Avatar,
   useTheme, useMediaQuery, Card, CardContent, Button, Divider, TextField, MenuItem, InputAdornment,
-  Dialog, DialogTitle, DialogContent, DialogActions 
+  Dialog, DialogTitle, DialogContent, DialogActions, Tooltip 
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
@@ -14,6 +14,7 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import SearchIcon from '@mui/icons-material/Search';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 const DeleteRequests = () => {
   const theme = useTheme();
@@ -45,7 +46,7 @@ const DeleteRequests = () => {
       .from('delete_requests')
       .select(`
         id, pdf_id, reason, created_at, 
-        pdfs(id, title, image_url, author, genre), 
+        pdfs(*), 
         profiles(full_name, role)
       `)
       .eq('status', 'pending')
@@ -54,6 +55,15 @@ const DeleteRequests = () => {
     if (error) console.error("Error fetching:", error);
     else setRequests(data || []);
     setLoading(false);
+  };
+
+  const handleViewPdf = (pdf) => {
+    const filePath = pdf?.file_url || pdf?.pdf_url;
+    if (!filePath) return;
+    const { data } = supabase.storage.from('pdfs').getPublicUrl(filePath);
+    if (data?.publicUrl) {
+      window.open(data.publicUrl, '_blank');
+    }
   };
 
   const genres = useMemo(() => {
@@ -67,13 +77,9 @@ const DeleteRequests = () => {
     const requestData = requests.find(r => r.id === requestId);
     const pdfTitle = requestData?.pdfs?.title || 'Unknown File';
 
-    // 1. Archive the PDF
     await supabase.from('pdfs').update({ is_archived: true }).eq('id', pdfId);
-    
-    // 2. Approve the delete request
     await supabase.from('delete_requests').update({ status: 'approved' }).eq('id', requestId);
     
-    // 3. Update the original upload request remarks to show it was deleted
     if (pdfTitle) {
         await supabase
           .from('upload_requests')
@@ -101,7 +107,6 @@ const DeleteRequests = () => {
     const pdfAuthor = requestData?.pdfs?.author;
     const pdfId = requestData?.pdf_id;
 
-    // 1. Update status in delete_requests
     await supabase
       .from('delete_requests')
       .update({ 
@@ -110,7 +115,6 @@ const DeleteRequests = () => {
       })
       .eq('id', requestId);
 
-    // 2. Update remarks in upload_requests so client sees it
     if (pdfTitle && pdfAuthor) {
       await supabase
         .from('upload_requests')
@@ -121,7 +125,6 @@ const DeleteRequests = () => {
         .eq('author', pdfAuthor);
     }
     
-    // 3. Audit log
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from('audit_logs').insert({
@@ -163,6 +166,7 @@ const DeleteRequests = () => {
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, background: pageBg, minHeight: '100vh', transition: 'all 0.3s ease' }}>
       
+      {/* Header Section */}
       <Box sx={{ mb: 4 }}>
         <Typography 
           variant="h3" 
@@ -178,6 +182,7 @@ const DeleteRequests = () => {
         </Typography>
       </Box>
 
+      {/* Filters Section */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
         <TextField 
           fullWidth 
@@ -222,7 +227,68 @@ const DeleteRequests = () => {
           <HourglassEmptyIcon sx={{ fontSize: 50, color: 'text.disabled', mb: 2, opacity: 0.4 }} />
           <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.secondary' }}>NO REQUESTS FOUND</Typography>
         </Box>
+      ) : isMobile ? (
+        // --- MOBILE VIEW (CARDS WITH LABELED BUTTONS) ---
+        <Stack spacing={2}>
+          {filteredRequests.map((req) => (
+            <Card key={req.id} sx={{ bgcolor: cardBg, border: `1px solid ${borderCol}`, borderRadius: 2 }}>
+              <CardContent>
+                <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+                  <Avatar variant="rounded" src={getImageUrl(req.pdfs?.image_url)} sx={{ width: 60, height: 80, border: `1px solid ${borderCol}` }}>
+                    <PictureAsPdfIcon fontSize="large" sx={{ color: '#ef4444' }} />
+                  </Avatar>
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: '1.1rem' }}>{req.pdfs?.title || 'Unknown File'}</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>{req.pdfs?.author}</Typography>
+                    <Typography variant="caption" sx={{ display: 'block', mt: 1, fontWeight: 700, color: 'primary.main' }}>
+                      BY: {req.profiles?.full_name}
+                    </Typography>
+                  </Box>
+                </Stack>
+                
+                <Divider sx={{ my: 1.5, opacity: 0.1 }} />
+                
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>REASON:</Typography>
+                <Typography variant="body2" sx={{ mb: 2 }}>{req.reason}</Typography>
+                <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', mb: 2 }}>{new Date(req.created_at).toLocaleDateString()}</Typography>
+
+                {/* UPDATED BUTTONS WITH TEXT FOR MOBILE */}
+                <Stack direction="column" spacing={1}>
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<VisibilityIcon />} 
+                    onClick={() => handleViewPdf(req.pdfs)}
+                    sx={{ color: '#0ea5e9', borderColor: '#0ea5e9', textTransform: 'none', fontWeight: 700 }}
+                  >
+                    View PDF
+                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    <Button 
+                      fullWidth
+                      variant="contained" 
+                      startIcon={<CheckCircleOutlineIcon />} 
+                      onClick={() => handleApprove(req.id, req.pdfs?.id)}
+                      sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, textTransform: 'none', fontWeight: 700 }}
+                    >
+                      Accept
+                    </Button>
+                    <Button 
+                      fullWidth
+                      variant="contained" 
+                      startIcon={<HighlightOffIcon />} 
+                      onClick={() => setRemarkModal({ open: true, requestId: req.id })}
+                      sx={{ bgcolor: '#dc2626', '&:hover': { bgcolor: '#b91c1c' }, textTransform: 'none', fontWeight: 700 }}
+                    >
+                      Reject
+                    </Button>
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
       ) : (
+        // --- DESKTOP VIEW (TABLE) ---
         <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
           <Table sx={{ minWidth: 650 }}>
             <TableHead sx={{ bgcolor: headerColor }}>
@@ -253,8 +319,17 @@ const DeleteRequests = () => {
                   <TableCell><Typography variant="body2">{new Date(req.created_at).toLocaleDateString()}</Typography></TableCell>
                   <TableCell align="center">
                     <Stack direction="row" justifyContent="center" spacing={1}>
-                      <IconButton onClick={() => handleApprove(req.id, req.pdfs.id)} sx={{ color: '#16a34a' }}><CheckCircleOutlineIcon sx={{ fontSize: 32 }} /></IconButton>
-                      <IconButton onClick={() => setRemarkModal({ open: true, requestId: req.id })} sx={{ color: '#dc2626' }}><HighlightOffIcon sx={{ fontSize: 32 }} /></IconButton>
+                      <Tooltip title="View PDF">
+                        <IconButton onClick={() => handleViewPdf(req.pdfs)} sx={{ color: '#0ea5e9' }}>
+                          <VisibilityIcon sx={{ fontSize: 28 }} />
+                        </IconButton>
+                      </Tooltip>
+                      <IconButton onClick={() => handleApprove(req.id, req.pdfs?.id)} sx={{ color: '#16a34a' }}>
+                        <CheckCircleOutlineIcon sx={{ fontSize: 32 }} />
+                      </IconButton>
+                      <IconButton onClick={() => setRemarkModal({ open: true, requestId: req.id })} sx={{ color: '#dc2626' }}>
+                        <HighlightOffIcon sx={{ fontSize: 32 }} />
+                      </IconButton>
                     </Stack>
                   </TableCell>
                 </TableRow>

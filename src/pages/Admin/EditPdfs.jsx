@@ -4,7 +4,7 @@ import {
   TableRow, IconButton, CircularProgress, Typography, Dialog, 
   DialogTitle, DialogContent, TextField, DialogActions, Button, 
   Chip, Stack, Avatar, useTheme, useMediaQuery, Snackbar, Alert,
-  MenuItem, InputAdornment
+  MenuItem, InputAdornment, Tooltip
 } from '@mui/material';
 
 // Icons
@@ -12,6 +12,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'; 
+import VisibilityIcon from '@mui/icons-material/Visibility'; // Inimport ang View icon
 
 import { fetchPdfs, submitDeleteRequest } from '../../services/pdfService';
 import EditPdfModal from '../../shared/EditPdfModal';
@@ -59,6 +60,16 @@ const EditPDFs = () => {
       console.error("Error loading PDFs:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // --- NEW VIEW PDF FUNCTION ---
+  const handleViewPdf = (pdf) => {
+    const filePath = pdf?.file_url || pdf?.pdf_url;
+    if (!filePath) return;
+    const { data } = supabase.storage.from('pdfs').getPublicUrl(filePath);
+    if (data?.publicUrl) {
+      window.open(data.publicUrl, '_blank');
     }
   };
 
@@ -258,6 +269,11 @@ const EditPDFs = () => {
                       </TableCell>
                       <TableCell align="center">
                         <Stack direction="row" justifyContent="center" spacing={1}>
+                          <Tooltip title="View PDF">
+                            <IconButton onClick={() => handleViewPdf(pdf)} sx={{ bgcolor: isDarkMode ? 'rgba(14, 165, 233, 0.1)' : '#f0f9ff', color: '#0ea5e9' }}>
+                              <VisibilityIcon />
+                            </IconButton>
+                          </Tooltip>
                           <IconButton onClick={() => { setSelectedPdf(pdf); setEditOpen(true); }} color="info" sx={{ bgcolor: isDarkMode ? 'rgba(59, 130, 246, 0.1)' : '#f0f7ff' }}>
                             <EditIcon />
                           </IconButton>
@@ -294,6 +310,17 @@ const EditPDFs = () => {
                     variant="outlined"
                     sx={{ color: '#3b82f6', borderColor: '#3b82f6', fontWeight: 700, mb: 3, textTransform: 'uppercase' }} 
                   />
+                  
+                  <Button 
+                    fullWidth 
+                    variant="outlined" 
+                    startIcon={<VisibilityIcon />} 
+                    onClick={() => handleViewPdf(pdf)}
+                    sx={{ mb: 1.5, borderRadius: 3, textTransform: 'none', fontWeight: 700, color: '#0ea5e9', borderColor: '#0ea5e9' }}
+                  >
+                    View PDF
+                  </Button>
+
                   <Stack direction="row" spacing={2}>
                     <Button 
                       fullWidth 
