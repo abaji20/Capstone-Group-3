@@ -160,7 +160,7 @@ const EditPDFs = () => {
             letterSpacing: '1px'
           }}
         >
-          MANAGE PDFs
+          MANAGE PDFs INFORMATION
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
           MANAGE AND EDIT YOUR ACADEMIC DOCUMENTS.

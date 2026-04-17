@@ -24,7 +24,7 @@ const PendingActions = () => {
   // --- DELETE MODAL STATE ---
   const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
 
-  const pageBg = isDarkMode ? '#0f172a' : '#f8fafc'; 
+  const pageBg = isDarkMode ? '#0f172a' : '#ffffff'; 
   const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
   const headerBg = isDarkMode ? '#0f172a' : '#213C51';
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
