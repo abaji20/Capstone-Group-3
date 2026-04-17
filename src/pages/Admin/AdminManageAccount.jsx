@@ -7,7 +7,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { PageHeader, PrimaryButton, DeleteButton, ActionModal, FormInput } from '../../shared';
+import { PageHeader, PrimaryButton, ActionModal, FormInput } from '../../shared';
 import { supabase } from '../../supabaseClient';
 
 // Icons
@@ -17,7 +17,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import BadgeIcon from '@mui/icons-material/Badge';
 import EmailIcon from '@mui/icons-material/Email';
 import KeyIcon from '@mui/icons-material/Key';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
@@ -49,9 +48,7 @@ const AdminManageAccount = () => {
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   
-  const [selectedUser, setSelectedUser] = useState(null);
   const [formData, setFormData] = useState({ fullName: '', email: '', role: 'client', password: '', idNumber: '', department: '', yearLevel: '' });
   const [editData, setEditData] = useState({ id: '', fullName: '', role: 'client', oldName: '', idNumber: '', department: '', yearLevel: '' });
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
@@ -144,12 +141,10 @@ const AdminManageAccount = () => {
       setLoading(false);
     }
   };
-const handleUpdateAccount = async () => {
+
+  const handleUpdateAccount = async () => {
     setLoading(true);
-    
-    // Hanapin ang original data para sa comparison
     const originalUser = users.find(u => u.id === editData.id);
-    
     const { error } = await supabase
       .from('profiles')
       .update({ 
@@ -164,33 +159,25 @@ const handleUpdateAccount = async () => {
       setNotify({ open: true, message: 'Update failed', severity: 'error' });
     } else {
       const targetName = editData.fullName;
-
-      // 1. I-collect ang bawat pagbabago bilang magkakahiwalay na entries
       let changes = [];
       if (originalUser) {
         if (originalUser.full_name !== editData.fullName) 
           changes.push(`Name: [${originalUser.full_name}] -> [${editData.fullName}]`);
-        
         if (originalUser.id_number !== editData.idNumber) 
           changes.push(`ID: [${originalUser.id_number || 'None'}] -> [${editData.idNumber}]`);
-        
         if (originalUser.department !== editData.department) 
           changes.push(`Dept: [${originalUser.department || 'None'}] -> [${editData.department}]`);
-        
         if (originalUser.year_level !== editData.yearLevel) 
           changes.push(`Year: [${originalUser.year_level || 'None'}] -> [${editData.yearLevel}]`);
       }
 
-      // 2. I-save sa Audit Logs nang magkakahiwalay (Individual Rows)
       if (changes.length > 0) {
-        // Gagamit tayo ng Promise.all para sabay-sabay i-insert pero separate rows
         await Promise.all(
           changes.map(detail => 
             createAuditLog('Edit Client', `Updated client info for: ${targetName} : ${detail}`)
           )
         );
       } else {
-        // Optional: Log lang kung walang binago talaga
         await createAuditLog('Edit Client', `Updated client info for: ${targetName} : No changes made`);
       }
       
@@ -199,22 +186,6 @@ const handleUpdateAccount = async () => {
       fetchClients();
     }
     setLoading(false);
-  };
-
-  const handleDeleteAccount = async () => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('profiles').delete().eq('id', selectedUser?.id);
-      if (error) throw error;
-      await createAuditLog('Delete Client', `Deleted account for ${selectedUser?.full_name}`);
-      setNotify({ open: true, message: 'Account deleted!', severity: 'success' });
-      setIsConfirmOpen(false);
-      fetchClients();
-    } catch (err) {
-      setNotify({ open: true, message: 'Delete failed. Active dependencies found.', severity: 'error' });
-    } finally {
-      setLoading(false);
-    }
   };
 
   const filteredUsers = users.filter((u) => {
@@ -279,7 +250,6 @@ const handleUpdateAccount = async () => {
               <Divider sx={{ mb: 2 }} />
               <Stack direction="row" spacing={2} justifyContent="center">
                 <IconButton onClick={() => { setEditData({ id: user.id, fullName: user.full_name, idNumber: user.id_number, department: user.department, yearLevel: user.year_level }); setIsEditModalOpen(true); }} sx={{ color: theme.palette.primary.main }}><EditIcon /></IconButton>
-                <DeleteButton onClick={() => { setSelectedUser(user); setIsConfirmOpen(true); }} />
               </Stack>
             </Paper>
           ))}
@@ -314,7 +284,6 @@ const handleUpdateAccount = async () => {
                   <TableCell align="right">
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
                       <IconButton onClick={() => { setEditData({ id: user.id, fullName: user.full_name, idNumber: user.id_number, department: user.department, yearLevel: user.year_level }); setIsEditModalOpen(true); }} size="small" color="primary"><EditIcon fontSize="small" /></IconButton>
-                      <DeleteButton onClick={() => { setSelectedUser(user); setIsConfirmOpen(true); }} />
                     </Stack>
                   </TableCell>
                 </TableRow>
@@ -323,16 +292,6 @@ const handleUpdateAccount = async () => {
           </Table>
         </TableContainer>
       )}
-
-      {/* CONFIRM DELETE DIALOG */}
-      <Dialog open={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 3, p: 1, width: '400px' } }}>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}> <WarningAmberIcon color="error" /> Confirm Deletion </DialogTitle>
-        <DialogContent> <DialogContentText sx={{ fontWeight: 500 }}> Delete <b>{selectedUser?.full_name}</b>? Profile removal only. </DialogContentText> </DialogContent>
-        <DialogActions sx={{ pb: 2, px: 3 }}>
-          <Button onClick={() => setIsConfirmOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button>
-          <Button onClick={handleDeleteAccount} variant="contained" color="error" sx={{ borderRadius: 2 }}> {loading ? "Deleting..." : "Confirm Delete"} </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* CREATE MODAL */}
       <ActionModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create GLC Client" onConfirm={handleCreateAccount} confirmText={loading ? "Creating..." : "Create Account"}>
