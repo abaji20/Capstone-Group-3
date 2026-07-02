@@ -231,7 +231,7 @@ const ClientTopbar = () => {
               </IconButton>
             )}
             <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: { xs: 1, md: 0 } }} onClick={() => navigate('/')}>
-              <Box component="img" src={nonamelogo} sx={{ height: { xs: 35, md: 45 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} />
+              <Box component="img" src={nonamelogo} sx={{ height: { xs: 30, md: 50 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} />
               <Typography fontFamily="Paytone One" sx={{ fontStyle: 'italic', fontWeight: 200, color: 'white', fontSize: { xs: '0.85rem', sm: '1.1rem', md: '1.25rem' }, letterSpacing: { xs: 1, md: 2 }, display: 'block', whiteSpace: 'nowrap', textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}>
                 Library Repository
               </Typography>
