@@ -224,12 +224,12 @@ const Dashboard = () => {
   const statItems = [
     { title: 'Total PDF', val: stats.total, icon: <DescriptionIcon />, color: '#3b82f6' },
     { title: 'Total Accounts', val: stats.totalAccounts, icon: <PeopleIcon />, color: '#6366f1' },
-    { title: 'Clients', val: stats.clients, icon: <GroupIcon />, color: '#10b981' },
+    { title: 'Users', val: stats.clients, icon: <GroupIcon />, color: '#10b981' },
     { title: 'Super Admin', val: stats.superAdmins, icon: <SecurityIcon />, color: '#7c3aed' },
     { title: 'Total Admins', val: stats.admins, icon: <AdminPanelSettingsIcon />, color: '#8b5cf6' },
     { title: 'Downloads', val: stats.downloads, icon: <DownloadIcon />, color: '#f59e0b' },
     { title: 'Delete Request', val: stats.deleteRequests, icon: <DeleteSweepIcon />, color: '#ef4444' },
-    { title: 'Client Request', val: stats.clientRequests, icon: <PublishIcon />, color: '#06b6d4' }
+    { title: 'Users Request', val: stats.clientRequests, icon: <PublishIcon />, color: '#06b6d4' }
   ];
 
   const commonPaperStyle = {

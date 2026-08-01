@@ -371,7 +371,7 @@ const ManageAccount = () => {
               ACCOUNT MANAGEMENT
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block', mt: 0 }}>
-              MANAGE USER ACCOUNTS & ROLES
+              MANAGE ACCOUNTS & ROLES
             </Typography>
           </Box>
         </Stack>
