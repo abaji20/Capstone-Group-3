@@ -37,9 +37,17 @@ const ManageAccount = () => {
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff';
 
   // Departments List
-  const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
-  // Year Levels List
-  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "Highschool", "Senior Highschool", "Staff", "N/A"];
+  const departments = [
+    "BS-Information Technology",
+    "BS-Business Administration",
+    "BS-Accounting Information Systems",
+    "BS-English",
+    "BEED-Elementary Education",
+    "BS-Mathematics",
+    "BS-Science",
+    "BS-Psychology"
+  ];  // Year Levels List
+  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "N/A"];
 
   // States
   const [users, setUsers] = useState([]);

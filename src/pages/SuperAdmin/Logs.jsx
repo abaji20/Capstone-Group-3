@@ -171,7 +171,7 @@ const Logs = () => {
     return (
       <Box sx={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: '120px', py: 0.5, borderRadius: '4px', fontWeight: 800, fontSize: '0.7rem',
+          width: '120px', py: 0.5 , borderRadius: '4px', fontWeight: 800, fontSize: '0.7rem',
           bgcolor: style.bg,
           color: style.text,
           border: isDarkMode ? `1px solid ${style.text}` : 'none',
