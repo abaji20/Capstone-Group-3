@@ -13,7 +13,8 @@ import {
   Person as PersonIcon,
   Business as BusinessIcon,
   Fingerprint as FingerprintIcon,
-  School as SchoolIcon
+  School as SchoolIcon,
+  Lock as LockIcon
 } from '@mui/icons-material';
 import { navLinks } from '../navConfig';
 import { supabase } from '../supabaseClient';
@@ -34,12 +35,20 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   // Constants
-  const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
-  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "High School", "Senior High", "Staff"];
+   // Lists for Dropdowns
+  const departments = ["Staff", "Steward"];
+  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "N/A"];
 
-  // PROFILE SETTINGS STATES
+  // MODAL STATES
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+
+  const [initialData, setInitialData] = useState({}); // Original data store
   const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '', year_level: '' });
+  
+  // Password state
+  const [newPassword, setNewPassword] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
@@ -50,6 +59,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       if (profile) {
         setFullName(profile.full_name);
         setUserData(profile);
+        setInitialData(profile); // Kinukuha ang baseline profile data
       }
     }
   };
@@ -68,37 +78,68 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         full_name: userData.full_name, 
         department: userData.department, 
         id_number: userData.id_number,
-        year_level: userData.year_level // Sinisiguro na kasama ito sa update
+        year_level: userData.year_level 
       })
       .eq('id', userData.id);
 
     if (profileError) {
       console.error("Error updating profile:", profileError);
       setNotify({ open: true, message: 'Update failed!', severity: 'error' });
-    } else {
-      // 2. INSERT TO ACTIVITY LOGS
-      // Idinagdag ang year_level sa details para ma-record sa logs
+      setLoading(false);
+      return;
+    }
+
+    // 2. CHECK EXACT CHANGES (Past value to New value format)
+    const changes = [];
+    if ((initialData.full_name || '') !== (userData.full_name || '')) {
+      changes.push(`name from "${initialData.full_name || 'N/A'}" to "${userData.full_name}"`);
+    }
+    if ((initialData.department || '') !== (userData.department || '')) {
+      changes.push(`department from "${initialData.department || 'N/A'}" to "${userData.department}"`);
+    }
+    if ((initialData.year_level || '') !== (userData.year_level || '')) {
+      changes.push(`year level from "${initialData.year_level || 'N/A'}" to "${userData.year_level}"`);
+    }
+    if ((initialData.id_number || '') !== (userData.id_number || '')) {
+      changes.push(`ID number from "${initialData.id_number || 'N/A'}" to "${userData.id_number}"`);
+    }
+
+    // Mag-eentry sa audit_logs KUNG MAY NABAGONG PROFILE FIELDS LAMANG
+    if (changes.length > 0) {
+      const logDetails = `Super Admin updated ${changes.join(', ')}`;
+
       const { error: logError } = await supabase
         .from('audit_logs')
         .insert([{
           user_id: userData.id,
-          action: 'Update Profile',
-          details: `Super Admin updated their profile: ${userData.full_name} (${userData.department} - ${userData.year_level || 'N/A'})`,
+          action_type: 'Edit Profile',
+          description: logDetails,
           created_at: new Date().toISOString()
         }]);
 
       if (logError) {
         console.error("Error inserting to audit_logs:", logError);
       }
-
-      setNotify({ open: true, message: 'Profile updated successfully!', severity: 'success' });
-      setFullName(userData.full_name);
-      setIsProfileModalOpen(false);
     }
+
+    // 3. HANDLE CHANGE PASSWORD (WALANG AUDIT LOG)
+    if (newPassword.trim() !== '') {
+      const { error: pwdError } = await supabase.auth.updateUser({ password: newPassword });
+      
+      if (pwdError) {
+        setNotify({ open: true, message: 'Failed to update password: ' + pwdError.message, severity: 'error' });
+      }
+    }
+
+    setNotify({ open: true, message: 'Profile updated successfully!', severity: 'success' });
+    setFullName(userData.full_name);
+    setInitialData(userData);
+    setNewPassword(''); // Clear password field
+    setIsProfileModalOpen(false);
     setLoading(false);
   };
 
-  const handleLogout = async () => {
+  const handleConfirmLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
   };
@@ -213,7 +254,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           {!isMini && <ListItemText primary="Appearance" primaryTypographyProps={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }} />}
         </ListItemButton>
 
-        <ListItemButton onClick={handleLogout} sx={{ borderRadius: '8px', color: '#ff5252', justifyContent: isMini ? 'center' : 'flex-start' }}>
+        <ListItemButton onClick={() => setIsLogoutModalOpen(true)} sx={{ borderRadius: '8px', color: '#ff5252', justifyContent: isMini ? 'center' : 'flex-start' }}>
           <ListItemIcon sx={{ color: 'inherit', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
             <LogoutIcon fontSize="small" />
           </ListItemIcon>
@@ -237,26 +278,51 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         {drawerContent}
       </Drawer>
 
+      {/* LOGOUT CONFIRMATION MODAL */}
+      <ActionModal
+        open={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        title="Confirm Logout"
+        onConfirm={handleConfirmLogout}
+        confirmText="Logout"
+      >
+        <Typography variant="body1" sx={{ mt: 1 }}>
+          Are you sure you want to log out?
+        </Typography>
+      </ActionModal>
+
       {/* PROFILE SETTINGS MODAL */}
       <ActionModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} title="Edit Super Admin Profile" onConfirm={handleUpdateProfile} confirmText={loading ? "Saving..." : "Save Changes"}>
         <Stack spacing={2.5} sx={{ mt: 2 }}>
-          <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          <FormInput label="Full Name" value={userData.full_name || ''} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           
           <Stack direction="row" spacing={2}>
-            <FormInput select label="Department" fullWidth value={userData.department} onChange={(e) => setUserData({...userData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            <FormInput select label="User Type" fullWidth value={userData.department || ''} onChange={(e) => setUserData({...userData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
               {departments.map((dept) => (
                 <MenuItem key={dept} value={dept}>{dept}</MenuItem>
               ))}
             </FormInput>
 
-            <FormInput select label="Year Level" fullWidth value={userData.year_level} onChange={(e) => setUserData({...userData, year_level: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            <FormInput select label="Year Level" fullWidth value={userData.year_level || ''} onChange={(e) => setUserData({...userData, year_level: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
               {yearLevels.map((year) => (
                 <MenuItem key={year} value={year}>{year}</MenuItem>
               ))}
             </FormInput>
           </Stack>
 
-          <FormInput label="Employee / ID Number" value={userData.id_number} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          <FormInput label="Employee / ID Number" value={userData.id_number || ''} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+
+          {/* Change Password Section */}
+          <Divider sx={{ my: 1 }}><Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', px: 1 }}>CHANGE PASSWORD</Typography></Divider>
+          
+          <FormInput 
+            type="password" 
+            label="New Password" 
+            placeholder="Leave blank to keep current password" 
+            value={newPassword} 
+            onChange={(e) => setNewPassword(e.target.value)} 
+            InputProps={{ startAdornment: <LockIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+          />
         </Stack>
       </ActionModal>
     </Box>

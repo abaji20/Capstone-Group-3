@@ -279,7 +279,7 @@ const Dashboard = () => {
 
   return (
     <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#ffffff', minHeight: '100vh', pb: 6 }}>
-      <Container maxWidth="xl" sx={{ mt: { xs: 1, md: 4 } } }>
+      <Container maxWidth="xls" sx={{ mt: { xs: 1, md: 7 } } }>
         <Box sx={{ mb: 4 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
             <Box>

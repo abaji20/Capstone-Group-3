@@ -8,7 +8,7 @@ const ActionModal = ({ open, onClose, title, children, onConfirm, confirmText = 
     </DialogContent>
     <DialogActions sx={{ p: 2 }}>
       <Button onClick={onClose} color="inherit">Cancel</Button>
-      <Button onClick={onConfirm} variant="contained" sx={{ bgcolor: '#1976D2' }}>
+      <Button onClick={onConfirm} variant="contained" sx={{ bgcolor: '#c70202' }}>
         {confirmText}
       </Button>
     </DialogActions>

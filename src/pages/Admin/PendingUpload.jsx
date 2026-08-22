@@ -206,7 +206,7 @@ const PendingUpload = () => {
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, bgcolor: pageBg, minHeight: '100vh' }}>
-      <Container maxWidth="xl">
+      <Container maxWidth="xls">
         <Box sx={{ mb: 4 }}>
           <Typography variant="h3" sx={{ fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.2rem', md: '3rem' }, letterSpacing: '1px' }}>
             PENDING UPLOADS

@@ -5,7 +5,7 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../supabaseClient';
 import logo from '../assets/logo.png'; 
-import nonamelogo from '../assets/nonamelogo.png';
+import nonamelogo from '../assets/glclogo.png';
 // Import your background asset
 import clientbackground from '../assets/clientbackground.png'; 
 

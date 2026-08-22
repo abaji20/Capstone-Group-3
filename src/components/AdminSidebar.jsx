@@ -15,7 +15,8 @@ import {
   Business as BusinessIcon,
   Fingerprint as FingerprintIcon,
   AssignmentInd as AssignmentIndIcon,
-  ChatBubbleOutline as ChatIcon
+  ChatBubbleOutline as ChatIcon,
+  Lock as LockIcon
 } from '@mui/icons-material';
 import { navLinks } from '../navConfig';
 import { supabase } from '../supabaseClient';
@@ -36,11 +37,14 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   // Lists for Dropdowns
-  const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
-  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
+  const departments = ["Staff", "Steward"];
+  const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "N/A"];
 
-  // PROFILE SETTINGS STATES
+  // MODAL STATES
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  
+  const [initialData, setInitialData] = useState({}); // Original data store
   const [userData, setUserData] = useState({ 
     id: '', 
     full_name: '', 
@@ -49,6 +53,10 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     role: '',
     year_level: '' 
   });
+  
+  // Password state
+  const [newPassword, setNewPassword] = useState('');
+  
   const [requestData, setRequestData] = useState({ role: '', reason: '' });
   const [latestRequest, setLatestRequest] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -61,6 +69,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       if (profile) {
         setFullName(profile.full_name);
         setUserData(profile);
+        setInitialData(profile); // Kinukuha ang baseline profile data
 
         // Fetch latest role request for status/remarks
         const { data: lastReq } = await supabase
@@ -82,6 +91,8 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
   const handleUpdateProfile = async () => {
     setLoading(true);
+
+    // 1. UPDATE PROFILE IN SUPABASE
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ 
@@ -98,6 +109,49 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       return;
     }
 
+    // 2. CHECK EXACT CHANGES (Past value to New value format)
+    const changes = [];
+    if ((initialData.full_name || '') !== (userData.full_name || '')) {
+      changes.push(`name from "${initialData.full_name || 'N/A'}" to "${userData.full_name}"`);
+    }
+    if ((initialData.department || '') !== (userData.department || '')) {
+      changes.push(`department from "${initialData.department || 'N/A'}" to "${userData.department}"`);
+    }
+    if ((initialData.year_level || '') !== (userData.year_level || '')) {
+      changes.push(`year level from "${initialData.year_level || 'N/A'}" to "${userData.year_level}"`);
+    }
+    if ((initialData.id_number || '') !== (userData.id_number || '')) {
+      changes.push(`ID number from "${initialData.id_number || 'N/A'}" to "${userData.id_number}"`);
+    }
+
+    // Mag-eentry sa audit_logs KUNG MAY NABAGONG PROFILE FIELDS LAMANG
+    if (changes.length > 0) {
+      const logDetails = `Updated ${changes.join(', ')}`;
+
+      const { error: logError } = await supabase
+        .from('audit_logs')
+        .insert([{
+          user_id: userData.id,
+          action_type: 'Edit Profile',
+          description: logDetails,
+          created_at: new Date().toISOString()
+        }]);
+
+      if (logError) {
+        console.error("Error inserting to audit_logs:", logError);
+      }
+    }
+
+    // 3. HANDLE CHANGE PASSWORD (WALANG AUDIT LOG)
+    if (newPassword.trim() !== '') {
+      const { error: pwdError } = await supabase.auth.updateUser({ password: newPassword });
+      
+      if (pwdError) {
+        setNotify({ open: true, message: 'Failed to update password: ' + pwdError.message, severity: 'error' });
+      }
+    }
+
+    // 4. HANDLE ROLE REQUEST (IF ANY)
     if (requestData.role) {
       const { error: roleError } = await supabase
         .from('role_requests')
@@ -120,12 +174,14 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     }
 
     setFullName(userData.full_name);
+    setInitialData(userData);
+    setNewPassword(''); // Clear password field
     setIsProfileModalOpen(false);
     setRequestData({ role: '', reason: '' }); 
     setLoading(false);
   };
 
-  const handleLogout = async () => {
+  const handleConfirmLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
   };
@@ -263,7 +319,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         </ListItemButton>
 
         <ListItemButton 
-          onClick={handleLogout}
+          onClick={() => setIsLogoutModalOpen(true)}
           sx={{ 
             borderRadius: '8px', 
             color: '#ff5252', 
@@ -314,6 +370,19 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         {drawerContent}
       </Drawer>
 
+      {/* LOGOUT CONFIRMATION MODAL */}
+      <ActionModal
+        open={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        title="Confirm Logout"
+        onConfirm={handleConfirmLogout}
+        confirmText="Logout"
+      >
+        <Typography variant="body1" sx={{ mt: 1 }}>
+          Are you sure you want to log out?
+        </Typography>
+      </ActionModal>
+
       {/* PROFILE SETTINGS MODAL */}
       <ActionModal 
         open={isProfileModalOpen} 
@@ -323,12 +392,12 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         confirmText={loading ? "Saving..." : "Save Changes"}
       >
         <Stack spacing={2.5} sx={{ mt: 2 }}>
-          <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          <FormInput label="Full Name" value={userData.full_name || ''} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           
           <FormInput 
             select 
-            label="Department" 
-            value={userData.department} 
+            label="User Type" 
+            value={userData.department || ''} 
             onChange={(e) => setUserData({...userData, department: e.target.value})} 
             InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
           >
@@ -337,7 +406,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
             ))}
           </FormInput>
 
-          {/* Year Level Dropdown Added Here */}
+          {/* Year Level Dropdown */}
           <FormInput 
             select 
             label="Year Level" 
@@ -350,7 +419,19 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
             ))}
           </FormInput>
 
-          <FormInput label="Employee / ID Number" value={userData.id_number} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          <FormInput label="Employee / ID Number" value={userData.id_number || ''} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+
+          {/* Change Password Section */}
+          <Divider sx={{ my: 1 }}><Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', px: 1 }}>CHANGE PASSWORD</Typography></Divider>
+          
+          <FormInput 
+            type="password" 
+            label="New Password" 
+            placeholder="Leave blank to keep current password" 
+            value={newPassword} 
+            onChange={(e) => setNewPassword(e.target.value)} 
+            InputProps={{ startAdornment: <LockIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+          />
 
           {latestRequest?.status === 'rejected' && (
             <Alert severity="error" variant="outlined" sx={{ borderRadius: '8px' }}>

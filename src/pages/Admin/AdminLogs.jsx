@@ -9,7 +9,6 @@ import { supabase } from '../../supabaseClient';
 // Icons
 import SearchIcon from '@mui/icons-material/Search';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import AssignmentLateIcon from '@mui/icons-material/AssignmentLate';
 
 const AdminLogs = () => {
@@ -46,6 +45,30 @@ const AdminLogs = () => {
     return `${month}/${day}/${year}`;
   };
 
+  // --- TARGET EXTRACTION HELPER ---
+  const getTargetName = (log) => {
+    // 1. PDF Title (if present from relation query)
+    if (log.pdfs?.title) return log.pdfs.title;
+
+    const action = log.action_type?.toLowerCase() || '';
+    const desc = log.description || '';
+
+    // 2. Profile changes
+    if (action.includes('profile')) {
+      return log.profiles?.full_name ? `${log.profiles.full_name} (Profile)` : 'User Profile';
+    }
+
+    // 3. Fallback extraction logic
+    if (desc.includes('for ')) {
+      return desc.split('for ').pop().trim();
+    }
+    if (desc.includes(': ')) {
+      return desc.split(': ').pop().trim();
+    }
+
+    return '—';
+  };
+
   const fetchLogs = async () => {
     setLoading(true);
     try {
@@ -60,7 +83,7 @@ const AdminLogs = () => {
           profiles!audit_logs_user_id_fkey1(full_name, role, email)
         `) 
         .order('created_at', { ascending: false });
-  
+
       if (error) throw error;
       setLogs(data || []);
     } catch (error) {
@@ -80,9 +103,9 @@ const AdminLogs = () => {
       const term = searchTerm.toLowerCase();
       tempLogs = tempLogs.filter(log => 
         log.profiles?.full_name?.toLowerCase().includes(term) ||
-        log.pdfs?.title?.toLowerCase().includes(term) ||
         log.action_type?.toLowerCase().includes(term) ||
-        log.description?.toLowerCase().includes(term)
+        log.description?.toLowerCase().includes(term) ||
+        getTargetName(log).toLowerCase().includes(term)
       );
     }
     if (roleFilter !== 'All') {
@@ -154,7 +177,7 @@ const AdminLogs = () => {
 
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
-      <Container maxWidth="xl">
+      <Container maxWidth="xls">
         
         {/* HEADER SECTION */}
         <Box sx={{ mb: 5 }}>
@@ -269,15 +292,9 @@ const AdminLogs = () => {
                         <TableCell align="center">
                           <ActionButton action={log.action_type} />
                         </TableCell>
-                       <TableCell sx={{ fontWeight: 600 }}>
-                            {/* 1. Try to show the PDF title first */}
-                            {log.pdfs?.title || 
-                            /* 2. If it's a delete action, try to extract the name from the description */
-                            (log.action_type?.toLowerCase().includes('delete') && log.description?.includes('for ') 
-                              ? log.description.split('for ').pop() 
-                              : (log.description?.includes(': ') ? log.description.split(': ').pop() : '—'))
-                            }
-                          </TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>
+                          {getTargetName(log)}
+                        </TableCell>
                         <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{log.description || '—'}</TableCell>
                         <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
                           {formatDate(log.created_at)}
@@ -302,7 +319,7 @@ const AdminLogs = () => {
                           </Typography>
                         </Box>
                         <Typography variant="caption" sx={{ color: 'text.disabled' }}>
-                            {formatDate(log.created_at)}
+                          {formatDate(log.created_at)}
                         </Typography>
                       </Stack> 
                       <Stack spacing={2}>
@@ -315,9 +332,15 @@ const AdminLogs = () => {
                           <ActionButton action={log.action_type} />
                         </Box>
                         <Box>
-                          <Typography variant="caption" color="text.secondary" fontWeight={700}>TARGET PDF</Typography>
+                          <Typography variant="caption" color="text.secondary" fontWeight={700}>TARGET</Typography>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {log.pdfs?.title || (log.description?.includes(': ') ? log.description.split(': ').pop() : '—')}
+                            {getTargetName(log)}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" fontWeight={700}>DETAILS</Typography>
+                          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                            {log.description || '—'}
                           </Typography>
                         </Box>
                       </Stack>

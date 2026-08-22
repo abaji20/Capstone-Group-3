@@ -26,7 +26,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import SchoolIcon from '@mui/icons-material/School'; // Added for Year Level icon
+import SchoolIcon from '@mui/icons-material/School';
 
 const ManageAccount = () => {
   const theme = useTheme();
@@ -46,7 +46,9 @@ const ManageAccount = () => {
     "BS-Mathematics",
     "BS-Science",
     "BS-Psychology"
-  ];  // Year Levels List
+  ];
+  
+  // Year Levels List
   const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "N/A"];
 
   // States
@@ -74,11 +76,11 @@ const ManageAccount = () => {
   const [rejectionRemarks, setRejectionRemarks] = useState('');
   const [formData, setFormData] = useState({ 
     fullName: '', email: '', role: 'client', password: '', 
-    department: '', idNumber: '', yearLevel: '' // Added yearLevel
+    department: '', idNumber: '', yearLevel: '' 
   });
   const [editData, setEditData] = useState({ 
-    id: '', fullName: '', role: '', department: '', idNumber: '', yearLevel: '', // Added yearLevel
-    oldName: '', oldRole: '', oldDept: '', oldIdNum: '', oldYear: '' // Added oldYear
+    id: '', fullName: '', role: '', department: '', idNumber: '', yearLevel: '', 
+    oldName: '', oldRole: '', oldDept: '', oldIdNum: '', oldYear: '' 
   });
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
@@ -149,7 +151,7 @@ const ManageAccount = () => {
         .update({ status: 'approved', remarks: 'Approved by administrator' })
         .eq('id', req.id);
 
-      await createAuditLog('Role Approval', `Approved ${req.requested_role} role for ${req.profiles.full_name}`);
+      await createAuditLog('Role Approval', `Approved ${req.requested_role} role for ${req.profiles?.full_name}`);
       setNotify({ open: true, message: 'Role upgrade approved!', severity: 'success' });
       fetchRoleRequests();
       fetchUsers();
@@ -171,7 +173,7 @@ const ManageAccount = () => {
         .update({ status: 'rejected', remarks: rejectionRemarks })
         .eq('id', selectedRequest.id);
 
-      await createAuditLog('Role Rejection', `Rejected role request for ${selectedRequest.profiles.full_name}. Reason: ${rejectionRemarks}`);
+      await createAuditLog('Role Rejection', `Rejected role request for ${selectedRequest.profiles?.full_name}. Reason: ${rejectionRemarks}`);
       setNotify({ open: true, message: 'Request rejected', severity: 'info' });
       setIsRejectModalOpen(false);
       setRejectionRemarks('');
@@ -198,13 +200,15 @@ const ManageAccount = () => {
         .from('profiles')
         .select('id')
         .eq('email', formData.email)
-        .single();
-      if (existingError && existingError.code !== 'PGRST116') throw existingError;
+        .maybeSingle();
+        
+      if (existingError) throw existingError;
       if (existingUser) {
         setNotify({ open: true, message: 'Email already registered. Please check inbox or try another.', severity: 'warning' });
         setLoading(false);
         return;
       }
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -214,30 +218,34 @@ const ManageAccount = () => {
             role: formData.role,
             department: formData.department,
             id_number: formData.idNumber,
-            year_level: formData.yearLevel // Added year_level
+            year_level: formData.yearLevel
           },
           emailRedirectTo: 'https://capstone-group-3-swart.vercel.app/login'
         }
       });
       if (authError) throw authError;
       if (!authData.user) throw new Error("User creation failed.");
+
+      // Sync Profile record (in case database trigger does not automatically insert it)
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert([{
+        .upsert([{
           id: authData.user.id,
           email: formData.email,
           full_name: formData.fullName,
           role: formData.role,
           department: formData.department,
           id_number: formData.idNumber,
-          year_level: formData.yearLevel // Added year_level
+          year_level: formData.yearLevel
         }]);
+
       if (profileError) {
         setNotify({ open: true, message: 'Account created, but profile sync delayed.', severity: 'warning' });
       } else {
         await createAuditLog('Create Account', `Created ${formData.role} account for ${formData.fullName}`);
         setNotify({ open: true, message: 'Account created! Please check email to confirm.', severity: 'success' });
       }
+
       setIsCreateModalOpen(false);
       setFormData({ fullName: '', email: '', role: 'client', password: '', department: '', idNumber: '', yearLevel: '' });
       fetchUsers();
@@ -251,16 +259,16 @@ const ManageAccount = () => {
   const handleOpenEdit = (user) => {
     setEditData({ 
         id: user.id, 
-        fullName: user.full_name, 
-        role: user.role,
+        fullName: user.full_name || '', 
+        role: user.role || 'client',
         department: user.department || '',
         idNumber: user.id_number || '',
-        yearLevel: user.year_level || '', // Added yearLevel
-        oldName: user.full_name,
-        oldRole: user.role,
+        yearLevel: user.year_level || '',
+        oldName: user.full_name || '',
+        oldRole: user.role || '',
         oldDept: user.department || 'N/A',
         oldIdNum: user.id_number || 'N/A',
-        oldYear: user.year_level || 'N/A' // Added oldYear
+        oldYear: user.year_level || 'N/A'
     });
     setIsEditModalOpen(true);
   };
@@ -272,8 +280,9 @@ const ManageAccount = () => {
       role: editData.role,
       department: editData.department,
       id_number: editData.idNumber,
-      year_level: editData.yearLevel // Added year_level
+      year_level: editData.yearLevel
     }).eq('id', editData.id);
+
     if (error) {
       setNotify({ open: true, message: 'Update failed', severity: 'error' });
     } else {
@@ -328,10 +337,10 @@ const ManageAccount = () => {
   };
 
   const StyledAvatar = ({ user, size = 30 }) => {
-    const colors = getAvatarColors(user.role);
+    const colors = getAvatarColors(user?.role);
     return (
       <Avatar sx={{ width: size, height: size, bgcolor: colors.bg, color: colors.text, fontWeight: 700 }}>
-        {user.full_name?.charAt(0) || <PersonOutlineIcon />}
+        {user?.full_name?.charAt(0) || <PersonOutlineIcon />}
       </Avatar>
     );
   };
@@ -479,7 +488,6 @@ const ManageAccount = () => {
           )}
         </>
       ) : (
-        /* ROLE REQUEST SECTION - UNCHANGED DESIGN */
         <>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
             <TextField placeholder="Search by name or email..." size="medium" fullWidth={isMobile} value={requestSearch} onChange={(e) => setRequestSearch(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
@@ -560,6 +568,7 @@ const ManageAccount = () => {
       )}
 
       {/* --- ALL MODALS --- */}
+      {/* Delete Confirmation Dialog */}
       <Dialog open={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 3, p: 1, width: '400px' } }}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}> <WarningAmberIcon color="error" /> Confirm Deletion </DialogTitle>
         <DialogContent> <DialogContentText sx={{ fontWeight: 500 }}> Delete <b>{selectedUser?.full_name}</b>? This cannot be undone. </DialogContentText> </DialogContent>
@@ -569,6 +578,7 @@ const ManageAccount = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Reject Request Modal */}
       <ActionModal open={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Role Request" onConfirm={handleRejectRole} confirmText={loading ? "Rejecting..." : "Confirm Reject"}>
         <Stack spacing={2} sx={{ mt: 2 }}>
           <Typography variant="body2" color="text.secondary">Provide a reason for rejecting the request from <b>{selectedRequest?.profiles?.full_name}</b>:</Typography>
@@ -576,56 +586,42 @@ const ManageAccount = () => {
         </Stack>
       </ActionModal>
 
+      {/* Create Account Modal */}
       <ActionModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Account" onConfirm={handleCreateAccount} confirmText={loading ? "Creating..." : "Create Account"}>
         <Stack spacing={2} sx={{ mt: 2 }}>
-          <FormInput label="Full Name" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          <FormInput label="ID Number (Student/Staff)" value={formData.idNumber} onChange={(e) => setFormData({...formData, idNumber: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          
-          <FormInput select label="Department" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
-            {departments.map((dept) => (
-              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
-            ))}
-          </FormInput>
-
-          {/* YEAR LEVEL DROPDOWN IN CREATE */}
-          <FormInput select label="Year Level" value={formData.yearLevel} onChange={(e) => setFormData({...formData, yearLevel: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
-            {yearLevels.map((year) => (
-              <MenuItem key={year} value={year}>{year}</MenuItem>
-            ))}
-          </FormInput>
-
-          <FormInput label="Email" placeholder="example@goldenlink.ph" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} InputProps={{ startAdornment: <EmailIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          <FormInput label="Default Password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} InputProps={{ startAdornment: <KeyIcon sx={{ mr: 1, opacity: 0.7 }} />, endAdornment: ( <InputAdornment position="end"> <IconButton onClick={() => setShowPassword(!showPassword)} edge="end"> {showPassword ? <VisibilityOff /> : <Visibility />} </IconButton> </InputAdornment> ) }} />
-          <TextField select label="Role" fullWidth value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})}>
-            <MenuItem value="superadmin">Superadmin</MenuItem>
-            <MenuItem value="admin">Admin</MenuItem>
+          <TextField fullWidth label="Full Name" value={formData.fullName} onChange={(e) => setFormData({ ...formData, fullName: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><BadgeIcon color="primary" /></InputAdornment>) }} />
+          <TextField fullWidth label="Email (@goldenlink.ph)" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><EmailIcon color="primary" /></InputAdornment>) }} />
+          <TextField fullWidth type={showPassword ? 'text' : 'password'} label="Password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><KeyIcon color="primary" /></InputAdornment>), endAdornment: (<InputAdornment position="end"><IconButton onClick={() => setShowPassword(!showPassword)} edge="end">{showPassword ? <VisibilityOff /> : <Visibility />}</IconButton></InputAdornment>) }} />
+          <TextField fullWidth label="ID Number" value={formData.idNumber} onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><FingerprintIcon color="primary" /></InputAdornment>) }} />
+          <TextField select fullWidth label="Department" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><BusinessIcon color="primary" /></InputAdornment>) }}>
+            {departments.map((dept) => (<MenuItem key={dept} value={dept}>{dept}</MenuItem>))}
+          </TextField>
+          <TextField select fullWidth label="Year Level" value={formData.yearLevel} onChange={(e) => setFormData({ ...formData, yearLevel: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><SchoolIcon color="primary" /></InputAdornment>) }}>
+            {yearLevels.map((lvl) => (<MenuItem key={lvl} value={lvl}>{lvl}</MenuItem>))}
+          </TextField>
+          <TextField select fullWidth label="Role" value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })}>
             <MenuItem value="client">Client</MenuItem>
+            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="superadmin">Superadmin</MenuItem>
           </TextField>
         </Stack>
       </ActionModal>
 
-      <ActionModal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Account" onConfirm={handleUpdateAccount} confirmText={loading ? "Saving..." : "Update"}>
+      {/* Edit Account Modal */}
+      <ActionModal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Account" onConfirm={handleUpdateAccount} confirmText={loading ? "Saving..." : "Save Changes"}>
         <Stack spacing={2} sx={{ mt: 2 }}>
-          <FormInput label="Full Name" value={editData.fullName} onChange={(e) => setEditData({...editData, fullName: e.target.value})} />
-          <FormInput label="ID Number" value={editData.idNumber} onChange={(e) => setEditData({...editData, idNumber: e.target.value})} />
-          
-          <FormInput select label="Department" value={editData.department} onChange={(e) => setEditData({...editData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
-            {departments.map((dept) => (
-              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
-            ))}
-          </FormInput>
-
-          {/* YEAR LEVEL DROPDOWN IN EDIT */}
-          <FormInput select label="Year Level" value={editData.yearLevel} onChange={(e) => setEditData({...editData, yearLevel: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
-            {yearLevels.map((year) => (
-              <MenuItem key={year} value={year}>{year}</MenuItem>
-            ))}
-          </FormInput>
-
-          <TextField select label="Role" fullWidth value={editData.role} onChange={(e) => setEditData({...editData, role: e.target.value})}>
-            <MenuItem value="superadmin">Superadmin</MenuItem>
-            <MenuItem value="admin">Admin</MenuItem>
+          <TextField fullWidth label="Full Name" value={editData.fullName} onChange={(e) => setEditData({ ...editData, fullName: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><BadgeIcon color="primary" /></InputAdornment>) }} />
+          <TextField fullWidth label="ID Number" value={editData.idNumber} onChange={(e) => setEditData({ ...editData, idNumber: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><FingerprintIcon color="primary" /></InputAdornment>) }} />
+          <TextField select fullWidth label="Department" value={editData.department} onChange={(e) => setEditData({ ...editData, department: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><BusinessIcon color="primary" /></InputAdornment>) }}>
+            {departments.map((dept) => (<MenuItem key={dept} value={dept}>{dept}</MenuItem>))}
+          </TextField>
+          <TextField select fullWidth label="Year Level" value={editData.yearLevel} onChange={(e) => setEditData({ ...editData, yearLevel: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><SchoolIcon color="primary" /></InputAdornment>) }}>
+            {yearLevels.map((lvl) => (<MenuItem key={lvl} value={lvl}>{lvl}</MenuItem>))}
+          </TextField>
+          <TextField select fullWidth label="Role" value={editData.role} onChange={(e) => setEditData({ ...editData, role: e.target.value })}>
             <MenuItem value="client">Client</MenuItem>
+            <MenuItem value="admin">Admin</MenuItem>
+            <MenuItem value="superadmin">Superadmin</MenuItem>
           </TextField>
         </Stack>
       </ActionModal>

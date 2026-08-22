@@ -42,7 +42,7 @@ const AdminLayout = () => {
         display: 'flex', 
         minHeight: '100vh', 
         bgcolor: theme.palette.mode === 'dark' ? '#0f172a' : '#ffffff',
-        zoom: '80%' // Viewpoint distance adjustment
+        zoom: '90%' // Viewpoint distance adjustment
       }}
     >
       

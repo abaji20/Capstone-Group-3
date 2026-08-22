@@ -37,7 +37,7 @@ const ClientLayout = () => {
         flexDirection: 'column',
         minHeight: '100vh', 
         bgcolor: theme.palette.mode === 'dark' ? '#0f172a' : '#f8fafc',
-        zoom: '80%' // Viewpoint zoom set to 80%
+        zoom: '90%' // Viewpoint zoom set to 80%
       }}
     >
       <ClientTopbar />

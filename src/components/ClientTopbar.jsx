@@ -3,22 +3,22 @@ import {
   AppBar, Toolbar, Box, Avatar, Typography, ButtonBase, Menu, MenuItem, 
   ListItemIcon, Divider, IconButton, useTheme, Drawer, List, ListItem, 
   ListItemText, useMediaQuery, Switch, ListItemButton, Stack, Snackbar, Alert,
-  FormControl, InputLabel, Select, TextField
+  FormControl, InputLabel, Select, TextField, Button
 } from '@mui/material';
 import { 
   LockReset, Brightness4 as Brightness4Icon, 
   Brightness7 as Brightness7Icon, Menu as MenuIcon,
-  AccountCircle as AccountCircleIcon, Logout as LogoutIcon,
-  Person as PersonIcon, Business as BusinessIcon, 
-  Fingerprint as FingerprintIcon, Download as DownloadIcon,
-  AssignmentInd as AssignmentIndIcon, ChatBubbleOutline as ChatIcon
+  AccountCircle as AccountCircleIcon,
+  Person as PersonIcon, Download as DownloadIcon,
+  AssignmentInd as AssignmentIndIcon, ChatBubbleOutline as ChatIcon,
+  Cancel as CancelIcon
 } from '@mui/icons-material';
 import { supabase } from '../supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { navLinks } from '../navConfig';
 import { LogoutButton, ActionModal, FormInput } from '../shared';
 import logo from '../assets/logo.png'; 
-import nonamelogo from '../assets/nonamelogo.png'; 
+import nonamelogo from '../assets/glclogo.png'; 
 import { ColorModeContext } from '../App';
 
 const expandedWidth = 280;
@@ -41,7 +41,6 @@ const ClientTopbar = () => {
   const [username, setUsername] = useState('Loading...');
   
   // Lists for Dropdowns
-  const departments = ["BSIT", "BSBA", "BSAIS", "BSENG", "BEED", "BSMATH", "BSSCI", "BSPSYCH"];
   const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 
   const [userData, setUserData] = useState({ 
@@ -52,6 +51,7 @@ const ClientTopbar = () => {
     role: '',
     year_level: '' 
   });
+  const [initialUserData, setInitialUserData] = useState({ full_name: '', year_level: '' });
   const [requestData, setRequestData] = useState({ role: '', reason: '' });
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -72,10 +72,11 @@ const ClientTopbar = () => {
       if (data) {
         setUsername(data.full_name);
         setUserData(data);
+        setInitialUserData({ full_name: data.full_name || '', year_level: data.year_level || '' });
 
         const { data: lastRequest } = await supabase
           .from('role_requests')
-          .select('status, remarks, requested_role')
+          .select('id, status, remarks, requested_role')
           .eq('requested_by', user.id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -83,6 +84,8 @@ const ClientTopbar = () => {
         
         if (lastRequest) {
           setLatestRequest(lastRequest);
+        } else {
+          setLatestRequest(null);
         }
       }
     }
@@ -92,21 +95,27 @@ const ClientTopbar = () => {
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
-  };
-
   const handleUpdateProfile = async () => {
     setLoading(true);
     
-    // 1. UPDATE PROFILE (Including Year Level)
+    // Track exact field modifications
+    let changes = [];
+    if (userData.full_name !== initialUserData.full_name) {
+      changes.push(`name from "${initialUserData.full_name || 'N/A'}" to "${userData.full_name}"`);
+    }
+    if (userData.year_level !== initialUserData.year_level) {
+      changes.push(`year level from "${initialUserData.year_level || 'N/A'}" to "${userData.year_level}"`);
+    }
+
+    const changeDescription = changes.length > 0 
+      ? `Updated ${changes.join(' & ')}` 
+      : 'Updated profile info';
+
+    // 1. UPDATE PROFILE
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ 
         full_name: userData.full_name, 
-        department: userData.department, 
-        id_number: userData.id_number,
         year_level: userData.year_level
       })
       .eq('id', userData.id);
@@ -117,17 +126,17 @@ const ClientTopbar = () => {
       return;
     }
 
-    // 2. INSERT ACTIVITY LOG
+    // 2. INSERT DETAILED AUDIT LOG
     const { error: logError } = await supabase
-      .from('activity_logs')
+      .from('audit_logs')
       .insert([{
         user_id: userData.id,
-        action: 'Update Profile',
-        details: `Client updated profile info: ${userData.full_name}`,
+        action_type: 'Edit Profile',
+        description: changeDescription,
         created_at: new Date().toISOString()
       }]);
 
-    if (logError) console.error("Activity Log Error:", logError);
+    if (logError) console.error("Audit Log Error:", logError);
 
     // 3. ROLE REQUEST LOGIC
     if (requestData.role) {
@@ -152,8 +161,37 @@ const ClientTopbar = () => {
     }
 
     setUsername(userData.full_name);
+    setInitialUserData({ full_name: userData.full_name, year_level: userData.year_level });
     setIsProfileModalOpen(false);
     setRequestData({ role: '', reason: '' }); 
+    setLoading(false);
+  };
+
+  // FUNCTION PARA I-CANCEL ANG ROLE REQUEST
+  const handleCancelRequest = async () => {
+    if (!latestRequest) return;
+    setLoading(true);
+
+    const { error } = await supabase
+      .from('role_requests')
+      .update({ status: 'cancelled' })
+      .eq('id', latestRequest.id);
+
+    if (error) {
+      setNotify({ open: true, message: 'Failed to cancel role request!', severity: 'error' });
+    } else {
+      await supabase.from('audit_logs').insert([{
+        user_id: userData.id,
+        action_type: 'Cancel Role Request',
+        description: `Cancelled request for role: ${latestRequest.requested_role}`,
+        created_at: new Date().toISOString()
+      }]);
+
+      setNotify({ open: true, message: 'Role request cancelled successfully!', severity: 'success' });
+      setLatestRequest(null);
+      setRequestData({ role: '', reason: '' });
+      fetchUser();
+    }
     setLoading(false);
   };
 
@@ -200,10 +238,7 @@ const ClientTopbar = () => {
         })}
       </List>
       <Box sx={{ p: 2, mt: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <ListItemButton onClick={handleLogout} sx={{ borderRadius: '8px', color: '#ff5252' }}>
-          <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}><LogoutIcon fontSize="small" /></ListItemIcon>
-          <ListItemText primary="Logout" primaryTypographyProps={{ fontWeight: 600, fontSize: '0.85rem' }} />
-        </ListItemButton>
+        <LogoutButton fullWidth sx={{ color: '#ff5252', borderColor: 'rgba(255,82,82,0.3)' }} />
       </Box>
     </Box>
   );
@@ -230,8 +265,8 @@ const ClientTopbar = () => {
                 <MenuIcon fontSize="medium" />
               </IconButton>
             )}
-            <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: { xs: 1, md: 0 } }} onClick={() => navigate('/')}>
-              <Box component="img" src={nonamelogo} sx={{ height: { xs: 30, md: 50 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: { xs: 2, md: 2 } }} onClick={() => navigate('/')}>
+              <Box component="img" src={nonamelogo} sx={{ height: { xs: 30, md: 60 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} />
               <Typography fontFamily="Paytone One" sx={{ fontStyle: 'italic', fontWeight: 200, color: 'white', fontSize: { xs: '0.85rem', sm: '1.1rem', md: '1.25rem' }, letterSpacing: { xs: 1, md: 2 }, display: 'block', whiteSpace: 'nowrap', textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}>
                 Library Repository
               </Typography>
@@ -297,7 +332,9 @@ const ClientTopbar = () => {
             </MenuItem>
 
             <Divider />
-            <Box sx={{ p: 1.5 }}><LogoutButton fullWidth /></Box>
+            <Box sx={{ p: 1.5 }}>
+              <LogoutButton fullWidth />
+            </Box>
           </Menu>
         </Toolbar>
       </AppBar>
@@ -305,20 +342,8 @@ const ClientTopbar = () => {
       <ActionModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} title="Edit User Information" onConfirm={handleUpdateProfile} confirmText={loading ? "Saving..." : "Save Changes"}>
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          
-          <FormInput 
-            select 
-            label="Department" 
-            value={userData.department} 
-            onChange={(e) => setUserData({...userData, department: e.target.value})} 
-            InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
-          >
-            {departments.map((dept) => (
-              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
-            ))}
-          </FormInput>
 
-          {/* Year Level Dropdown Added Here */}
+          {/* Year Level Dropdown */}
           <FormInput 
             select 
             label="Year Level" 
@@ -331,8 +356,6 @@ const ClientTopbar = () => {
             ))}
           </FormInput>
 
-          <FormInput label="Student / Staff Number" value={userData.id_number} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-
           {latestRequest?.status === 'rejected' && (
             <Alert severity="error" variant="outlined" sx={{ borderRadius: '8px', borderLeft: '5px solid' }}>
               <Typography variant="caption" sx={{ fontWeight: 900, display: 'block', textTransform: 'uppercase' }}>Request Rejected ({latestRequest.requested_role})</Typography>
@@ -341,36 +364,66 @@ const ClientTopbar = () => {
           )}
 
           {latestRequest?.status === 'pending' && (
-            <Alert severity="info" variant="outlined" sx={{ borderRadius: '8px' }}>
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>Request for <b>{latestRequest.requested_role}</b> is pending review.</Typography>
+            <Alert 
+              severity="info" 
+              variant="outlined" 
+              sx={{ 
+                borderRadius: '8px', 
+                alignItems: 'center',
+                '& .MuiAlert-message': { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 } 
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                Request for <b>{latestRequest.requested_role}</b> is pending review.
+              </Typography>
+              <Button 
+                size="small"
+                variant="contained"
+                color="error"
+                startIcon={<CancelIcon />}
+                onClick={handleCancelRequest}
+                disabled={loading}
+                sx={{ 
+                  borderRadius: '6px', 
+                  fontSize: '0.75rem', 
+                  fontWeight: 700,
+                  textTransform: 'none'
+                }}
+              >
+                Cancel Request
+              </Button>
             </Alert>
           )}
 
-          <Divider sx={{ my: 1 }}><Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', px: 1 }}>ROLE REQUEST</Typography></Divider>
-          
-          <Stack spacing={2}>
-            <FormControl fullWidth variant="outlined" size="small">
-              <InputLabel sx={{ color: 'text.secondary', fontWeight: 600 }}>Request Access Level</InputLabel>
-              <Select
-                value={requestData.role}
-                label="Request Access Level"
-                onChange={(e) => setRequestData({...requestData, role: e.target.value})}
-                startAdornment={<AssignmentIndIcon sx={{ mr: 1, opacity: 0.7, fontSize: 20 }} />}
-                sx={{ borderRadius: '8px', fontWeight: 700, color: theme.palette.text.primary }}
-              >
-                <MenuItem value="" sx={{ fontWeight: 600 }}>None</MenuItem>
-                <MenuItem value="admin" sx={{ fontWeight: 600 }}>Admin</MenuItem>
-                <MenuItem value="superadmin" sx={{ fontWeight: 600 }}>Superadmin</MenuItem>
-              </Select>
-            </FormControl>
+          {!latestRequest || latestRequest?.status !== 'pending' ? (
+            <>
+              <Divider sx={{ my: 1 }}><Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', px: 1 }}>ROLE REQUEST</Typography></Divider>
+              
+              <Stack spacing={2}>
+                <FormControl fullWidth variant="outlined" size="small">
+                  <InputLabel sx={{ color: 'text.secondary', fontWeight: 600 }}>Request Access Level</InputLabel>
+                  <Select
+                    value={requestData.role}
+                    label="Request Access Level"
+                    onChange={(e) => setRequestData({...requestData, role: e.target.value})}
+                    startAdornment={<AssignmentIndIcon sx={{ mr: 1, opacity: 0.7, fontSize: 20 }} />}
+                    sx={{ borderRadius: '8px', fontWeight: 700, color: theme.palette.text.primary }}
+                  >
+                    <MenuItem value="" sx={{ fontWeight: 600 }}>None</MenuItem>
+                    <MenuItem value="admin" sx={{ fontWeight: 600 }}>Admin</MenuItem>
+                    <MenuItem value="superadmin" sx={{ fontWeight: 600 }}>Superadmin</MenuItem>
+                  </Select>
+                </FormControl>
 
-            {requestData.role && (
-              <TextField
-                fullWidth multiline rows={2} label="Reason for Request" placeholder="Briefly explain why you need this role..." value={requestData.reason} onChange={(e) => setRequestData({...requestData, reason: e.target.value})} InputProps={{ startAdornment: <ChatIcon sx={{ mr: 1, mt: 1, opacity: 0.7, alignSelf: 'flex-start' }} /> }}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' }, '& .MuiInputLabel-root': { fontWeight: 600 } }}
-              />
-            )}
-          </Stack>
+                {requestData.role && (
+                  <TextField
+                    fullWidth multiline rows={2} label="Reason for Request" placeholder="Briefly explain why you need this role..." value={requestData.reason} onChange={(e) => setRequestData({...requestData, reason: e.target.value})} InputProps={{ startAdornment: <ChatIcon sx={{ mr: 1, mt: 1, opacity: 0.7, alignSelf: 'flex-start' }} /> }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' }, '& .MuiInputLabel-root': { fontWeight: 600 } }}
+                  />
+                )}
+              </Stack>
+            </>
+          ) : null}
         </Stack>
       </ActionModal>
 

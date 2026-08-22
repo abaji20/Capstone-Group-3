@@ -37,7 +37,7 @@ const SuperAdminLayout = () => {
   }, [navigate]);
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: theme.palette.mode === 'dark' ? '#0f172a' : '#ffffff', zoom: '85%' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: theme.palette.mode === 'dark' ? '#0f172a' : '#ffffff', zoom: '90%' }}>
 
       {/* Mobile Top Bar */}
       <AppBar 

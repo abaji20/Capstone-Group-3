@@ -1,18 +1,19 @@
 import React, { useState, useContext } from 'react';
 import { 
   Box, Paper, TextField, Button, Typography, Container, 
-  InputAdornment, IconButton, Avatar, Alert, Collapse, useTheme, Tooltip, Link 
+  InputAdornment, IconButton, Alert, Collapse, useTheme, Tooltip, Link,
+  Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import { 
-  Visibility, VisibilityOff, Email, Lock, Brightness4, Brightness7 
+  Visibility, VisibilityOff, Email, Lock, Brightness4, Brightness7, Close 
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 import { ColorModeContext } from '../../App'; 
-import logo from '../../assets/logo.png'; 
-import coverlogin from '../../assets/coverlogin.png'; 
-import clientbackground from '../../assets/clientbackground.png'; 
+import glcBG from '../../assets/glcBG.jpg';
+import libraryBG from '../../assets/libraryBG.jpg';
+import glclogo from '../../assets/glclogo.png';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -21,11 +22,24 @@ const Login = () => {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null); 
   const [loading, setLoading] = useState(false);
+
+  // Modal State
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalType, setModalType] = useState('privacy'); // 'privacy' or 'terms'
   
   const theme = useTheme();
   const navigate = useNavigate();
   const isDarkMode = theme.palette.mode === 'dark';
   const { toggleColorMode } = useContext(ColorModeContext);
+
+  const handleOpenModal = (type) => {
+    setModalType(type);
+    setModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+  };
 
   const handleSignIn = async (e) => {
     e.preventDefault();
@@ -90,18 +104,17 @@ const Login = () => {
   };
 
   const dynamicPageBg = isDarkMode 
-    ? `linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%), url(${clientbackground})` 
-    : `linear-gradient(135deg, rgba(2, 91, 180, 0.8) 0%, rgba(226, 232, 240, 0.8) 100%), url(${clientbackground})`;
+    ? `linear-gradient(rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.88)), url(${glcBG})` 
+    : `linear-gradient(rgba(15, 23, 42, 0.65), rgba(15, 23, 42, 0.65)), url(${glcBG})`;
 
- return (
+  return (
     <Box sx={{ 
       minHeight: '100vh', 
       display: 'flex', 
       alignItems: 'center', 
       justifyContent: 'center', 
-      p: 2, 
-      // Background settings to ensure the image covers the page and stays fixed
-      background: dynamicPageBg,
+      p: { xs: 2, md: 4 }, 
+      backgroundImage: dynamicPageBg,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
       backgroundAttachment: 'fixed',
@@ -109,192 +122,330 @@ const Login = () => {
       transition: 'background 0.3s ease'
     }}>
 
-      
-    
+      {/* DESKTOP-ONLY LOGO (Top-Left, Outside Box) */}
+      <Box 
+        component="img" 
+        src={glclogo} 
+        alt="GLC Logo" 
+        sx={{ 
+          position: 'absolute', 
+          top: { md: 24 }, 
+          left: { md: 32 }, 
+          width: 95, 
+          height: 'auto',
+          filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.4))',
+          zIndex: 10,
+          display: { xs: 'none', md: 'block' }
+        }} 
+      />
+
       {/* Darkmode Toggle */}
-      <Box sx={{ position: 'absolute', top: 20, right: 20 }}>
+      <Box sx={{ position: 'absolute', top: 20, right: 20, zIndex: 10 }}>
         <Tooltip title={`Switch to ${isDarkMode ? 'Light' : 'Dark'} Mode`}>
           <IconButton onClick={toggleColorMode} sx={{ 
-              bgcolor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-              color: isDarkMode ? '#ffb74d' : '#1e293b',
+              bgcolor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)',
+              color: isDarkMode ? '#ffb74d' : '#ffffff',
+              backdropFilter: 'blur(10px)',
+              '&:hover': { bgcolor: isDarkMode ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.3)' }
           }}>
             {isDarkMode ? <Brightness7 /> : <Brightness4 />}
           </IconButton>
         </Tooltip>
       </Box>
 
-      {/* MAIN CONTAINER */}
-      <Container maxWidth="md" sx={{ display: 'flex', justifyContent: 'center' }}>
+      {/* MAIN CONTAINER - EXPANDED TO 'lg' */}
+      <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'center' }}>
         <Paper 
-          elevation={isDarkMode ? 0 : 12}
+          elevation={isDarkMode ? 0 : 20}
           sx={{ 
             display: 'flex',
             width: '100%',
+            maxWidth: '1000px', // Pinalaki ang width ng card
             overflow: 'hidden',
-            borderRadius: { xs: 1, sm: 4 },
-            bgcolor: isDarkMode ? 'rgba(32, 45, 62, 0.9)' : '#ffffff', 
-            backdropFilter: isDarkMode ? 'blur(10px)' : 'none',
+            borderRadius: { xs: 3, sm: 5 },
+            bgcolor: isDarkMode ? 'rgba(30, 41, 59, 0.95)' : '#ffffff', 
+            backdropFilter: 'blur(12px)',
             border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
           }}
         >
-          {/* LEFT SIDE: COVER IMAGE */}
+          {/* LEFT SIDE: COVER IMAGE BANNER */}
           <Box sx={{ 
-            flex: 1.1, 
+            flex: 1.2, 
             display: { xs: 'none', md: 'flex' }, 
             flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
+            justifyContent: 'flex-end',
+            p: 5,
             position: 'relative',
-            bgcolor: '#1e293b',
+            backgroundImage: `linear-gradient(to top, rgba(15, 23, 42, 0.92) 0%, rgba(15, 23, 42, 0.2) 60%), url(${libraryBG})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
             overflow: 'hidden'
           }}>
-            {isDarkMode && (
-              <Box sx={{
-                position: 'absolute',
-                top: -20,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                background: 'conic-gradient(from 180deg at 100% 0%, rgba(0, 0, 0, 0.1) 0%, rgba(255, 255, 255, 0.49) 10%, rgba(0, 0, 0, 0.1) 20%, transparent 40%)',
-                filter: 'blur(25px)', 
-                width: '100%',
-                height: '100%',
-                zIndex: 2,
-                pointerEvents: 'none',
-                maskImage: 'linear-gradient(to bottom, black 50%, transparent 90%)',
-                WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 90%)'
-              }} />
-            )}
-
-            <Box
-              component="img"
-              src={coverlogin}
-              alt="Library Cover"
-              sx={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                position: 'absolute',
-                opacity: isDarkMode ? 0.5 : 0.9,
-                zIndex: 1
-              }}
-            />
+            <Box sx={{ position: 'relative', zIndex: 2, color: 'white' }}>
+              <Typography variant="h4" sx={{ fontWeight: 500, fontFamily: 'Paytone One, sans-serif', letterSpacing: 1 }}>
+                Library Repository
+              </Typography>
+              <Typography variant="body1" sx={{ opacity: 0.85, mt: 1, fontWeight: 500 }}>
+                Golden Link College Web-based Library Repository System
+              </Typography>
+            </Box>
           </Box>
 
           {/* RIGHT SIDE: LOGIN FORM */}
           <Box 
             sx={{ 
               flex: 1,
-              minHeight: { xs: 'auto', sm: '580px' }, 
+              minHeight: { xs: 'auto', sm: '620px' }, // Pinalaki ang vertical height
               p: { xs: 4, sm: 6 }, 
               display: 'flex', 
               flexDirection: 'column', 
-              justifyContent: 'center', 
+              justifyContent: 'space-between', 
               alignItems: 'center', 
             }}
           >
-              
-            
-            <Typography 
-              variant="h4" 
-              sx={{ 
-                mt: 2,
-                mb: 1, 
-                fontWeight: 600, 
-                color: isDarkMode ? '#f8fafc' : '#002c72', 
-                fontFamily: "monserrat, sans-serif",
-                letterSpacing: '2px',
-                textAlign: 'center',
-                fontSize: { xs: '1.25rem', sm: '1.8rem' }
-              }}
-            >
-              Sign In
-            </Typography>
-            
-            <Collapse in={!!error} sx={{ width: '100%', mb: 2 }}>
-              <Alert severity="error" variant="outlined" onClose={() => setError(null)} sx={{ borderRadius: 2 }}>
-                {error}
-              </Alert>
-            </Collapse>
-
-            <Collapse in={!!message} sx={{ width: '100%', mb: 2 }}>
-              <Alert severity="success" variant="outlined" onClose={() => setMessage(null)} sx={{ borderRadius: 2 }}>
-                {message}
-              </Alert>
-            </Collapse>
-
-            <form onSubmit={handleSignIn} style={{ width: '100%' }}>
-              <TextField 
-                margin="normal" required fullWidth label="Email" 
-                variant="outlined"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)} 
-                InputProps={{ 
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Email sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />
-                    </InputAdornment>
-                  ) 
-                }} 
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
-              />
-              
-              <TextField 
-                margin="normal" required fullWidth label="Password" 
-                variant="outlined"
-                type={showPassword ? 'text' : 'password'} 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)} 
-                InputProps={{ 
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Lock sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />
-                    </InputAdornment>
-                  ), 
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    </InputAdornment>
-                  )
-                }} 
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+            <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              {/* MOBILE-ONLY LOGO */}
+              <Box
+                component="img"
+                src={glclogo}
+                alt="GLC Logo Mobile"
+                sx={{
+                  width: 75,
+                  height: 'auto',
+                  mb: 1.5,
+                  filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))',
+                  display: { xs: 'block', md: 'none' }
+                }}
               />
 
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-                <Link
-                  component="button"
-                  type="button"
-                  variant="body2"
-                  onClick={handleForgotPassword}
-                  sx={{ 
-                    fontWeight: 600, 
-                    textDecoration: 'none', 
-                    color: isDarkMode ? '#38bdf8' : '#1976d2',
-                    '&:hover': { textDecoration: 'underline' }
-                  }}
-                >
-                  Forgot Password?
-                </Link>
-              </Box>
-              
-              <Button 
-                type="submit" fullWidth variant="contained" 
-                disabled={loading}
+              {/* BLUE SIGN IN TITLE */}
+              <Typography 
+                variant="h4" 
                 sx={{ 
-                  mt: 4, py: 1.8, 
-                  backgroundColor: isDarkMode ? '#38bdf8' : '#1976d2', 
-                  fontWeight: 800, borderRadius: 2, 
-                  boxShadow: isDarkMode ? '0 10px 15px -3px rgba(56, 189, 248, 0.3)' : '0 10px 15px -3px rgba(25, 118, 210, 0.3)',
-                  '&:hover': { backgroundColor: isDarkMode ? '#0ea5e9' : '#1565c0', transform: 'translateY(-1px)' },
+                  mt: 1,
+                  mb: 1, 
+                  fontWeight: 800, 
+                  color: isDarkMode ? '#38bdf8' : '#1e40af', 
+                  textAlign: 'center',
+                  fontSize: { xs: '1.6rem', sm: '2rem' }
                 }}
               >
-                {loading ? "AUTHENTICATING..." : "LOGIN"}
-              </Button>
-            </form>
+                Sign In
+              </Typography>
+
+              <Typography 
+                variant="body2" 
+                sx={{ color: 'text.secondary', mb: 3, textAlign: 'center', fontWeight: 500 }}
+              >
+                Enter your college credentials to proceed
+              </Typography>
+              
+              <Collapse in={!!error} sx={{ width: '100%', mb: 2 }}>
+                <Alert severity="error" variant="outlined" onClose={() => setError(null)} sx={{ borderRadius: 2 }}>
+                  {error}
+                </Alert>
+              </Collapse>
+
+              <Collapse in={!!message} sx={{ width: '100%', mb: 2 }}>
+                <Alert severity="success" variant="outlined" onClose={() => setMessage(null)} sx={{ borderRadius: 2 }}>
+                  {message}
+                </Alert>
+              </Collapse>
+
+              <form onSubmit={handleSignIn} style={{ width: '100%' }}>
+                <TextField 
+                  margin="normal" required fullWidth label="Email" 
+                  variant="outlined"
+                  placeholder="username@goldenlink.ph"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)} 
+                  InputProps={{ 
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Email sx={{ color: '#213C51', fontSize: '1.2rem' }} />
+                      </InputAdornment>
+                    ) 
+                  }} 
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+                />
+                
+                <TextField 
+                  margin="normal" required fullWidth label="Password" 
+                  variant="outlined"
+                  type={showPassword ? 'text' : 'password'} 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)} 
+                  InputProps={{ 
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Lock sx={{ color: '#213C51', fontSize: '1.2rem' }} />
+                      </InputAdornment>
+                    ), 
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }} 
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+                />
+
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                  <Link
+                    component="button"
+                    type="button"
+                    variant="body2"
+                    onClick={handleForgotPassword}
+                    sx={{ 
+                      fontWeight: 700, 
+                      textDecoration: 'none', 
+                      color: isDarkMode ? '#38bdf8' : '#213C51',
+                      '&:hover': { textDecoration: 'underline' }
+                    }}
+                  >
+                    Forgot Password?
+                  </Link>
+                </Box>
+                
+                <Button 
+                  type="submit" fullWidth variant="contained" 
+                  disabled={loading}
+                  sx={{ 
+                    mt: 3, py: 1.6, 
+                    backgroundColor: '#213C51', 
+                    color: '#ffffff',
+                    fontWeight: 800, 
+                    borderRadius: 2.5, 
+                    fontSize: '0.95rem',
+                    textTransform: 'none',
+                    boxShadow: '0 10px 15px -3px rgba(33, 60, 81, 0.3)',
+                    '&:hover': { backgroundColor: '#182d3e', transform: 'translateY(-1px)' },
+                  }}
+                >
+                  {loading ? "AUTHENTICATING..." : "LOGIN"}
+                </Button>
+              </form>
+            </Box>
+
+            {/* PRIVACY POLICY & TERMS LINKS AT THE BOTTOM OF THE BOX */}
+            <Box sx={{ mt: 4, textAlign: 'center' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                By signing in, you agree to Golden Link College Policies.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center' }}>
+                <Link
+                  component="button"
+                  variant="caption"
+                  onClick={() => handleOpenModal('privacy')}
+                  sx={{ 
+                    color: isDarkMode ? '#94a3b8' : '#64748b', 
+                    fontWeight: 600, 
+                    textDecoration: 'none',
+                    '&:hover': { textDecoration: 'underline', color: isDarkMode ? '#38bdf8' : '#1e40af' }
+                  }}
+                >
+                  Privacy Policy
+                </Link>
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>•</Typography>
+                <Link
+                  component="button"
+                  variant="caption"
+                  onClick={() => handleOpenModal('terms')}
+                  sx={{ 
+                    color: isDarkMode ? '#94a3b8' : '#64748b', 
+                    fontWeight: 600, 
+                    textDecoration: 'none',
+                    '&:hover': { textDecoration: 'underline', color: isDarkMode ? '#38bdf8' : '#1e40af' }
+                  }}
+                >
+                  Terms & Conditions
+                </Link>
+              </Box>
+            </Box>
           </Box>
         </Paper>
       </Container>
+
+      {/* POLICY & TERMS MODAL / DIALOG */}
+      <Dialog 
+        open={modalOpen} 
+        onClose={handleCloseModal}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            p: 1,
+            bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
+            color: isDarkMode ? '#f8fafc' : '#0f172a'
+          }
+        }}
+      >
+        <DialogTitle sx={{ m: 0, p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 800 }}>
+          {modalType === 'privacy' ? 'Privacy Policy' : 'Terms & Conditions'}
+          <IconButton onClick={handleCloseModal} sx={{ color: (theme) => theme.palette.grey[500] }}>
+            <Close />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent dividers sx={{ borderTop: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : undefined }}>
+          {modalType === 'privacy' ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>1. Data Collection</Typography>
+              <Typography variant="body2" color="text.secondary">
+                We collect your college email address (`@goldenlink.ph`) and login timestamps purely for authentication and administrative oversight within the Golden Link College Library Repository.
+              </Typography>
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1 }}>2. Use of Information</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Your credentials are used solely to grant access to repository documents, research papers, and institutional resources based on user roles (Student, Faculty, Admin).
+              </Typography>
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1 }}>3. Data Protection</Typography>
+              <Typography variant="body2" color="text.secondary">
+                All data is securely handled via Supabase authentication protocols. We do not sell, trade, or share your personal information with external parties.
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>1. Authorized Use</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Access to the Golden Link College Library Repository is strictly limited to active students, faculty, and authorized personnel holding a valid `@goldenlink.ph` email account.
+              </Typography>
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1 }}>2. Intellectual Property</Typography>
+              <Typography variant="body2" color="text.secondary">
+                All research, capstone papers, and digital archives contained within this repository are protected by intellectual property guidelines. Unauthorized redistribution is strictly prohibited.
+              </Typography>
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1 }}>3. Account Conduct</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Users are responsible for maintaining the confidentiality of their login details. Any unauthorized activity performed under your credentials must be reported to the system administrator immediately.
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button 
+            onClick={handleCloseModal} 
+            variant="contained" 
+            sx={{ 
+              backgroundColor: '#213C51', 
+              color: '#fff', 
+              fontWeight: 700, 
+              borderRadius: 2,
+              '&:hover': { backgroundColor: '#182d3e' }
+            }}
+          >
+            I Understand
+          </Button>
+        </DialogActions>
+      </Dialog>
+
     </Box>
   );
 };

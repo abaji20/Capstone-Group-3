@@ -98,7 +98,7 @@ const PendingActions = () => {
 
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
-      <Container maxWidth="xl">
+      <Container maxWidth="xls">
         
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
           <Box>

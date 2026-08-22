@@ -16,9 +16,10 @@ import PersonIcon from '@mui/icons-material/Person';
 import { supabase } from '../supabaseClient';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCloudArrowDown, faFilePdf } from '@fortawesome/free-solid-svg-icons';
-// Import your logo
+
+// Inimport ang glclogo bilang school logo fallback
 import logo from '../assets/logo.png'; 
-import nonamelogo from '../assets/nonamelogo.png';
+import glclogo from '../assets/glclogo.png'; 
 import clientbackground from '../assets/clientbackground.png'; 
 
 const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
@@ -28,7 +29,6 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
   if (!pdf) return null;
 
   const [open, setOpen] = useState(false);
-  // confirmOpen state is kept to avoid breaking logic, but the dialog is removed
   const [confirmOpen, setConfirmOpen] = useState(false);
   
   const coverUrl = pdf.image_url ? supabase.storage.from('pdfs').getPublicUrl(pdf.image_url).data.publicUrl : null;
@@ -122,12 +122,12 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
           }}>
             <Box 
               component="img"
-              src={nonamelogo}
+              src={glclogo}
               alt="Logo Fallback"
               sx={{ 
                 width: '65%', 
                 height: 'auto', 
-                opacity: 0.8,
+                opacity: 0.9,
                 filter: isDarkMode ? 'drop-shadow(0px 4px 10px rgba(0,0,0,0.5))' : 'none'
               }}
             />
@@ -178,8 +178,6 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
           </Button>
         </Stack>
       </Card>
-
-      {/* Confirmation Dialog removed here */}
       
       <Dialog 
         open={open} 
@@ -221,9 +219,9 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
               ) : (
                 <Box 
                   component="img"
-                  src={nonamelogo}
+                  src={glclogo}
                   alt="No Cover Fallback"
-                  sx={{ width: '70%', height: 'auto', opacity: 0.8 }}
+                  sx={{ width: '70%', height: 'auto', opacity: 0.9 }}
                 />
               )}
             </Box>

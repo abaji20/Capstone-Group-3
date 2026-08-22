@@ -197,7 +197,7 @@ const Logs = () => {
 
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
-      <Container maxWidth="xl">
+      <Container maxWidth="xls">
         <Stack 
           direction={{ xs: 'column', sm: 'row' }} 
           justifyContent="space-between" 
