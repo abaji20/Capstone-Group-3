@@ -153,7 +153,7 @@ const Login = () => {
         </Tooltip>
       </Box>
 
-      {/* MAIN CONTAINER - EXPANDED TO 'lg' */}
+      {/* MAIN CONTAINER - EXPANDED TO 'md' */}
       <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'center' }}>
         <Paper 
           elevation={isDarkMode ? 0 : 20}
@@ -183,10 +183,10 @@ const Login = () => {
             overflow: 'hidden'
           }}>
             <Box sx={{ position: 'relative', zIndex: 2, color: 'white' }}>
-              <Typography variant="h4" sx={{ fontWeight: 500, fontFamily: 'Paytone One, sans-serif', letterSpacing: 1 }}>
+              <Typography variant="h5" sx={{ fontWeight: 500, fontFamily: 'Paytone One, sans-serif', letterSpacing: 1 }}>
                 Library Repository
               </Typography>
-              <Typography variant="body1" sx={{ opacity: 0.85, mt: 1, fontWeight: 500 }}>
+              <Typography variant="body2" sx={{ opacity: 0.85, mt: 1, fontWeight: 500 }}>
                 Golden Link College Web-based Library Repository System
               </Typography>
             </Box>

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   Card, CardMedia, CardContent, Typography, Button, Box, 
-  Dialog, DialogTitle, DialogContent, DialogActions, Stack, Divider, useTheme 
+  Dialog, DialogTitle, DialogContent, DialogActions, Stack, Divider, useTheme,
+  CircularProgress
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'; 
 import DateRangeIcon from '@mui/icons-material/DateRange';
@@ -13,6 +14,8 @@ import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import TitleIcon from '@mui/icons-material/Title';
 import BookIcon from '@mui/icons-material/Book'; 
 import PersonIcon from '@mui/icons-material/Person'; 
+import DownloadForOfflineIcon from '@mui/icons-material/DownloadForOffline';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import { supabase } from '../supabaseClient';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCloudArrowDown, faFilePdf } from '@fortawesome/free-solid-svg-icons';
@@ -30,12 +33,56 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
 
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [fileSize, setFileSize] = useState('Fetching size...');
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const coverUrl = pdf.image_url ? supabase.storage.from('pdfs').getPublicUrl(pdf.image_url).data.publicUrl : null;
   const iconColor = isDarkMode ? theme.palette.primary.light : '#1976d2'; 
   const poppinsFont = { fontFamily: "'Poppins', sans-serif" };
 
   const isSmall = variant === "small";
+
+  // Utility Function para i-convert ang bytes papuntang readable format (KB, MB, GB)
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Shared function para kunin ang size ng file mula sa Supabase Storage
+  const fetchFileSize = async () => {
+    if (fileSize !== 'Fetching size...' && fileSize !== 'Unknown size') return;
+
+    try {
+      const { data } = supabase.storage.from('pdfs').getPublicUrl(pdf.file_url);
+      if (data?.publicUrl) {
+        const response = await fetch(data.publicUrl, { method: 'HEAD' });
+        const size = response.headers.get('content-length');
+        if (size) {
+          setFileSize(formatBytes(parseInt(size, 10)));
+        } else {
+          setFileSize('Unknown size');
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching file size:", err);
+      setFileSize('Unknown size');
+    }
+  };
+
+  // Kapag pinindot ang See More
+  const handleOpenInfo = () => {
+    setOpen(true);
+    fetchFileSize();
+  };
+
+  // Papasok muna sa confirmation modal bago i-download
+  const handleOpenDownloadConfirm = () => {
+    setConfirmOpen(true);
+    fetchFileSize();
+  };
 
   const handleRead = () => {
     const { data } = supabase.storage.from('pdfs').getPublicUrl(pdf.file_url);
@@ -46,6 +93,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
 
   const handleDownload = async () => {
     try {
+      setIsDownloading(true);
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
@@ -82,6 +130,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
     } catch (error) {
       console.error("Download failed:", error);
     } finally {
+      setIsDownloading(false);
       setConfirmOpen(false);
     }
   };
@@ -157,7 +206,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
             fullWidth 
             variant="outlined" 
             startIcon={<VisibilityIcon sx={{ fontSize: isSmall ? '1rem' : 'inherit' }} />} 
-            onClick={() => setOpen(true)} 
+            onClick={handleOpenInfo} 
             sx={{ fontSize: isSmall ? '0.7rem' : '0.8rem', textTransform: 'none' }}
           >
             See More
@@ -166,7 +215,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
             fullWidth 
             variant="contained" 
             startIcon={<DownloadIcon sx={{ fontSize: isSmall ? '1rem' : 'inherit' }} />} 
-            onClick={handleDownload} 
+            onClick={handleOpenDownloadConfirm} 
             sx={{ 
               fontSize: isSmall ? '0.7rem' : '0.8rem', 
               textTransform: 'none',  
@@ -179,6 +228,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
         </Stack>
       </Card>
       
+      {/* SEE MORE / DOCUMENT INFO DIALOG */}
       <Dialog 
         open={open} 
         onClose={() => setOpen(false)} 
@@ -244,6 +294,9 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
               <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <DateRangeIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Published:</strong> {pdf.published_date || 'N/A'}
               </Typography>
+              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <InsertDriveFileIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Size:</strong> {fileSize}
+              </Typography>
               
               <Divider sx={{ bgcolor: isDarkMode ? '#334155' : 'rgba(0,0,0,0.12)' }} />
               
@@ -283,6 +336,65 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)} sx={{ color: isDarkMode ? '#94a3b8' : 'inherit' }}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DOWNLOAD CONFIRMATION MODAL */}
+      <Dialog
+        open={confirmOpen}
+        onClose={() => !isDownloading && setConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2, p: 1, ...poppinsFont, bgcolor: isDarkMode ? '#0f172a' : '#fff' } }}
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}> 
+           Confirm Download
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Are you sure you want to download <strong>"{pdf.title}"</strong>?
+          </Typography>
+
+          <Box sx={{ 
+            p: 2, 
+            borderRadius: 1.5, 
+            bgcolor: isDarkMode ? '#1e293b' : '#f1f5f9',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1
+          }}>
+            <Typography variant="caption" sx={{ display: 'block' }}>
+              <strong>Author:</strong> {pdf.author || 'N/A'}
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block' }}>
+              <strong>Category / Genre:</strong> {pdf.category || 'N/A'} ({pdf.genre || 'N/A'})
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: iconColor, mt: 0.5 }}>
+              File Size: {fileSize}
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button 
+            onClick={() => setConfirmOpen(false)} 
+            disabled={isDownloading}
+            sx={{ textTransform: 'none', color: isDarkMode ? '#94a3b8' : 'text.secondary' }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDownload} 
+            variant="contained" 
+            disabled={isDownloading}
+            startIcon={isDownloading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+            sx={{ 
+              textTransform: 'none', 
+              bgcolor: isDarkMode ? '#281C59' : iconColor,
+              color: '#fff'
+            }}
+          >
+            {isDownloading ? 'Downloading...' : 'Confirm'}
+          </Button>
         </DialogActions>
       </Dialog>
     </>

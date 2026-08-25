@@ -5,13 +5,13 @@ import {
   DialogContent, DialogActions, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, IconButton, 
   LinearProgress, useMediaQuery, Card, CardContent, Divider,
-  Snackbar, Avatar, Tooltip
+  Snackbar, Avatar
 } from '@mui/material';
 import { 
   PictureAsPdf, Image as ImageIcon, Add as AddIcon, 
-  Close as CloseIcon, ErrorOutline, DeleteForever as DeleteIcon,
-  WarningAmber, Send as SendIcon, Edit as EditIcon,
-  CalendarMonth, Person, Description, Comment
+  Close as CloseIcon, ErrorOutline, Send as SendIcon, 
+  CalendarMonth, Description, Comment,
+  Info, Title, Person, Class, Category, InsertDriveFile, WarningAmber
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 import { checkDuplicate } from '../../services/pdfService'; 
@@ -30,6 +30,7 @@ const RequestUpload = () => {
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [pdfFile, setPdfFile] = useState(null);
   const [coverFile, setCoverFile] = useState(null); 
+  const [coverPreview, setCoverPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState({ open: false, type: 'success', message: '' });
   const [confirmData, setConfirmData] = useState({ open: false, record: null });
@@ -37,6 +38,7 @@ const RequestUpload = () => {
   // Dialog states
   const [cancelDialog, setCancelDialog] = useState({ open: false, record: null, processing: false });
   const [deleteRequestDialog, setDeleteRequestDialog] = useState({ open: false, record: null, reason: '', processing: false });
+  const [submitConfirmDialog, setSubmitConfirmDialog] = useState(false);
 
   const [formData, setFormData] = useState({ 
     title: '', author: '', description: '', genre: '', 
@@ -45,59 +47,70 @@ const RequestUpload = () => {
 
   // --- FETCH USER REQUESTS ---
   const fetchRequests = async () => {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    // 1. Kunin ang upload requests
-    const { data: uploadData, error: uploadError } = await supabase
-      .from('upload_requests')
-      .select('*')
-      .eq('client_id', user.id)
-      .order('created_at', { ascending: false });
+      const { data: uploadData, error: uploadError } = await supabase
+        .from('upload_requests')
+        .select('*')
+        .eq('client_id', user.id)
+        .order('created_at', { ascending: false });
 
-    if (uploadError) throw uploadError;
+      if (uploadError) throw uploadError;
 
-    // 2. Kunin ang lahat ng active PDFs para malaman kung ano na ang nadelete
-    const { data: livePdfs } = await supabase
-      .from('pdfs')
-      .select('title, author');
+      const { data: livePdfs } = await supabase
+        .from('pdfs')
+        .select('title, author');
 
-    // Gumawa ng Set para sa mabilis na pag-check (O(1) lookup)
-    const livePdfKeys = new Set(livePdfs?.map(p => `${p.title}-${p.author}`));
+      const livePdfKeys = new Set(livePdfs?.map(p => `${p.title}-${p.author}`));
 
-    // 3. Kunin ang deletion requests
-    const { data: deleteData } = await supabase
-      .from('delete_requests')
-      .select(`status, pdfs ( title, author )`)
-      .eq('requested_by', user.id);
+      const { data: deleteData } = await supabase
+        .from('delete_requests')
+        .select(`status, pdfs ( title, author )`)
+        .eq('requested_by', user.id);
 
-    // I-inject natin ang 'isDeleted' flag sa uploadData
-    const processedRequests = uploadData.map(req => ({
-      ...req,
-      // Kapag approved na pero wala na sa livePdfKeys, ibig sabihin DELETED na
-      isMissingInLibrary: req.status === 'approved' && !livePdfKeys.has(`${req.title}-${req.author}`)
-    }));
+      const processedRequests = uploadData.map(req => ({
+        ...req,
+        isMissingInLibrary: req.status === 'approved' && !livePdfKeys.has(`${req.title}-${req.author}`)
+      }));
 
-    setRequests(processedRequests);
-    
-    const statusMap = {};
-    deleteData?.forEach(d => {
-      if (d.pdfs) {
-        const key = `${d.pdfs.title}-${d.pdfs.author}`;
-        statusMap[key] = d.status;
-      }
-    });
-    setDeletionStatuses(statusMap);
+      setRequests(processedRequests);
+      
+      const statusMap = {};
+      deleteData?.forEach(d => {
+        if (d.pdfs) {
+          const key = `${d.pdfs.title}-${d.pdfs.author}`;
+          statusMap[key] = d.status;
+        }
+      });
+      setDeletionStatuses(statusMap);
 
-  } catch (error) {
-    console.error('Fetch error:', error.message);
-  } finally {
-    setLoadingRequests(false);
-  }
-};
+    } catch (error) {
+      console.error('Fetch error:', error.message);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
 
   useEffect(() => { fetchRequests(); }, []);
+
+  useEffect(() => {
+    if (coverFile) {
+      const url = URL.createObjectURL(coverFile);
+      setCoverPreview(url);
+      return () => URL.revokeObjectURL(url);
+    } else if (isEditing && editingId) {
+      const currentReq = requests.find(r => r.id === editingId);
+      if (currentReq?.cover_url) {
+        setCoverPreview(supabase.storage.from('pdfs').getPublicUrl(currentReq.cover_url).data.publicUrl);
+      } else {
+        setCoverPreview(null);
+      }
+    } else {
+      setCoverPreview(null);
+    }
+  }, [coverFile, isEditing, editingId, requests]);
 
   // --- HANDLERS ---
   const handleOpen = () => { 
@@ -139,18 +152,17 @@ const RequestUpload = () => {
   
   const resetForm = () => {
     setFormData({ title: '', author: '', description: '', genre: '', category: 'book', published_date: '', upload_reason: '' });
-    setPdfFile(null); setCoverFile(null);
+    setPdfFile(null); setCoverFile(null); setCoverPreview(null);
     setEditingId(null);
   };
 
-  // --- VALIDATION HELPERS ---
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       if (file.type !== 'application/pdf') {
         showStatus('error', 'PDF files only!');
         setPdfFile(null);
-        e.target.value = null; // reset input
+        e.target.value = null;
         return;
       }
       setPdfFile(file);
@@ -227,15 +239,15 @@ const RequestUpload = () => {
         await supabase.from('upload_requests').insert([{
           client_id: user.id, ...formData, pdf_url: pdfPath, cover_url: coverPath, status: 'pending'
         }]);
-      // --- ADDED: LOG FOR NEW REQUEST ---
+
         await supabase.from('audit_logs').insert([{
           user_id: user.id,
-          action_type: 'Request ',
+          action_type: 'Request',
           description: `User submitted a new upload request: ${formData.title}`
         }]);
       }
 
-      resetForm(); fetchRequests(); setOpen(false);
+      resetForm(); fetchRequests(); setOpen(false); setSubmitConfirmDialog(false);
       showStatus('success', 'Processed successfully!');
     } catch (error) {
       showStatus('error', error.message);
@@ -245,14 +257,12 @@ const RequestUpload = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // 1. Strict PDF Check
     if (!isEditing && !pdfFile) { showStatus('error', 'PDF required.'); return; }
     if (pdfFile && pdfFile.type !== 'application/pdf') { 
         showStatus('error', 'Only PDF files are allowed!'); 
         return; 
     }
 
-    // 2. Year Validation
     const currentYear = new Date().getFullYear();
     const inputYear = parseInt(formData.published_date);
     if (inputYear > currentYear) {
@@ -268,7 +278,8 @@ const RequestUpload = () => {
       const existing = await checkDuplicate(formData.title.trim(), formData.author.trim());
       if (existing) { setConfirmData({ open: true, record: existing }); return; }
     }
-    await performUploadOrUpdate();
+    
+    setSubmitConfirmDialog(true);
   };
 
   // --- STYLES ---
@@ -281,6 +292,21 @@ const RequestUpload = () => {
     width: isMobile ? '90px' : '110px', fontWeight: 900, borderRadius: '6px', color: 'white',
     bgcolor: status === 'approved' ? '#2e7d32' : status === 'rejected' ? '#d32f2f' : '#ed6c02'
   });
+
+  // Reusable component para sa metadata list rows gaya ng nasa image
+  const DetailRow = ({ icon, label, value }) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.4 }}>
+      <Box sx={{ color: 'primary.main', display: 'flex', alignItems: 'center' }}>
+        {icon}
+      </Box>
+      <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700, minWidth: '75px' }}>
+        {label}:
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', wordBreak: 'break-word', flex: 1 }}>
+        {value || 'N/A'}
+      </Typography>
+    </Box>
+  );
 
   const renderActionButtons = (req) => {
     const delStatus = deletionStatuses[`${req.title}-${req.author}`];
@@ -299,13 +325,7 @@ const RequestUpload = () => {
             variant="outlined" 
             size="small" 
             onClick={() => handleEditInitiate(req)} 
-            sx={{ 
-              fontWeight: 800, 
-              borderRadius: 1.5, 
-              fontSize: '0.75rem',
-              minWidth: '85px', 
-              px: 2 
-            }}
+            sx={{ fontWeight: 800, borderRadius: 1.5, fontSize: '0.75rem', minWidth: '85px', px: 2 }}
           >
             EDIT
           </Button>
@@ -315,13 +335,7 @@ const RequestUpload = () => {
             color="error" 
             size="small" 
             onClick={() => setCancelDialog({ open: true, record: req })} 
-            sx={{ 
-              fontWeight: 800, 
-              borderRadius: 1.5, 
-              fontSize: '0.75rem',  
-              minWidth: '85px', 
-              px: 2 
-            }}
+            sx={{ fontWeight: 800, borderRadius: 1.5, fontSize: '0.75rem', minWidth: '85px', px: 2 }}
           >
             CANCEL
           </Button>
@@ -516,6 +530,89 @@ const RequestUpload = () => {
           </form>
         </Dialog>
 
+        {/* --- SUBMIT CONFIRMATION DIALOG (UPDATED UI BASED ON IMAGE) --- */}
+        <Dialog 
+          open={submitConfirmDialog} 
+          onClose={() => !uploading && setSubmitConfirmDialog(false)} 
+          PaperProps={{ sx: { borderRadius: 4, maxWidth: '580px', width: '100%', p: 1 } }}
+        >
+          <DialogTitle sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1.5, fontSize: '1.25rem', pt: 2.5, px: 3 }}>
+            <Info color="primary" fontSize="medium" /> Document Info
+          </DialogTitle>
+          
+          <DialogContent sx={{ px: 3, pt: 2, pb: 1 }}>
+            <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 3, alignItems: isMobile ? 'center' : 'flex-start', mb: 3 }}>
+              {/* Cover Image Container */}
+              <Avatar 
+                variant="rounded" 
+                src={coverPreview || ''}
+                sx={{ 
+                  width: 150, 
+                  height: 190, 
+                  borderRadius: 3, 
+                  boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'action.hover'
+                }}
+              >
+                <ImageIcon sx={{ fontSize: 50, color: 'text.disabled' }} />
+              </Avatar>
+
+              {/* Vertical Metadata List */}
+              <Stack spacing={0.6} sx={{ flex: 1, width: '100%' }}>
+                <DetailRow icon={<Title fontSize="small" />} label="Title" value={formData.title} />
+                <DetailRow icon={<Person fontSize="small" />} label="Author" value={formData.author} />
+                <DetailRow icon={<Class fontSize="small" />} label="Type" value={formData.category} />
+                <DetailRow icon={<Category fontSize="small" />} label="Genre" value={formData.genre} />
+                <DetailRow icon={<CalendarMonth fontSize="small" />} label="Published" value={formData.published_date} />
+                <DetailRow icon={<InsertDriveFile fontSize="small" />} label="File" value={pdfFile ? pdfFile.name : (isEditing ? 'Attached PDF File' : 'None')} />
+              </Stack>
+            </Box>
+
+            <Divider sx={{ mb: 2 }} />
+
+            {/* Description & Upload Reason */}
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary', mb: 0.5 }}>
+                  Description
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6, fontSize: '0.875rem' }}>
+                  {formData.description || 'No description provided.'}
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary', mb: 0.5 }}>
+                  Reason for Upload
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', fontSize: '0.875rem' }}>
+                  "{formData.upload_reason || 'N/A'}"
+                </Typography>
+              </Box>
+            </Stack>
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, pb: 2.5, pt: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Button 
+              onClick={() => setSubmitConfirmDialog(false)} 
+              disabled={uploading}
+              sx={{ fontWeight: 800, color: 'text.secondary' }}
+            >
+              CLOSE
+            </Button>
+            <Button 
+              onClick={performUploadOrUpdate} 
+              variant="contained" 
+              disabled={uploading}
+              sx={{ color: '#ffffff', bgcolor: '#1e3a5f', px: 3, py: 1, fontWeight: 800, borderRadius: 2 }}
+            >
+              {uploading ? 'SUBMITTING...' : 'CONFIRM & SUBMIT'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         {/* --- CANCEL DIALOG --- */}
         <Dialog open={cancelDialog.open} onClose={() => setCancelDialog({ open: false, record: null })} PaperProps={{ sx: { borderRadius: 3 } }}>
           <DialogTitle sx={{ textAlign: 'center', fontWeight: 900 }}>Cancel Request?</DialogTitle>
@@ -547,50 +644,43 @@ const RequestUpload = () => {
           </DialogActions>
         </Dialog>
 
-        {/* --- DUPLICATE CONFIRMATION DIALOG --- */}
-        <Dialog open={confirmData.open} onClose={() => setConfirmData({ open: false, record: null })} PaperProps={{ sx: { borderRadius: 4, maxWidth: '500px' } }}>
-          <DialogTitle sx={{ fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
+        {/* --- DUPLICATE CONFIRMATION DIALOG (UPDATED UI) --- */}
+        <Dialog open={confirmData.open} onClose={() => setConfirmData({ open: false, record: null })} PaperProps={{ sx: { borderRadius: 4, maxWidth: '550px', width: '100%', p: 1 } }}>
+          <DialogTitle sx={{ fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1, pb: 1, color: 'warning.main' }}>
               <ErrorOutline color="warning" /> PDF Already Exists
           </DialogTitle>
-          <DialogContent>
-              <Typography variant="body2" sx={{ mb: 3, color: 'text.secondary', fontWeight: 500 }}>
+          <DialogContent sx={{ px: 3, pt: 1 }}>
+              <Typography variant="body2" sx={{ mb: 2.5, color: 'text.secondary', fontWeight: 500 }}>
                 This document already exists in the library. Please review the details below:
               </Typography>
               
-              <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 2, mb: 2, alignItems: isMobile ? 'center' : 'flex-start' }}>
+              <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 2.5, mb: 2, alignItems: isMobile ? 'center' : 'flex-start' }}>
                 <Avatar 
                   variant="rounded" 
                   src={confirmData.record?.image_url ? `${supabase.storage.from('pdfs').getPublicUrl(confirmData.record.image_url).data.publicUrl}` : ''}
-                  sx={{ width: 100, height: 140, border: '1px solid #ddd' }}
+                  sx={{ width: 130, height: 165, borderRadius: 2.5, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                 >
-                  <ImageIcon />
+                  <ImageIcon sx={{ fontSize: 40 }} />
                 </Avatar>
-                <Stack spacing={0.5} alignItems={isMobile ? 'center' : 'flex-start'} textAlign={isMobile ? 'center' : 'left'}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#ffffff', lineHeight: 1.2 }}>
-                    {confirmData.record?.title}
-                  </Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                    By {confirmData.record?.author}
-                  </Typography>
-                  <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                    <Chip size="small" label={confirmData.record?.genre} sx={{ fontWeight: 700, fontSize: '0.65rem' }} />
-                    <Chip size="small" label={confirmData.record?.category} color="primary" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.65rem' }} />
-                  </Stack>
-                  <Typography variant="caption" sx={{ fontWeight: 700, mt: 1, display: 'block' }}>
-                    Published: {confirmData.record?.published_date}
-                  </Typography>
+                
+                <Stack spacing={0.5} sx={{ flex: 1, width: '100%' }}>
+                  <DetailRow icon={<Title fontSize="small" />} label="Title" value={confirmData.record?.title} />
+                  <DetailRow icon={<Person fontSize="small" />} label="Author" value={confirmData.record?.author} />
+                  <DetailRow icon={<Class fontSize="small" />} label="Type" value={confirmData.record?.category} />
+                  <DetailRow icon={<Category fontSize="small" />} label="Genre" value={confirmData.record?.genre} />
+                  <DetailRow icon={<CalendarMonth fontSize="small" />} label="Published" value={confirmData.record?.published_date} />
                 </Stack>
               </Box>
 
               <Divider sx={{ my: 2 }} />
               
-              <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase' }}>Description</Typography>
-              <Typography variant="body2" sx={{ color: 'text.primary', mt: 0.5, fontStyle: 'italic', fontSize: '0.85rem' }}>
-                "{confirmData.record?.description}"
+              <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary', mb: 0.5 }}>Description</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.5, fontSize: '0.85rem' }}>
+                {confirmData.record?.description || 'No description available.'}
               </Typography>
           </DialogContent>
-          <DialogActions sx={{ p: 3 }}>
-              <Button fullWidth onClick={() => setConfirmData({ open: false, record: null })} variant="contained" sx={{ color: '#ffffff', bgcolor: '#1e3a5f', py: 1.5, fontWeight: 900, borderRadius: 2 }}>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button fullWidth onClick={() => setConfirmData({ open: false, record: null })} variant="contained" sx={{ color: '#ffffff', bgcolor: '#1e3a5f', py: 1.2, fontWeight: 900, borderRadius: 2 }}>
                 I UNDERSTAND
               </Button>
           </DialogActions>
