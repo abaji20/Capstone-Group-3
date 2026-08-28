@@ -7,11 +7,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("Missing Supabase environment variables!");
 }
 
-// 1. Standard Client (Uses session/local storage)
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 1. Standard Client (Uses sessionStorage — wipes auth state when tab closes)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: window.sessionStorage, // <-- ADDED: Clears login data on tab closure
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+});
 
-// 2. Admin Creation Client (IMPORTANT: persistSession: false)
-// This prevents the browser from logging you into the new account you just created.
+// 2. Admin Creation Client (Unchanged)
 export const supabaseAdmin = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: false,

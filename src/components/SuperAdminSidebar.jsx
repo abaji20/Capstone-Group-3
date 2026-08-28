@@ -35,7 +35,6 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const [isHovered, setIsHovered] = useState(false);
 
   // Constants
-   // Lists for Dropdowns
   const departments = ["Staff", "Steward"];
   const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "N/A"];
 
@@ -46,8 +45,46 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const [initialData, setInitialData] = useState({}); // Original data store
   const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '', year_level: '' });
   
-  // Password state
+  // Password state & Validation
   const [newPassword, setNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  const validatePassword = (password) => {
+    if (!password) {
+      setPasswordError('');
+      return true;
+    }
+    const minLength = 8;
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+
+    if (password.length < minLength) {
+      setPasswordError('Password must be at least 8 characters long');
+      return false;
+    }
+    if (!hasUpper) {
+      setPasswordError('Password must contain at least one uppercase letter');
+      return false;
+    }
+    if (!hasLower) {
+      setPasswordError('Password must contain at least one lowercase letter');
+      return false;
+    }
+    if (!hasNumber) {
+      setPasswordError('Password must contain at least one number');
+      return false;
+    }
+
+    setPasswordError('');
+    return true;
+  };
+
+  const handlePasswordChange = (e) => {
+    const value = e.target.value;
+    setNewPassword(value);
+    validatePassword(value);
+  };
 
   const [loading, setLoading] = useState(false);
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
@@ -59,7 +96,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       if (profile) {
         setFullName(profile.full_name);
         setUserData(profile);
-        setInitialData(profile); // Kinukuha ang baseline profile data
+        setInitialData(profile);
       }
     }
   };
@@ -69,6 +106,11 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   }, []);
 
   const handleUpdateProfile = async () => {
+    if (newPassword.trim() !== '' && !validatePassword(newPassword)) {
+      setNotify({ open: true, message: 'Please fulfill all password requirements!', severity: 'error' });
+      return;
+    }
+
     setLoading(true);
     
     // 1. UPDATE PROFILE IN SUPABASE
@@ -104,7 +146,6 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       changes.push(`ID number from "${initialData.id_number || 'N/A'}" to "${userData.id_number}"`);
     }
 
-    // Mag-eentry sa audit_logs KUNG MAY NABAGONG PROFILE FIELDS LAMANG
     if (changes.length > 0) {
       const logDetails = `Super Admin updated ${changes.join(', ')}`;
 
@@ -122,19 +163,22 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       }
     }
 
-    // 3. HANDLE CHANGE PASSWORD (WALANG AUDIT LOG)
+    // 3. HANDLE CHANGE PASSWORD
     if (newPassword.trim() !== '') {
       const { error: pwdError } = await supabase.auth.updateUser({ password: newPassword });
       
       if (pwdError) {
         setNotify({ open: true, message: 'Failed to update password: ' + pwdError.message, severity: 'error' });
+        setLoading(false);
+        return;
       }
     }
 
     setNotify({ open: true, message: 'Profile updated successfully!', severity: 'success' });
     setFullName(userData.full_name);
     setInitialData(userData);
-    setNewPassword(''); // Clear password field
+    setNewPassword('');
+    setPasswordError('');
     setIsProfileModalOpen(false);
     setLoading(false);
   };
@@ -320,7 +364,9 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
             label="New Password" 
             placeholder="Leave blank to keep current password" 
             value={newPassword} 
-            onChange={(e) => setNewPassword(e.target.value)} 
+            onChange={handlePasswordChange}
+            error={Boolean(passwordError)}
+            helperText={passwordError || "Must be at least 8 characters with uppercase, lowercase, and numbers."}
             InputProps={{ startAdornment: <LockIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
           />
         </Stack>

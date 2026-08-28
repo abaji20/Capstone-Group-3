@@ -55,6 +55,26 @@ const ForgotPasswordPage = () => {
     e.preventDefault();
     setError(null);
 
+    // Password Validation Rules: at least 8 chars, uppercase, lowercase, numbers
+    const pwdErrors = [];
+    if (password.length < 8) {
+      pwdErrors.push('at least 8 characters long');
+    }
+    if (!/[A-Z]/.test(password)) {
+      pwdErrors.push('at least one uppercase letter');
+    }
+    if (!/[a-z]/.test(password)) {
+      pwdErrors.push('at least one lowercase letter');
+    }
+    if (!/\d/.test(password)) {
+      pwdErrors.push('at least one number');
+    }
+
+    if (pwdErrors.length > 0) {
+      setError(`Password needs: ${pwdErrors.join(', ')}.`);
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
@@ -66,7 +86,6 @@ const ForgotPasswordPage = () => {
     if (error) {
       setError(error.message);
     } else {
-      // Changed: Just show success message, do not redirect automatically
       setMessage("Password updated successfully! You can now sign in with your new password.");
       await supabase.auth.signOut(); // Kill recovery session
     }
@@ -134,8 +153,11 @@ const ForgotPasswordPage = () => {
                 />
                 <TextField fullWidth type="password" label="Confirm Password" required variant="outlined" onChange={(e) => setConfirmPassword(e.target.value)}
                   InputProps={{ startAdornment: (<InputAdornment position="start"><Lock sx={{ color: 'text.secondary' }} /></InputAdornment>) }}
-                  sx={{ mb: 3, '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                  sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
                 />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'left', mb: 3, px: 0.5, fontFamily: poppinsFont }}>
+                  Requirement: Must be at least 8 characters with uppercase, lowercase, and numbers.
+                </Typography>
               </>
             )}
 

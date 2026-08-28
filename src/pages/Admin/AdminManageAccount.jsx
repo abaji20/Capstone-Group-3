@@ -36,7 +36,7 @@ const AdminManageAccount = () => {
   const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
 
   // Constants
- // Departments List
+  // Departments List
   const departments = [
     "BS-Information Technology",
     "BS-Business Administration",
@@ -102,11 +102,41 @@ const AdminManageAccount = () => {
     }
   };
 
+  // Function para i-validate ang Password requirements
+  const validatePassword = (password) => {
+    const missing = [];
+    if (password.length < 8 || password.length > 12) {
+      missing.push('be 8-12 characters long');
+    }
+    if (!/[A-Z]/.exec(password)) {
+      missing.push('an uppercase letter');
+    }
+    if (!/[a-z]/.exec(password)) {
+      missing.push('a lowercase letter');
+    }
+    if (!/[0-9]/.exec(password)) {
+      missing.push('a number');
+    }
+    return missing;
+  };
+
   const handleCreateAccount = async () => {
     if (!formData.email || !formData.password || !formData.fullName || !formData.idNumber || !formData.department || !formData.yearLevel) {
       setNotify({ open: true, message: 'Please fill in all fields!', severity: 'error' });
       return;
     }
+
+    // Password Validation Check
+    const missingPasswordRequirements = validatePassword(formData.password);
+    if (missingPasswordRequirements.length > 0) {
+      setNotify({ 
+        open: true, 
+        message: `Password must contain: ${missingPasswordRequirements.join(', ')}!`, 
+        severity: 'error' 
+      });
+      return;
+    }
+
     if (!formData.email.toLowerCase().endsWith('@goldenlink.ph')) {
       setNotify({ open: true, message: 'Only @goldenlink.ph accounts are allowed!', severity: 'error' });
       return;
@@ -321,7 +351,7 @@ const AdminManageAccount = () => {
 
           <FormInput label="Email" placeholder="example@goldenlink.ph" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} InputProps={{ startAdornment: <EmailIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           <FormInput label="Default Password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} InputProps={{ startAdornment: <KeyIcon sx={{ mr: 1, opacity: 0.7 }} />, endAdornment: ( <InputAdornment position="end"> <IconButton onClick={() => setShowPassword(!showPassword)} edge="end"> {showPassword ? <VisibilityOff /> : <Visibility />} </IconButton> </InputAdornment> ) }} />
-          <Typography variant="caption" color="text.secondary">Requirement: Must use <b>@goldenlink.ph</b> domain.</Typography>
+          <Typography variant="caption" color="text.secondary">Requirement: Must use <b>@goldenlink.ph</b> domain and at least 8 characters long with uppercase, lowercase, and numbers.</Typography>
         </Stack>
       </ActionModal>
 

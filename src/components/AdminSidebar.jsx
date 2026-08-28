@@ -89,7 +89,38 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     fetchProfile();
   }, []);
 
+  // Function para i-validate ang Password requirements (8-12 characters)
+  const validatePassword = (password) => {
+    const missing = [];
+    if (password.length < 8 || password.length > 12) {
+      missing.push('be 8-12 characters long');
+    }
+    if (!/[A-Z]/.exec(password)) {
+      missing.push('an uppercase letter');
+    }
+    if (!/[a-z]/.exec(password)) {
+      missing.push('a lowercase letter');
+    }
+    if (!/[0-9]/.exec(password)) {
+      missing.push('a number');
+    }
+    return missing;
+  };
+
   const handleUpdateProfile = async () => {
+    // Check password validation kung may inilagay na bagong password
+    if (newPassword.trim() !== '') {
+      const missingPasswordRequirements = validatePassword(newPassword);
+      if (missingPasswordRequirements.length > 0) {
+        setNotify({ 
+          open: true, 
+          message: `Password must contain: ${missingPasswordRequirements.join(', ')}!`, 
+          severity: 'error' 
+        });
+        return;
+      }
+    }
+
     setLoading(true);
 
     // 1. UPDATE PROFILE IN SUPABASE
@@ -148,6 +179,8 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       
       if (pwdError) {
         setNotify({ open: true, message: 'Failed to update password: ' + pwdError.message, severity: 'error' });
+        setLoading(false);
+        return;
       }
     }
 
@@ -432,6 +465,9 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
             onChange={(e) => setNewPassword(e.target.value)} 
             InputProps={{ startAdornment: <LockIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
           />
+          <Typography variant="caption" color="text.secondary">
+            Requirement: Must be at least 8 characters long and contain uppercase, lowercase, and numbers.
+          </Typography>
 
           {latestRequest?.status === 'rejected' && (
             <Alert severity="error" variant="outlined" sx={{ borderRadius: '8px' }}>

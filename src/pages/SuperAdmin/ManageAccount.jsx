@@ -27,6 +27,7 @@ import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import SchoolIcon from '@mui/icons-material/School';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
 const ManageAccount = () => {
   const theme = useTheme();
@@ -190,10 +191,36 @@ const ManageAccount = () => {
       setNotify({ open: true, message: 'Please fill in required fields!', severity: 'error' });
       return;
     }
+
     if (!formData.email.toLowerCase().endsWith('@goldenlink.ph')) {
       setNotify({ open: true, message: 'Only @goldenlink.ph accounts are allowed!', severity: 'error' });
       return;
     }
+
+    // Dynamic Specific Password Validation (At least 8 characters, no upper limit)
+    const pwdErrors = [];
+    if (formData.password.length < 8) {
+      pwdErrors.push('at least 8 characters long');
+    }
+    if (!/[A-Z]/.test(formData.password)) {
+      pwdErrors.push('at least one uppercase letter');
+    }
+    if (!/[a-z]/.test(formData.password)) {
+      pwdErrors.push('at least one lowercase letter');
+    }
+    if (!/\d/.test(formData.password)) {
+      pwdErrors.push('at least one number');
+    }
+
+    if (pwdErrors.length > 0) {
+      setNotify({
+        open: true,
+        message: `Password needs: ${pwdErrors.join(', ')}.`,
+        severity: 'error'
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const { data: existingUser, error: existingError } = await supabase
@@ -226,7 +253,7 @@ const ManageAccount = () => {
       if (authError) throw authError;
       if (!authData.user) throw new Error("User creation failed.");
 
-      // Sync Profile record (in case database trigger does not automatically insert it)
+      // Sync Profile record
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert([{
@@ -579,50 +606,179 @@ const ManageAccount = () => {
       </Dialog>
 
       {/* Reject Request Modal */}
-      <ActionModal open={isRejectModalOpen} onClose={() => setIsRejectModalOpen(false)} title="Reject Role Request" onConfirm={handleRejectRole} confirmText={loading ? "Rejecting..." : "Confirm Reject"}>
+      <ActionModal 
+        open={isRejectModalOpen} 
+        onClose={() => setIsRejectModalOpen(false)} 
+        title="Reject Role Request" 
+        onConfirm={handleRejectRole} 
+        confirmText={loading ? "Rejecting..." : "Confirm Reject"}
+      >
         <Stack spacing={2} sx={{ mt: 2 }}>
-          <Typography variant="body2" color="text.secondary">Provide a reason for rejecting the request from <b>{selectedRequest?.profiles?.full_name}</b>:</Typography>
-          <TextField fullWidth multiline rows={3} placeholder="e.g. Unauthorized access, please verify department..." value={rejectionRemarks} onChange={(e) => setRejectionRemarks(e.target.value)} />
+          <Typography variant="body2" color="text.secondary">
+            Provide a reason for rejecting the request from <b>{selectedRequest?.profiles?.full_name}</b>:
+          </Typography>
+          <TextField 
+            fullWidth 
+            multiline 
+            rows={3} 
+            placeholder="e.g. Unauthorized access, please verify department..." 
+            value={rejectionRemarks} 
+            onChange={(e) => setRejectionRemarks(e.target.value)} 
+          />
         </Stack>
       </ActionModal>
 
       {/* Create Account Modal */}
-      <ActionModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Account" onConfirm={handleCreateAccount} confirmText={loading ? "Creating..." : "Create Account"}>
+      <ActionModal 
+        open={isCreateModalOpen} 
+        onClose={() => setIsCreateModalOpen(false)} 
+        title="Create New Account" 
+        onConfirm={handleCreateAccount} 
+        confirmText={loading ? "Creating..." : "Create Account"}
+      >
         <Stack spacing={2} sx={{ mt: 2 }}>
-          <TextField fullWidth label="Full Name" value={formData.fullName} onChange={(e) => setFormData({ ...formData, fullName: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><BadgeIcon color="primary" /></InputAdornment>) }} />
-          <TextField fullWidth label="Email (@goldenlink.ph)" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><EmailIcon color="primary" /></InputAdornment>) }} />
-          <TextField fullWidth type={showPassword ? 'text' : 'password'} label="Password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><KeyIcon color="primary" /></InputAdornment>), endAdornment: (<InputAdornment position="end"><IconButton onClick={() => setShowPassword(!showPassword)} edge="end">{showPassword ? <VisibilityOff /> : <Visibility />}</IconButton></InputAdornment>) }} />
-          <TextField fullWidth label="ID Number" value={formData.idNumber} onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><FingerprintIcon color="primary" /></InputAdornment>) }} />
-          <TextField select fullWidth label="Department" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><BusinessIcon color="primary" /></InputAdornment>) }}>
-            {departments.map((dept) => (<MenuItem key={dept} value={dept}>{dept}</MenuItem>))}
-          </TextField>
-          <TextField select fullWidth label="Year Level" value={formData.yearLevel} onChange={(e) => setFormData({ ...formData, yearLevel: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><SchoolIcon color="primary" /></InputAdornment>) }}>
-            {yearLevels.map((lvl) => (<MenuItem key={lvl} value={lvl}>{lvl}</MenuItem>))}
-          </TextField>
-          <TextField select fullWidth label="Role" value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })}>
+          <FormInput 
+            label="Full Name" 
+            value={formData.fullName} 
+            onChange={(e) => setFormData({ ...formData, fullName: e.target.value })} 
+            InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+          />
+          
+          <FormInput 
+            label="ID Number" 
+            placeholder="e.g. 2024-0001" 
+            value={formData.idNumber} 
+            onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })} 
+            InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+          />
+          
+          <Stack direction="row" spacing={2}>
+            <FormInput 
+              select 
+              label="Department" 
+              fullWidth 
+              value={formData.department} 
+              onChange={(e) => setFormData({ ...formData, department: e.target.value })} 
+              InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+            >
+              {departments.map((dept) => (<MenuItem key={dept} value={dept}>{dept}</MenuItem>))}
+            </FormInput>
+
+            <FormInput 
+              select 
+              label="Year Level" 
+              fullWidth 
+              value={formData.yearLevel} 
+              onChange={(e) => setFormData({ ...formData, yearLevel: e.target.value })} 
+              InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+            >
+              {yearLevels.map((lvl) => (<MenuItem key={lvl} value={lvl}>{lvl}</MenuItem>))}
+            </FormInput>
+          </Stack>
+
+          <FormInput 
+            label="Email" 
+            placeholder="example@goldenlink.ph" 
+            value={formData.email} 
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })} 
+            InputProps={{ startAdornment: <EmailIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+          />
+
+          <FormInput 
+            label="Default Password" 
+            type={showPassword ? 'text' : 'password'} 
+            value={formData.password} 
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })} 
+            InputProps={{ 
+              startAdornment: <KeyIcon sx={{ mr: 1, opacity: 0.7 }} />, 
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ) 
+            }} 
+          />
+
+          <FormInput 
+            select 
+            label="Role" 
+            fullWidth 
+            value={formData.role} 
+            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+            InputProps={{ startAdornment: <AdminPanelSettingsIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+          >
             <MenuItem value="client">Client</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
             <MenuItem value="superadmin">Superadmin</MenuItem>
-          </TextField>
+          </FormInput>
+
+          <Typography variant="caption" color="text.secondary">
+            Requirement: Must use <b>@goldenlink.ph</b> domain and at least 8 characters with uppercase, lowercase, and numbers.
+          </Typography>
         </Stack>
       </ActionModal>
 
       {/* Edit Account Modal */}
-      <ActionModal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Account" onConfirm={handleUpdateAccount} confirmText={loading ? "Saving..." : "Save Changes"}>
+      <ActionModal 
+        open={isEditModalOpen} 
+        onClose={() => setIsEditModalOpen(false)} 
+        title="Edit Account" 
+        onConfirm={handleUpdateAccount} 
+        confirmText={loading ? "Saving..." : "Save Changes"}
+      >
         <Stack spacing={2} sx={{ mt: 2 }}>
-          <TextField fullWidth label="Full Name" value={editData.fullName} onChange={(e) => setEditData({ ...editData, fullName: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><BadgeIcon color="primary" /></InputAdornment>) }} />
-          <TextField fullWidth label="ID Number" value={editData.idNumber} onChange={(e) => setEditData({ ...editData, idNumber: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><FingerprintIcon color="primary" /></InputAdornment>) }} />
-          <TextField select fullWidth label="Department" value={editData.department} onChange={(e) => setEditData({ ...editData, department: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><BusinessIcon color="primary" /></InputAdornment>) }}>
-            {departments.map((dept) => (<MenuItem key={dept} value={dept}>{dept}</MenuItem>))}
-          </TextField>
-          <TextField select fullWidth label="Year Level" value={editData.yearLevel} onChange={(e) => setEditData({ ...editData, yearLevel: e.target.value })} InputProps={{ startAdornment: (<InputAdornment position="start"><SchoolIcon color="primary" /></InputAdornment>) }}>
-            {yearLevels.map((lvl) => (<MenuItem key={lvl} value={lvl}>{lvl}</MenuItem>))}
-          </TextField>
-          <TextField select fullWidth label="Role" value={editData.role} onChange={(e) => setEditData({ ...editData, role: e.target.value })}>
+          <FormInput 
+            label="Full Name" 
+            value={editData.fullName} 
+            onChange={(e) => setEditData({ ...editData, fullName: e.target.value })} 
+            InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+          />
+          
+          <FormInput 
+            label="ID Number" 
+            value={editData.idNumber} 
+            onChange={(e) => setEditData({ ...editData, idNumber: e.target.value })} 
+            InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+          />
+          
+          <Stack direction="row" spacing={2}>
+            <FormInput 
+              select 
+              label="Department" 
+              fullWidth 
+              value={editData.department} 
+              onChange={(e) => setEditData({ ...editData, department: e.target.value })} 
+              InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+            >
+              {departments.map((dept) => (<MenuItem key={dept} value={dept}>{dept}</MenuItem>))}
+            </FormInput>
+
+            <FormInput 
+              select 
+              label="Year Level" 
+              fullWidth 
+              value={editData.yearLevel} 
+              onChange={(e) => setEditData({ ...editData, yearLevel: e.target.value })} 
+              InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+            >
+              {yearLevels.map((lvl) => (<MenuItem key={lvl} value={lvl}>{lvl}</MenuItem>))}
+            </FormInput>
+          </Stack>
+
+          <FormInput 
+            select 
+            label="Role" 
+            fullWidth 
+            value={editData.role} 
+            onChange={(e) => setEditData({ ...editData, role: e.target.value })}
+            InputProps={{ startAdornment: <AdminPanelSettingsIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+          >
             <MenuItem value="client">Client</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
             <MenuItem value="superadmin">Superadmin</MenuItem>
-          </TextField>
+          </FormInput>
         </Stack>
       </ActionModal>
     </Box>

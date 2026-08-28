@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Box, Paper, TextField, Button, Typography, 
-  Stack, Alert, InputAdornment, useTheme, IconButton 
+  Stack, Alert, InputAdornment, useTheme, IconButton
 } from '@mui/material';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
@@ -23,6 +23,30 @@ const ResetPassword = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Specific Password Validation (At least 8 characters, uppercase, lowercase, numbers)
+    const pwdErrors = [];
+    if (password.length < 8) {
+      pwdErrors.push('at least 8 characters long');
+    }
+    if (!/[A-Z]/.test(password)) {
+      pwdErrors.push('at least one uppercase letter');
+    }
+    if (!/[a-z]/.test(password)) {
+      pwdErrors.push('at least one lowercase letter');
+    }
+    if (!/\d/.test(password)) {
+      pwdErrors.push('at least one number');
+    }
+
+    if (pwdErrors.length > 0) {
+      setMessage({
+        type: 'error',
+        text: `Password needs: ${pwdErrors.join(', ')}.`
+      });
+      return;
+    }
+
     if (password !== confirmPassword) {
       setMessage({ type: 'error', text: "Passwords do not match!" });
       return;
@@ -35,10 +59,9 @@ const ResetPassword = () => {
       setMessage({ type: 'error', text: error.message });
     } else {
       setMessage({ type: 'success', text: "Password updated successfully!" });
-      // SUCCESS: Clear the fields here
       setPassword('');
       setConfirmPassword('');
-      setShowPassword(false); // Optional: reset visibility to hidden
+      setShowPassword(false);
     }
     setLoading(false);
   };
@@ -98,7 +121,7 @@ const ResetPassword = () => {
         <Typography variant="h4" sx={{ fontWeight: 900, mb: 1.5, color: 'text.primary', letterSpacing: '-0.5px' }}>
           Reset Password
         </Typography>
-        <Typography variant="body1" sx={{ mb: 5, color: 'text.secondary', px: 2 }}>
+        <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary', px: 2 }}>
           Create a new strong password to keep your account safe.
         </Typography>
         
@@ -132,6 +155,7 @@ const ResetPassword = () => {
               )
             }}
           />
+
           <TextField 
             label="Confirm Password *" 
             type={showPassword ? 'text' : 'password'} 
@@ -155,6 +179,11 @@ const ResetPassword = () => {
               )
             }}
           />
+
+          <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left', px: 1 }}>
+            Requirement: Must be at least 8 characters with uppercase, lowercase, and numbers.
+          </Typography>
+
           <Button 
             type="submit" 
             variant="contained" 
