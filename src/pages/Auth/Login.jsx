@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { 
   Box, Paper, TextField, Button, Typography, Container, 
   InputAdornment, IconButton, Alert, Collapse, useTheme, Tooltip, Link,
@@ -11,7 +11,7 @@ import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 import { ColorModeContext } from '../../App'; 
-import glcBG from '../../assets/glcBG.jpg';
+import glcBG from '../../assets/glcbackgroundlogin.png';
 import libraryBG from '../../assets/libraryBG.jpg';
 import glclogo from '../../assets/glclogo.png';
 
@@ -25,20 +25,72 @@ const Login = () => {
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalType, setModalType] = useState('privacy'); // 'privacy' or 'terms'
+  const [modalType, setModalType] = useState('privacy'); 
+  const [isFirstVisitSession, setIsFirstVisitSession] = useState(false);
   
   const theme = useTheme();
   const navigate = useNavigate();
   const isDarkMode = theme.palette.mode === 'dark';
   const { toggleColorMode } = useContext(ColorModeContext);
 
+  useEffect(() => {
+    const hasSeenPolicyThisSession = sessionStorage.getItem('hasSeenPolicyThisSession');
+    if (!hasSeenPolicyThisSession) {
+      setIsFirstVisitSession(true);
+      setModalType('privacy');
+      setModalOpen(true);
+    }
+  }, []);
+
   const handleOpenModal = (type) => {
+    setIsFirstVisitSession(false);
     setModalType(type);
     setModalOpen(true);
   };
 
   const handleCloseModal = () => {
+    if (isFirstVisitSession) {
+      if (modalType === 'privacy') {
+        setModalType('terms');
+        return;
+      }
+      if (modalType === 'terms') {
+        sessionStorage.setItem('hasSeenPolicyThisSession', 'true');
+        setIsFirstVisitSession(false);
+        setModalOpen(false);
+        return;
+      }
+    }
     setModalOpen(false);
+  };
+
+  // --- LOGIN LOCKOUT HELPER FUNCTIONS ---
+  const checkIsLockedOut = () => {
+    const lockUntil = localStorage.getItem('loginLockUntil');
+    if (lockUntil) {
+      const now = new Date().getTime();
+      if (now < parseInt(lockUntil, 10)) {
+        return true;
+      } else {
+        // Tapos na ang 3 minutes lockout, i-clear ang storage
+        localStorage.removeItem('loginLockUntil');
+        localStorage.removeItem('loginAttempts');
+        return false;
+      }
+    }
+    return false;
+  };
+
+  const registerFailedAttempt = () => {
+    let attempts = parseInt(localStorage.getItem('loginAttempts') || '0', 10);
+    attempts += 1;
+    localStorage.setItem('loginAttempts', attempts.toString());
+
+    if (attempts >= 5) {
+      // Mag-set ng 3 minutes lock from now
+      const lockUntil = new Date().getTime() + 3 * 60 * 1000;
+      localStorage.setItem('loginLockUntil', lockUntil.toString());
+    }
   };
 
   const handleSignIn = async (e) => {
@@ -46,9 +98,15 @@ const Login = () => {
     setError(null);
     setMessage(null);
 
-    // --- DOMAIN RESTRICTION LOGIC ---
+    // 1. Tignan kung nakalock pa ang account/session
+    if (checkIsLockedOut()) {
+      setError("Too many failed login attempts. Please try again later.");
+      return;
+    }
+
+    // 2. Domain Restriction
     if (!email.toLowerCase().endsWith('@goldenlink.ph')) {
-      setError("Access Denied: Only @goldenlink.ph accounts are allowed.");
+      setError("Access Denied: Only Authorized accounts are allowed.");
       return;
     }
 
@@ -58,17 +116,28 @@ const Login = () => {
       const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       
       if (authError) {
-        if (authError.message === "Invalid login credentials") {
-          setError("Incorrect email or password. Please check your credentials.");
-        } else if (authError.message.includes("Email not confirmed")) {
-          setError("Email not confirmed. Please check your Gmail inbox to verify your account.");
+        // Mag-record ng mali / failed attempt
+        registerFailedAttempt();
+
+        // Tignan kung nag-5th attempt na pala sa pag-fail na ito
+        if (checkIsLockedOut()) {
+          setError("Too many failed login attempts. Please try again later.");
         } else {
-          setError(authError.message);
+          if (authError.message === "Invalid login credentials") {
+            setError("Incorrect email or password. Please check your credentials.");
+          } else if (authError.message.includes("Email not confirmed")) {
+            setError("Email not confirmed. Please check your Gmail inbox to verify your account.");
+          } else {
+            setError(authError.message);
+          }
         }
         return;
       }
 
       if (data.user) {
+        // Kapag matagumpay ang login, i-reset ang attempts
+        localStorage.removeItem('loginAttempts');
+        localStorage.removeItem('loginLockUntil');
         navigate('/');
       }
     } catch (err) {
@@ -85,7 +154,7 @@ const Login = () => {
     }
     
     if (!email.toLowerCase().endsWith('@goldenlink.ph')) {
-      setError("Only @goldenlink.ph accounts can request a password reset.");
+      setError("Only Authorized accounts can request a password reset.");
       return;
     }
 
@@ -113,7 +182,7 @@ const Login = () => {
       display: 'flex', 
       alignItems: 'center', 
       justifyContent: 'center', 
-      p: { xs: 2, md: 4 }, 
+      p: { xs: 2, md: 3, lg: 4 }, 
       backgroundImage: dynamicPageBg,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
@@ -121,23 +190,6 @@ const Login = () => {
       position: 'relative',
       transition: 'background 0.3s ease'
     }}>
-
-      {/* DESKTOP-ONLY LOGO (Top-Left, Outside Box) */}
-      <Box 
-        component="img" 
-        src={glclogo} 
-        alt="GLC Logo" 
-        sx={{ 
-          position: 'absolute', 
-          top: { md: 24 }, 
-          left: { md: 32 }, 
-          width: 95, 
-          height: 'auto',
-          filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.4))',
-          zIndex: 10,
-          display: { xs: 'none', md: 'block' }
-        }} 
-      />
 
       {/* Darkmode Toggle */}
       <Box sx={{ position: 'absolute', top: 20, right: 20, zIndex: 10 }}>
@@ -153,14 +205,14 @@ const Login = () => {
         </Tooltip>
       </Box>
 
-      {/* MAIN CONTAINER - EXPANDED TO 'md' */}
-      <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'center' }}>
+      {/* MAIN CONTAINER */}
+      <Container maxWidth="xl" sx={{ display: 'flex', justifyContent: 'center' }}>
         <Paper 
           elevation={isDarkMode ? 0 : 20}
           sx={{ 
             display: 'flex',
             width: '100%',
-            maxWidth: '1000px', // Pinalaki ang width ng card
+            maxWidth: { xs: '100%', sm: '500px', md: '900px', lg: '1150px' },
             overflow: 'hidden',
             borderRadius: { xs: 3, sm: 5 },
             bgcolor: isDarkMode ? 'rgba(30, 41, 59, 0.95)' : '#ffffff', 
@@ -171,19 +223,19 @@ const Login = () => {
         >
           {/* LEFT SIDE: COVER IMAGE BANNER */}
           <Box sx={{ 
-            flex: 1.2, 
+            flex: { md: 1, lg: 1.2 }, 
             display: { xs: 'none', md: 'flex' }, 
             flexDirection: 'column',
-            justifyContent: 'flex-end',
-            p: 5,
+            p: { md: 4, lg: 5 },
             position: 'relative',
+            justifyContent: 'flex-end',
             backgroundImage: `linear-gradient(to top, rgba(15, 23, 42, 0.92) 0%, rgba(15, 23, 42, 0.2) 60%), url(${libraryBG})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             overflow: 'hidden'
           }}>
             <Box sx={{ position: 'relative', zIndex: 2, color: 'white' }}>
-              <Typography variant="h5" sx={{ fontWeight: 500, fontFamily: 'Paytone One, sans-serif', letterSpacing: 1 }}>
+              <Typography variant="h4" sx={{ fontWeight: 500, fontFamily: 'Paytone One, sans-serif', letterSpacing: 1 }}>
                 Library Repository
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.85, mt: 1, fontWeight: 500 }}>
@@ -196,8 +248,8 @@ const Login = () => {
           <Box 
             sx={{ 
               flex: 1,
-              minHeight: { xs: 'auto', sm: '620px' }, // Pinalaki ang vertical height
-              p: { xs: 4, sm: 6 }, 
+              minHeight: { xs: 'auto', sm: '620px' }, 
+              p: { xs: 3, sm: 5, lg: 6 }, 
               display: 'flex', 
               flexDirection: 'column', 
               justifyContent: 'space-between', 
@@ -205,17 +257,16 @@ const Login = () => {
             }}
           >
             <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              {/* MOBILE-ONLY LOGO */}
+              {/* LOGO */}
               <Box
                 component="img"
                 src={glclogo}
-                alt="GLC Logo Mobile"
+                alt="GLC Logo"
                 sx={{
-                  width: 75,
+                  width: { xs: 70, md: 85, lg: 95 },
                   height: 'auto',
-                  mb: 1.5,
+                  mb: 1,
                   filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))',
-                  display: { xs: 'block', md: 'none' }
                 }}
               />
 
@@ -228,7 +279,7 @@ const Login = () => {
                   fontWeight: 800, 
                   color: isDarkMode ? '#38bdf8' : '#1e40af', 
                   textAlign: 'center',
-                  fontSize: { xs: '1.6rem', sm: '2rem' }
+                  fontSize: { xs: '1.6rem', sm: '1.8rem', lg: '2.2rem' }
                 }}
               >
                 Sign In
@@ -267,7 +318,14 @@ const Login = () => {
                       </InputAdornment>
                     ) 
                   }} 
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': { borderRadius: 2.5 },
+                    '& input:-webkit-autofill': {
+                      WebkitBoxShadow: `0 0 0 1000px ${isDarkMode ? '#1e293b' : '#ffffff'} inset !important`,
+                      WebkitTextFillColor: `${isDarkMode ? '#f8fafc' : '#0f172a'} !important`,
+                      transition: 'background-color 5000s ease-in-out 0s'
+                    }
+                  }}
                 />
                 
                 <TextField 
@@ -290,7 +348,14 @@ const Login = () => {
                       </InputAdornment>
                     )
                   }} 
-                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2.5 } }}
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': { borderRadius: 2.5 },
+                    '& input:-webkit-autofill': {
+                      WebkitBoxShadow: `0 0 0 1000px ${isDarkMode ? '#1e293b' : '#ffffff'} inset !important`,
+                      WebkitTextFillColor: `${isDarkMode ? '#f8fafc' : '#0f172a'} !important`,
+                      transition: 'background-color 5000s ease-in-out 0s'
+                    }
+                  }}
                 />
 
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
@@ -330,7 +395,7 @@ const Login = () => {
               </form>
             </Box>
 
-            {/* PRIVACY POLICY & TERMS LINKS AT THE BOTTOM OF THE BOX */}
+            {/* PRIVACY POLICY & TERMS LINKS AT THE BOTTOM */}
             <Box sx={{ mt: 4, textAlign: 'center' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
                 By signing in, you agree to Golden Link College Policies.
@@ -373,12 +438,16 @@ const Login = () => {
       <Dialog 
         open={modalOpen} 
         onClose={handleCloseModal}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
         PaperProps={{
           sx: {
             borderRadius: 3,
             p: 1,
+            minHeight: '480px',
+            maxHeight: '85vh',
+            display: 'flex',
+            flexDirection: 'column',
             bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
             color: isDarkMode ? '#f8fafc' : '#0f172a'
           }
@@ -391,38 +460,38 @@ const Login = () => {
           </IconButton>
         </DialogTitle>
 
-        <DialogContent dividers sx={{ borderTop: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : undefined }}>
+        <DialogContent dividers sx={{ flexGrow: 1, borderTop: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : undefined, p: 3 }}>
           {modalType === 'privacy' ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>1. Data Collection</Typography>
-              <Typography variant="body2" color="text.secondary">
-                We collect your college email address (`@goldenlink.ph`) and login timestamps purely for authentication and administrative oversight within the Golden Link College Library Repository.
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>1. Data Collection</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                We collect your college email address and login timestamps purely for authentication and administrative oversight within the Golden Link College Library Repository.
               </Typography>
 
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1 }}>2. Use of Information</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Your credentials are used solely to grant access to repository documents, research papers, and institutional resources based on user roles (Student, Faculty, Admin).
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1 }}>2. Use of Information</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                Your credentials are used solely to grant access to repository documents, research papers, and institutional resources based on user roles.
               </Typography>
 
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1 }}>3. Data Protection</Typography>
-              <Typography variant="body2" color="text.secondary">
-                All data is securely handled via Supabase authentication protocols. We do not sell, trade, or share your personal information with external parties.
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1 }}>3. Data Protection</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                All data is securely handled via authentication protocols. We do not sell, trade, or share your personal information with external parties.
               </Typography>
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>1. Authorized Use</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Access to the Golden Link College Library Repository is strictly limited to active students, faculty, and authorized personnel holding a valid `@goldenlink.ph` email account.
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>1. Authorized Use</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                Access to the Golden Link College Library Repository is strictly limited to active students, faculty, and authorized personnel holding a valid email account.
               </Typography>
 
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1 }}>2. Intellectual Property</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1 }}>2. Intellectual Property</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
                 All research, capstone papers, and digital archives contained within this repository are protected by intellectual property guidelines. Unauthorized redistribution is strictly prohibited.
               </Typography>
 
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mt: 1 }}>3. Account Conduct</Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1 }}>3. Account Conduct</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
                 Users are responsible for maintaining the confidentiality of their login details. Any unauthorized activity performed under your credentials must be reported to the system administrator immediately.
               </Typography>
             </Box>
@@ -438,6 +507,7 @@ const Login = () => {
               color: '#fff', 
               fontWeight: 700, 
               borderRadius: 2,
+              px: 3,
               '&:hover': { backgroundColor: '#182d3e' }
             }}
           >
