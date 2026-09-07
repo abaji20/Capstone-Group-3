@@ -213,6 +213,7 @@ const Login = () => {
             display: 'flex',
             width: '100%',
             maxWidth: { xs: '100%', sm: '500px', md: '900px', lg: '1150px' },
+            maxHeight: { xs: '100%', sm: '450px', md: '650px', lg: '680px' },
             overflow: 'hidden',
             borderRadius: { xs: 3, sm: 5 },
             bgcolor: isDarkMode ? 'rgba(30, 41, 59, 0.95)' : '#ffffff', 
@@ -224,11 +225,12 @@ const Login = () => {
           {/* LEFT SIDE: COVER IMAGE BANNER */}
           <Box sx={{ 
             flex: { md: 1, lg: 1.2 }, 
+            justifyContent: 'flex-end',
             display: { xs: 'none', md: 'flex' }, 
             flexDirection: 'column',
             p: { md: 4, lg: 5 },
             position: 'relative',
-            justifyContent: 'flex-end',
+            justify: 'flex-end',
             backgroundImage: `linear-gradient(to top, rgba(15, 23, 42, 0.92) 0%, rgba(15, 23, 42, 0.2) 60%), url(${libraryBG})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
@@ -248,8 +250,8 @@ const Login = () => {
           <Box 
             sx={{ 
               flex: 1,
-              minHeight: { xs: 'auto', sm: '620px' }, 
-              p: { xs: 3, sm: 5, lg: 6 }, 
+              minHeight: { xs: 'auto', sm: 'auto' }, 
+              p: { xs: 3, sm: 4, lg: 5 }, 
               display: 'flex', 
               flexDirection: 'column', 
               justifyContent: 'space-between', 
@@ -263,9 +265,9 @@ const Login = () => {
                 src={glclogo}
                 alt="GLC Logo"
                 sx={{
-                  width: { xs: 70, md: 85, lg: 95 },
+                  width: { xs: 60, md: 75, lg: 85 },
                   height: 'auto',
-                  mb: 1,
+                  mb: 0.5,
                   filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))',
                 }}
               />
@@ -274,12 +276,12 @@ const Login = () => {
               <Typography 
                 variant="h4" 
                 sx={{ 
-                  mt: 1,
-                  mb: 1, 
+                  mt: 0.5,
+                  mb: 0.5, 
                   fontWeight: 800, 
                   color: isDarkMode ? '#38bdf8' : '#1e40af', 
                   textAlign: 'center',
-                  fontSize: { xs: '1.6rem', sm: '1.8rem', lg: '2.2rem' }
+                  fontSize: { xs: '1.4rem', sm: '1.6rem', lg: '1.9rem' }
                 }}
               >
                 Sign In
@@ -287,18 +289,18 @@ const Login = () => {
 
               <Typography 
                 variant="body2" 
-                sx={{ color: 'text.secondary', mb: 3, textAlign: 'center', fontWeight: 500 }}
+                sx={{ color: 'text.secondary', mb: 2, textAlign: 'center', fontWeight: 500 }}
               >
                 Enter your college credentials to proceed
               </Typography>
               
-              <Collapse in={!!error} sx={{ width: '100%', mb: 2 }}>
+              <Collapse in={!!error} sx={{ width: '100%', mb: 1.5 }}>
                 <Alert severity="error" variant="outlined" onClose={() => setError(null)} sx={{ borderRadius: 2 }}>
                   {error}
                 </Alert>
               </Collapse>
 
-              <Collapse in={!!message} sx={{ width: '100%', mb: 2 }}>
+              <Collapse in={!!message} sx={{ width: '100%', mb: 1.5 }}>
                 <Alert severity="success" variant="outlined" onClose={() => setMessage(null)} sx={{ borderRadius: 2 }}>
                   {message}
                 </Alert>
@@ -306,7 +308,7 @@ const Login = () => {
 
               <form onSubmit={handleSignIn} style={{ width: '100%' }}>
                 <TextField 
-                  margin="normal" required fullWidth label="Email" 
+                  margin="dense" required fullWidth label="Email" 
                   variant="outlined"
                   placeholder="username@goldenlink.ph"
                   value={email}
@@ -329,7 +331,7 @@ const Login = () => {
                 />
                 
                 <TextField 
-                  margin="normal" required fullWidth label="Password" 
+                  margin="dense" required fullWidth label="Password" 
                   variant="outlined"
                   type={showPassword ? 'text' : 'password'} 
                   value={password}
@@ -358,7 +360,7 @@ const Login = () => {
                   }}
                 />
 
-                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
                   <Link
                     component="button"
                     type="button"
@@ -379,7 +381,7 @@ const Login = () => {
                   type="submit" fullWidth variant="contained" 
                   disabled={loading}
                   sx={{ 
-                    mt: 3, py: 1.6, 
+                    mt: 2, py: 1.4, 
                     backgroundColor: '#213C51', 
                     color: '#ffffff',
                     fontWeight: 800, 
@@ -396,7 +398,7 @@ const Login = () => {
             </Box>
 
             {/* PRIVACY POLICY & TERMS LINKS AT THE BOTTOM */}
-            <Box sx={{ mt: 4, textAlign: 'center' }}>
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
                 By signing in, you agree to Golden Link College Policies.
               </Typography>
@@ -444,8 +446,8 @@ const Login = () => {
           sx: {
             borderRadius: 3,
             p: 1,
-            minHeight: '150px',
-            maxHeight: '40vh',
+            minHeight: '250px',
+            maxHeight: '200vh',
             display: 'flex',
             flexDirection: 'column',
             bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
