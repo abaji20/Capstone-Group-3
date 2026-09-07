@@ -31,7 +31,7 @@ const AdminLayout = () => {
       if (!isUserTyping) {
         navigate(0);
       }
-    }, 90000); // 1 minute interval
+    }, 190000); // 1 minute interval
 
     return () => clearInterval(interval);
   }, [navigate]);

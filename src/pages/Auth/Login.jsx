@@ -444,8 +444,8 @@ const Login = () => {
           sx: {
             borderRadius: 3,
             p: 1,
-            minHeight: '480px',
-            maxHeight: '85vh',
+            minHeight: '150px',
+            maxHeight: '40vh',
             display: 'flex',
             flexDirection: 'column',
             bgcolor: isDarkMode ? '#1e293b' : '#ffffff',

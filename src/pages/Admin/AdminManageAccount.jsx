@@ -3,11 +3,10 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Stack, Typography, MenuItem, TextField, InputAdornment, Avatar,
   IconButton, Chip, useTheme, useMediaQuery, Divider, Snackbar, Alert,
-  Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button,
-  CircularProgress
+  CircularProgress, Button
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { PageHeader, PrimaryButton, ActionModal, FormInput } from '../../shared';
+import { PrimaryButton, ActionModal, FormInput } from '../../shared';
 import { supabase } from '../../supabaseClient';
 
 // Icons
@@ -35,7 +34,6 @@ const AdminManageAccount = () => {
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
   const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
 
-  // Constants
   // Departments List
   const departments = [
     "BS-Information Technology",
@@ -46,22 +44,56 @@ const AdminManageAccount = () => {
     "BS-Mathematics",
     "BS-Science",
     "BS-Psychology"
-  ];  // Year Levels List
+  ];
+  
+  // Year Levels List
   const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "N/A"];
+
+  // Default empty form
+  const defaultFormData = { fullName: '', email: '', role: 'client', password: '', idNumber: '', department: '', yearLevel: '' };
 
   // States
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
+  const [filterDate, setFilterDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
+
+  // Restore create form data and modal open status from sessionStorage if available
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(() => {
+    return sessionStorage.getItem('isCreateModalOpen') === 'true';
+  });
+  const [formData, setFormData] = useState(() => {
+    const saved = sessionStorage.getItem('createFormData');
+    return saved ? JSON.parse(saved) : defaultFormData;
+  });
+
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  
-  const [formData, setFormData] = useState({ fullName: '', email: '', role: 'client', password: '', idNumber: '', department: '', yearLevel: '' });
   const [editData, setEditData] = useState({ id: '', fullName: '', role: 'client', oldName: '', idNumber: '', department: '', yearLevel: '' });
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
+
+  // Auto-save Create Form Data to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('createFormData', JSON.stringify(formData));
+  }, [formData]);
+
+  // Auto-save Create Modal Open state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('isCreateModalOpen', isCreateModalOpen);
+  }, [isCreateModalOpen]);
+
+  // Styles to remove browser autofill blue background
+  const removeAutofillBg = {
+    '& input:-webkit-autofill': {
+      WebkitBoxShadow: `0 0 0 1000px ${inputBg} inset !important`,
+      WebkitTextFillColor: isDarkMode ? '#ffffff' : '#000000',
+      transition: 'background-color 5000s ease-in-out 0s',
+    },
+  };
 
   useEffect(() => { 
     const checkUser = async () => {
@@ -102,31 +134,49 @@ const AdminManageAccount = () => {
     }
   };
 
-  // Function para i-validate ang Password requirements
   const validatePassword = (password) => {
     const missing = [];
-    if (password.length < 8 || password.length > 12) {
-      missing.push('be 8-12 characters long');
+    if (password.length < 8) {
+      missing.push('be at least 8 characters long');
     }
-    if (!/[A-Z]/.exec(password)) {
+    if (!/[A-Z]/.test(password)) {
       missing.push('an uppercase letter');
     }
-    if (!/[a-z]/.exec(password)) {
+    if (!/[a-z]/.test(password)) {
       missing.push('a lowercase letter');
     }
-    if (!/[0-9]/.exec(password)) {
+    if (!/[0-9]/.test(password)) {
       missing.push('a number');
     }
     return missing;
   };
 
+  const formatIdNumber = (value) => {
+    const raw = value.replace(/\D/g, '').slice(0, 10);
+    if (raw.length <= 2) return raw;
+    if (raw.length <= 4) return `${raw.slice(0, 2)}-${raw.slice(2)}`;
+    return `${raw.slice(0, 2)}-${raw.slice(2, 4)}-${raw.slice(4)}`;
+  };
+
+  const handleCloseCreateModal = () => {
+    setIsCreateModalOpen(false);
+    sessionStorage.removeItem('createFormData');
+    sessionStorage.removeItem('isCreateModalOpen');
+    setFormData(defaultFormData);
+  };
+
   const handleCreateAccount = async () => {
-    if (!formData.email || !formData.password || !formData.fullName || !formData.idNumber || !formData.department || !formData.yearLevel) {
-      setNotify({ open: true, message: 'Please fill in all fields!', severity: 'error' });
+    if (!formData.fullName || !formData.idNumber || !formData.department || !formData.yearLevel || !formData.email || !formData.password) {
+      setNotify({ open: true, message: 'All fields are required!', severity: 'error' });
       return;
     }
 
-    // Password Validation Check
+    const cleanId = formData.idNumber.replace(/-/g, '');
+    if (cleanId.length !== 10) {
+      setNotify({ open: true, message: 'ID Number must be exactly 10 digits in XX-XX-XXXXXX format!', severity: 'error' });
+      return;
+    }
+
     const missingPasswordRequirements = validatePassword(formData.password);
     if (missingPasswordRequirements.length > 0) {
       setNotify({ 
@@ -141,6 +191,7 @@ const AdminManageAccount = () => {
       setNotify({ open: true, message: 'Only @goldenlink.ph accounts are allowed!', severity: 'error' });
       return;
     }
+
     setLoading(true);
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -169,8 +220,9 @@ const AdminManageAccount = () => {
 
       await createAuditLog('Create Client', `Created GLC account: ${formData.fullName}`);
       setNotify({ open: true, message: 'Client account created! Verify email to activate.', severity: 'success' });
-      setIsCreateModalOpen(false);
-      setFormData({ fullName: '', email: '', role: 'client', password: '', idNumber: '', department: '', yearLevel: '' });
+      
+      // Clear saved data upon successful creation
+      handleCloseCreateModal();
       fetchClients();
     } catch (err) {
       const errorMessage = err.message?.toLowerCase().includes('unique constraint') || err.message?.toLowerCase().includes('already registered')
@@ -183,6 +235,17 @@ const AdminManageAccount = () => {
   };
 
   const handleUpdateAccount = async () => {
+    if (!editData.fullName || !editData.idNumber || !editData.department || !editData.yearLevel) {
+      setNotify({ open: true, message: 'All fields are required!', severity: 'error' });
+      return;
+    }
+
+    const cleanId = editData.idNumber.replace(/-/g, '');
+    if (cleanId.length !== 10) {
+      setNotify({ open: true, message: 'ID Number must be exactly 10 digits in XX-XX-XXXXXX format!', severity: 'error' });
+      return;
+    }
+
     setLoading(true);
     const originalUser = users.find(u => u.id === editData.id);
     const { error } = await supabase
@@ -228,6 +291,7 @@ const AdminManageAccount = () => {
     setLoading(false);
   };
 
+  // Filter Logic
   const filteredUsers = users.filter((u) => {
     const term = searchTerm.toLowerCase();
     const matchesSearch = 
@@ -238,22 +302,42 @@ const AdminManageAccount = () => {
       (u.year_level || "").toLowerCase().includes(term);
 
     let matchesDate = true;
-    if (dateFilter) {
+    if (filterDate) {
       const userDate = new Date(u.created_at).toISOString().split('T')[0];
-      matchesDate = userDate === dateFilter;
+      matchesDate = userDate === filterDate;
     }
+
     return matchesSearch && matchesDate;
   });
+
+  // Pagination Calculations
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentUsers = filteredUsers.slice(startIndex, startIndex + itemsPerPage);
+
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
 
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, minHeight: '100vh', bgcolor: pageBg }}>
       
+      {/* HEADER WITH ACCOUNT COUNTER */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h3" sx={{ fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px' }}>
-          CLIENT MANAGEMENT
-        </Typography>
+        <Stack direction="row" alignItems="center" spacing={2} sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Typography variant="h3" sx={{ fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px' }}>
+            ACCOUNT MANAGEMENT
+          </Typography>
+          <Chip 
+            label={`${filteredUsers.length} ${filteredUsers.length === 1 ? 'Account' : 'Accounts'}`} 
+            color="primary" 
+            sx={{ fontWeight: 800, borderRadius: '8px', fontSize: '0.85rem' }} 
+          />
+        </Stack>
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block', mt: 0 }}>
-          MANAGE SYSTEM CLIENTS & ACCOUNTS
+          MANAGE SYSTEM USERS & ACCOUNTS
         </Typography>
       </Box>
 
@@ -262,9 +346,32 @@ const AdminManageAccount = () => {
       </Snackbar>
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
-        <TextField fullWidth placeholder="Search by name, email, ID, dept, or year..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ bgcolor: inputBg, borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
-        <TextField type="date" label="Date Joined" size="medium" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5, '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' } }} InputProps={{ startAdornment: ( <InputAdornment position="start"> <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} /> </InputAdornment> ) }} />
-        <PrimaryButton sx={{ bgcolor: '#213C51', height: '56px', minWidth: 180, borderRadius: 0.5, '&:hover': { bgcolor: '#1a3041' } }} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}> New Client </PrimaryButton>
+        <TextField fullWidth placeholder="Search by name, email, ID, dept, or year..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} sx={{ bgcolor: inputBg, borderRadius: 0.5, ...removeAutofillBg }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
+        
+        {/* Single Date Filter */}
+        <TextField 
+          type="date" 
+          size="medium" 
+          value={filterDate} 
+          onChange={(e) => { setFilterDate(e.target.value); setCurrentPage(1); }} 
+          sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5, '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' }, ...removeAutofillBg }} 
+          InputProps={{ startAdornment: ( <InputAdornment position="start"> <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} /> </InputAdornment> ) }} 
+        />
+
+        <PrimaryButton 
+          sx={{ 
+            bgcolor: isDarkMode ? '#28334e' : '#213C51', 
+            color: '#ffffff',
+            height: '56px', 
+            minWidth: 180, 
+            borderRadius: 0.5, 
+            '&:hover': { bgcolor: isDarkMode ? '#3b486b' : '#1a3041' } 
+          }} 
+          startIcon={<AddCircleOutlineIcon sx={{ color: '#ffffff' }} />} 
+          onClick={() => setIsCreateModalOpen(true)}
+        > 
+          New Account 
+        </PrimaryButton>
       </Stack>
 
       {loading ? (
@@ -276,7 +383,7 @@ const AdminManageAccount = () => {
         </Box>
       ) : isMobile ? (
         <Stack spacing={2}>
-          {filteredUsers.map((user) => (
+          {currentUsers.map((user) => (
             <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
               <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}> <Avatar sx={{ width: 45, height: 45, bgcolor: '#fbc02d', color: '#000000', fontWeight: 700 }}>{user.full_name?.charAt(0)}</Avatar> </Box>
               <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
@@ -307,7 +414,7 @@ const AdminManageAccount = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredUsers.map((user) => (
+              {currentUsers.map((user) => (
                 <TableRow key={user.id} hover>
                   <TableCell>
                     <Stack direction="row" spacing={2} alignItems="center">
@@ -333,40 +440,202 @@ const AdminManageAccount = () => {
         </TableContainer>
       )}
 
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mt: 4, gap: 1 }}>
+          {currentPage > 1 && (
+            <Button 
+              onClick={() => handlePageChange(currentPage - 1)}
+              sx={{ minWidth: 'auto', px: 1.5, color: '#0000ff', fontWeight: 500, fontSize: '1rem', textTransform: 'none' }}
+            >
+              Prev
+            </Button>
+          )}
+
+          {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+            <Button
+              key={page}
+              onClick={() => handlePageChange(page)}
+              sx={{
+                height: '32px',
+                p: 0,
+                fontSize: '1rem',
+                fontWeight: page === currentPage ? 700 : 400,
+                color: page === currentPage ? '#854d0e' : '#0000ff',
+                textTransform: 'none',
+                minWidth: 'auto',
+                mx: 0.5
+              }}
+            >
+              {page}
+            </Button>
+          ))}
+
+          {currentPage < totalPages && (
+            <Button 
+              onClick={() => handlePageChange(currentPage + 1)}
+              sx={{ minWidth: 'auto', px: 1.5, color: '#0000ff', fontWeight: 500, fontSize: '1rem', textTransform: 'none' }}
+            >
+              Next
+            </Button>
+          )}
+        </Box>
+      )}
+
       {/* CREATE MODAL */}
-      <ActionModal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create GLC Client" onConfirm={handleCreateAccount} confirmText={loading ? "Creating..." : "Create Account"}>
-        <Stack spacing={2} sx={{ mt: 2 }}>
-          <FormInput label="Full Name" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          <FormInput label="ID Number" placeholder="e.g. 2024-0001" value={formData.idNumber} onChange={(e) => setFormData({...formData, idNumber: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+      <ActionModal 
+        open={isCreateModalOpen} 
+        onClose={handleCloseCreateModal} 
+        title="Create New User Account" 
+        onConfirm={handleCreateAccount} 
+        confirmText={loading ? "Creating..." : "Create Account"}
+        confirmBtnSx={{
+          bgcolor: isDarkMode ? '#28334e' : '#213C51',
+          color: '#ffffff',
+          '&:hover': { bgcolor: isDarkMode ? '#3b486b' : '#1a3041' }
+        }}
+      >
+        <Stack spacing={2} sx={{ mt: 2, ...removeAutofillBg }}>
+          <FormInput 
+            required 
+            label="Full Name" 
+            placeholder="e.g. Juan Dela Cruz"
+            value={formData.fullName} 
+            onChange={(e) => setFormData({...formData, fullName: e.target.value})} 
+            InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+            sx={removeAutofillBg}
+          />
+          <FormInput 
+            required 
+            label="ID Number" 
+            placeholder="Enter Student ID Number" 
+            value={formData.idNumber} 
+            onChange={(e) => setFormData({...formData, idNumber: formatIdNumber(e.target.value)})} 
+            InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+            sx={removeAutofillBg}
+          />
           
           <Stack direction="row" spacing={2}>
-            <FormInput select label="Department" fullWidth value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            <FormInput 
+              required
+              select 
+              label="Department" 
+              fullWidth 
+              value={formData.department} 
+              onChange={(e) => setFormData({...formData, department: e.target.value})} 
+              InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+              sx={removeAutofillBg}
+            >
+              <MenuItem value="" disabled>Select Department</MenuItem>
               {departments.map((dept) => <MenuItem key={dept} value={dept}>{dept}</MenuItem>)}
             </FormInput>
 
-            <FormInput select label="Year Level" fullWidth value={formData.yearLevel} onChange={(e) => setFormData({...formData, yearLevel: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            <FormInput 
+              required
+              select 
+              label="Year Level" 
+              fullWidth 
+              value={formData.yearLevel} 
+              onChange={(e) => setFormData({...formData, yearLevel: e.target.value})} 
+              InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+              sx={removeAutofillBg}
+            >
+              <MenuItem value="" disabled>Select Year Level</MenuItem>
               {yearLevels.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
             </FormInput>
           </Stack>
 
-          <FormInput label="Email" placeholder="example@goldenlink.ph" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} InputProps={{ startAdornment: <EmailIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          <FormInput label="Default Password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} InputProps={{ startAdornment: <KeyIcon sx={{ mr: 1, opacity: 0.7 }} />, endAdornment: ( <InputAdornment position="end"> <IconButton onClick={() => setShowPassword(!showPassword)} edge="end"> {showPassword ? <VisibilityOff /> : <Visibility />} </IconButton> </InputAdornment> ) }} />
+          <FormInput 
+            required 
+            label="Email" 
+            placeholder="example@goldenlink.ph" 
+            value={formData.email} 
+            onChange={(e) => setFormData({...formData, email: e.target.value})} 
+            InputProps={{ startAdornment: <EmailIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+            sx={removeAutofillBg}
+          />
+          <FormInput 
+            required 
+            label="Default Password" 
+            placeholder="Enter temporary password"
+            type={showPassword ? 'text' : 'password'} 
+            value={formData.password} 
+            onChange={(e) => setFormData({...formData, password: e.target.value})} 
+            InputProps={{ 
+              startAdornment: <KeyIcon sx={{ mr: 1, opacity: 0.7 }} />, 
+              endAdornment: ( 
+                <InputAdornment position="end"> 
+                  <IconButton onClick={() => setShowPassword(!showPassword)} edge="end"> 
+                    {showPassword ? <VisibilityOff /> : <Visibility />} 
+                  </IconButton> 
+                </InputAdornment> 
+              ) 
+            }} 
+            sx={removeAutofillBg}
+          />
           <Typography variant="caption" color="text.secondary">Requirement: Must use <b>@goldenlink.ph</b> domain and at least 8 characters long with uppercase, lowercase, and numbers.</Typography>
         </Stack>
       </ActionModal>
 
       {/* EDIT MODAL */}
-      <ActionModal open={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Client Info" onConfirm={handleUpdateAccount} confirmText={loading ? "Saving..." : "Update"}>
-        <Stack spacing={2} sx={{ mt: 2 }}>
-          <FormInput label="Full Name" value={editData.fullName} onChange={(e) => setEditData({...editData, fullName: e.target.value})} InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
-          <FormInput label="ID Number" value={editData.idNumber} onChange={(e) => setEditData({...editData, idNumber: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+      <ActionModal 
+        open={isEditModalOpen} 
+        onClose={() => setIsEditModalOpen(false)} 
+        title="Edit Account Info" 
+        onConfirm={handleUpdateAccount} 
+        confirmText={loading ? "Saving..." : "Update"}
+        confirmBtnSx={{
+          bgcolor: isDarkMode ? '#28334e' : '#213C51',
+          color: '#ffffff',
+          '&:hover': { bgcolor: isDarkMode ? '#3b486b' : '#1a3041' }
+        }}
+      >
+        <Stack spacing={2} sx={{ mt: 2, ...removeAutofillBg }}>
+          <FormInput 
+            required 
+            label="Full Name" 
+            placeholder="e.g. Juan Dela Cruz"
+            value={editData.fullName} 
+            onChange={(e) => setEditData({...editData, fullName: e.target.value})} 
+            InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+            sx={removeAutofillBg}
+          />
+          <FormInput 
+            required 
+            label="ID Number" 
+            placeholder="23-02-000104" 
+            value={editData.idNumber} 
+            onChange={(e) => setEditData({...editData, idNumber: formatIdNumber(e.target.value)})} 
+            InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+            sx={removeAutofillBg}
+          />
           
           <Stack direction="row" spacing={2}>
-            <FormInput select label="Department" fullWidth value={editData.department} onChange={(e) => setEditData({...editData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            <FormInput 
+              required
+              select 
+              label="Department" 
+              fullWidth 
+              value={editData.department} 
+              onChange={(e) => setEditData({...editData, department: e.target.value})} 
+              InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+              sx={removeAutofillBg}
+            >
+              <MenuItem value="" disabled>Select Department</MenuItem>
               {departments.map((dept) => <MenuItem key={dept} value={dept}>{dept}</MenuItem>)}
             </FormInput>
 
-            <FormInput select label="Year Level" fullWidth value={editData.yearLevel} onChange={(e) => setEditData({...editData, yearLevel: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+            <FormInput 
+              required
+              select 
+              label="Year Level" 
+              fullWidth 
+              value={editData.yearLevel} 
+              onChange={(e) => setEditData({...editData, yearLevel: e.target.value})} 
+              InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
+              sx={removeAutofillBg}
+            >
+              <MenuItem value="" disabled>Select Year Level</MenuItem>
               {yearLevels.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
             </FormInput>
           </Stack>

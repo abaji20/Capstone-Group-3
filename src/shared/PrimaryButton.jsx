@@ -7,7 +7,7 @@ const PrimaryButton = ({ children, onClick, ...props }) => (
     sx={{ 
       bgcolor: '#003569', 
       textTransform: 'none', 
-      color: '#fff',
+      color: '#ffffff',
       borderRadius: 2,
       fontSize: '0.95rem',
       fontWeight: 'bold',

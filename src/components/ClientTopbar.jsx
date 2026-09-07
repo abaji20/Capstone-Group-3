@@ -210,7 +210,7 @@ const ClientTopbar = () => {
         <Box sx={{ ml: 2, textAlign: 'left', whiteSpace: 'nowrap' }}>
           <Typography variant="body1" sx={{ fontWeight: 800, color: 'white' }}>{username}</Typography>
           <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.7rem' }}>
-            Client Account
+            User Account
           </Typography>
         </Box>
       </Box>
@@ -295,7 +295,7 @@ const ClientTopbar = () => {
               {!isMobile && (
                 <Box sx={{ textAlign: 'right', mr: 0.5 }}>
                   <Typography sx={{ fontSize: '0.9rem', fontWeight: 900, lineHeight: 1 }}>{username === 'Loading...' ? '...' : username.split(' ')[0].toUpperCase()}</Typography>
-                  <Typography sx={{ fontSize: '0.6rem', color: '#3b82f6', fontWeight: 800, mt: 0.3 }}>Client Account</Typography>
+                  <Typography sx={{ fontSize: '0.6rem', color: '#3b82f6', fontWeight: 800, mt: 0.3 }}>User Account</Typography>
                 </Box>
               )}
               <Avatar sx={{ bgcolor: '#3b82f6', color: '#fff', width: { xs: 35, md: 45 }, height: { xs: 35, md: 45 }, fontSize: { xs: '1rem', md: '1.2rem' }, fontWeight: 900, border: '2px solid rgba(255,255,255,0.3)' }}>{username.charAt(0).toUpperCase()}</Avatar>

@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Typography, Grid, Paper, List, ListItem, 
   ListItemAvatar, Avatar, ListItemText, useTheme,
-  Select, MenuItem, FormControl, Container, useMediaQuery, Stack, Button
+  Select, MenuItem, FormControl, Container, useMediaQuery, Stack, Button,
+  Menu, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
 } from '@mui/material';
 import { PieChart } from '@mui/x-charts/PieChart';
-import { LineChart } from '@mui/x-charts/LineChart'; // Fixed: Reference error solved
+import { LineChart } from '@mui/x-charts/LineChart';
 import { supabase } from '../../supabaseClient';
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // MUI Icons
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -20,7 +23,6 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import PublishIcon from '@mui/icons-material/Publish'; 
 import PeopleIcon from '@mui/icons-material/People';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import { FitScreen } from '@mui/icons-material';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({ 
@@ -33,6 +35,12 @@ const Dashboard = () => {
   const [monthlyDownloads, setMonthlyDownloads] = useState(new Array(12).fill(0));
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   
+  // Export states & Dialog states
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [exportType, setExportType] = useState(null); // 'excel' or 'pdf'
+  const [fileSizeEst, setFileSizeEst] = useState('~120 KB');
+  
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -41,7 +49,6 @@ const Dashboard = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Fetch Top Performing Documents
       const { data: rankedPdfs } = await supabase
         .from('pdfs')
         .select(`
@@ -111,25 +118,43 @@ const Dashboard = () => {
     };
     fetchData();
   }, [selectedYear]);
-  const handleExportExcel = async () => {
-    // 1. Fetch data for sheets - ensuring we get the new columns
-    const { data: allPDFs } = await supabase
-      .from('pdfs')
-      .select('*')
-      .eq('is_archived', false);
-      
-    const { data: allProfiles } = await supabase
-      .from('profiles')
-      .select('*');
+
+  // Handlers for Export Menu & Confirmation Dialog
+  const handleMenuClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleSelectExportType = (type) => {
+    setExportType(type);
+    setFileSizeEst(type === 'pdf' ? '~350 KB (PDF Report)' : '~85 KB (Excel Workbook)');
+    handleMenuClose();
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmExport = () => {
+    setConfirmOpen(false);
+    if (exportType === 'excel') {
+      executeExcelExport();
+    } else if (exportType === 'pdf') {
+      executePdfExport();
+    }
+  };
+
+  const executeExcelExport = async () => {
+    const { data: allPDFs } = await supabase.from('pdfs').select('*').eq('is_archived', false);
+    const { data: allProfiles } = await supabase.from('profiles').select('*');
 
     const now = new Date();
     const dateString = `${now.toLocaleString('default', { month: 'long' })}-${now.getDate()}-${now.getFullYear()}`;
     const wb = XLSX.utils.book_new();
 
-    // --- SHEET 1: DASHBOARD SUMMARY ---
     let dashboardSheetData = [
       ["LIBRARY REPOSITORY SYSTEM SUMMARY REPORT"],
-      ["Generated on:", dateString],
+      ["Generated on:", now.toLocaleString()],
       [],
       ["OVERVIEW STATS"],
       ["Metric", "Value"],
@@ -150,30 +175,16 @@ const Dashboard = () => {
     const wsDashboard = XLSX.utils.aoa_to_sheet(dashboardSheetData);
     XLSX.utils.book_append_sheet(wb, wsDashboard, "Dashboard Summary");
 
-
-    // --- SHEET 2: ACCOUNTS (Updated with ID Number and Department) ---
-    let accountsSheetData = [
-      ["USER ACCOUNTS CATEGORIZED BY ROLE"],
-      ["Generated on:", dateString],
-      [],
-    ];
-
-    const roles = ['superadmin', 'admin', 'client'];
-    roles.forEach(role => {
+    let accountsSheetData = [["USER ACCOUNTS CATEGORIZED BY ROLE"], ["Generated on:", now.toLocaleString()], []];
+    ['superadmin', 'admin', 'client'].forEach(role => {
       const filtered = allProfiles?.filter(acc => acc.role === role) || [];
       accountsSheetData.push([`${role.toUpperCase()} ACCOUNTS`]);
-      
       if (filtered.length > 0) {
-        // Added ID Number and Department to the header row
         accountsSheetData.push(["Full Name", "ID Number", "Department", "Email", "Role", "Created At"]);
         filtered.forEach(item => {
           accountsSheetData.push([
-            item.full_name || 'N/A',
-            item.id_number || 'N/A', // New Column
-            item.department || 'N/A', // New Column
-            item.email || 'N/A',
-            item.role,
-            new Date(item.created_at).toLocaleDateString()
+            item.full_name || 'N/A', item.id_number || 'N/A', item.department || 'N/A',
+            item.email || 'N/A', item.role, new Date(item.created_at).toLocaleDateString()
           ]);
         });
       } else {
@@ -184,29 +195,16 @@ const Dashboard = () => {
     const wsAccounts = XLSX.utils.aoa_to_sheet(accountsSheetData);
     XLSX.utils.book_append_sheet(wb, wsAccounts, "Accounts");
 
-
-    // --- SHEET 3: PDF LIBRARY (Categorized by Category) ---
-    let pdfSheetData = [
-      ["PDF LIBRARY CATEGORIZED BY TYPE"],
-      ["Generated on:", dateString],
-      [],
-    ];
-
-    const categories = ['book', 'academic paper'];
-    categories.forEach(cat => {
+    let pdfSheetData = [["PDF LIBRARY CATEGORIZED BY TYPE"], ["Generated on:", now.toLocaleString()], []];
+    ['book', 'academic paper'].forEach(cat => {
       const filtered = allPDFs?.filter(p => p.category?.toLowerCase() === cat.toLowerCase()) || [];
       pdfSheetData.push([`${cat.toUpperCase()}S`]);
-      
       if (filtered.length > 0) {
         pdfSheetData.push(["ID", "Title", "Author", "Genre", "Category", "Uploaded At"]);
         filtered.forEach(item => {
           pdfSheetData.push([
-            item.id,
-            item.title,
-            item.author || 'N/A',
-            item.genre || 'Uncategorized',
-            item.category,
-            new Date(item.created_at).toLocaleDateString()
+            item.id, item.title, item.author || 'N/A', item.genre || 'Uncategorized',
+            item.category, new Date(item.created_at).toLocaleDateString()
           ]);
         });
       } else {
@@ -217,8 +215,121 @@ const Dashboard = () => {
     const wsPDFs = XLSX.utils.aoa_to_sheet(pdfSheetData);
     XLSX.utils.book_append_sheet(wb, wsPDFs, "PDF Library");
 
-    // Final Action: Download the file
     XLSX.writeFile(wb, `Library_Repository_Report_${dateString}.xlsx`);
+  };
+
+  const executePdfExport = async () => {
+    const { data: allPDFs } = await supabase.from('pdfs').select('*').eq('is_archived', false);
+    const now = new Date();
+    const dateTimeString = now.toLocaleString('en-US', { 
+      month: 'long', day: 'numeric', year: 'numeric', 
+      hour: '2-digit', minute: '2-digit', second: '2-digit' 
+    });
+
+    const doc = new jsPDF();
+
+    // Formal Header Design
+    doc.setFillColor(33, 60, 81); // #213C51
+    doc.rect(0, 0, 210, 30, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("LIBRARY REPOSITORY SYSTEM", 14, 15);
+    
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Generated: ${dateTimeString}`, 14, 22);
+
+    // Summary Section Text
+    doc.setTextColor(33, 60, 81);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Executive Summary & Statistics", 14, 42);
+
+    const summaryData = [
+      ["Total Documents", stats.total],
+      ["Total Books", stats.books],
+      ["Academic Papers", stats.papers],
+      ["Total System Downloads", stats.downloads],
+      ["Pending Delete Requests", stats.deleteRequests],
+      ["Pending Client Requests", stats.clientRequests]
+    ];
+
+    autoTable(doc, {
+      startY: 46,
+      head: [["Metric Description", "Count"]],
+      body: summaryData,
+      theme: 'grid',
+      headStyles: { fillColor: [33, 60, 81], textColor: [255, 255, 255], fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 4 }
+    });
+
+    let currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 12 : 90;
+
+    // Books Table Section
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Categorized Materials: Books", 14, currentY);
+
+    const booksList = allPDFs?.filter(p => p.category?.toLowerCase() === 'book') || [];
+    const booksRows = booksList.map(item => [
+      item.title || 'N/A', 
+      item.author || 'N/A', 
+      item.genre || 'General', 
+      new Date(item.created_at).toLocaleDateString()
+    ]);
+
+    autoTable(doc, {
+      startY: currentY + 4,
+      head: [["Title", "Author", "Genre", "Uploaded At"]],
+      body: booksRows.length > 0 ? booksRows : [["No books found in the repository.", "", "", ""]],
+      theme: 'striped',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
+      styles: { fontSize: 8, cellPadding: 3 }
+    });
+
+    currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 12 : currentY + 50;
+
+    // Check page overflow to add page if needed
+    if (currentY > 240) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    // Academic Papers Table Section
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Categorized Materials: Academic Papers", 14, currentY);
+
+    const papersList = allPDFs?.filter(p => p.category?.toLowerCase() === 'academic paper') || [];
+    const papersRows = papersList.map(item => [
+      item.title || 'N/A', 
+      item.author || 'N/A', 
+      item.genre || 'General', 
+      new Date(item.created_at).toLocaleDateString()
+    ]);
+
+    autoTable(doc, {
+      startY: currentY + 4,
+      head: [["Title", "Author", "Genre", "Uploaded At"]],
+      body: papersRows.length > 0 ? papersRows : [["No academic papers found in the repository.", "", "", ""]],
+      theme: 'striped',
+      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
+      styles: { fontSize: 8, cellPadding: 3 }
+    });
+
+    // Footer with page count
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`Page ${i} of ${pageCount} - Library Repository System Report`, 14, 290);
+    }
+
+    const fileDateStr = `${now.getMonth() + 1}-${now.getDate()}-${now.getFullYear()}`;
+    doc.save(`Library_Official_Report_${fileDateStr}.pdf`);
   };
 
   const statItems = [
@@ -279,7 +390,7 @@ const Dashboard = () => {
 
   return (
     <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#ffffff', minHeight: '100vh', pb: 6 }}>
-      <Container maxWidth="xls" sx={{ mt: { xs: 1, md: 7 } } }>
+      <Container maxWidth="xls" sx={{ mt: { xs: 1, md: 7 } }}>
         <Box sx={{ mb: 4 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
             <Box>
@@ -290,11 +401,50 @@ const Dashboard = () => {
                 SYSTEM OVERVIEW & ANALYTICS
               </Typography>
             </Box>
-            <Button variant="contained" startIcon={<FileDownloadIcon />} onClick={handleExportExcel} sx={{ bgcolor: '#213C51', color: '#ffffff', '&:hover': { bgcolor: '#162836' }, fontFamily: "'Montserrat', sans-serif", fontWeight: 700, borderRadius: '8px' }}>
-              Export Report
+            
+            {/* Export Report Button & Dropdown Menu */}
+            <Button 
+              variant="contained" 
+              startIcon={<FileDownloadIcon />} 
+              onClick={handleMenuClick} 
+              sx={{ bgcolor: '#213C51', color: '#ffffff', '&:hover': { bgcolor: '#162836' }, fontFamily: "'Montserrat', sans-serif", fontWeight: 700, borderRadius: '8px' }}
+            >
+              Generate Report
             </Button>
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleMenuClose}
+            >
+              <MenuItem onClick={() => handleSelectExportType('pdf')}>Generate PDF Report</MenuItem>
+              <MenuItem onClick={() => handleSelectExportType('excel')}>Generate Excel Workbook</MenuItem>
+            </Menu>
           </Stack>
         </Box>
+
+        {/* Confirmation Dialog */}
+        <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+          <DialogTitle sx={{ fontWeight: 800, color: '#213C51' }}>Confirm Generate Report</DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ mt: 1 }}>
+              Do you want to Generate this system report now? 
+              <br /><br />
+              <strong>Format:</strong> {exportType?.toUpperCase()}
+              <br />
+              <strong>Estimated File Size:</strong> {fileSizeEst}
+              <br />
+              <strong>Generated Timestamp:</strong> {new Date().toLocaleString()}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setConfirmOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmExport} variant="contained" sx={{ bgcolor: '#213C51', fontWeight: 700 }}>
+              Proceed
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         <Grid container spacing={2} sx={{ mb: 5 }}>
           {statItems.map((item, i) => (
@@ -319,18 +469,7 @@ const Dashboard = () => {
               </FormControl>
             </Box>
             
-            <Box 
-              sx={{ 
-                width: '100%', 
-                overflowX: isMobile ? 'auto' : 'hidden', 
-                backgroundColor: '#fff',
-                overflowY: 'hidden',
-                borderRadius: '12px',
-                p: 1,
-                '&::-webkit-scrollbar': { height: '6px' },
-                '&::-webkit-scrollbar-thumb': { backgroundColor: '#001127', borderRadius: '10px' }
-              }}
-            >
+            <Box sx={{ width: '100%', overflowX: isMobile ? 'auto' : 'hidden', backgroundColor: '#fff', overflowY: 'hidden', borderRadius: '12px', p: 1 }}>
               <Box sx={{ minWidth: isMobile ? 100 : '100%', height: 350 }}>
                 {isMobile ? (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -350,18 +489,8 @@ const Dashboard = () => {
                   </Box>
                 ) : (
                   <LineChart
-                    xAxis={[{ 
-                      scaleType: 'point', 
-                      data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-                      tickLabelStyle: { fontSize: 12, fill: '#64748b', fontWeight: 500 }
-                    }]}
-                    series={[{ 
-                      data: monthlyDownloads, 
-                      color: '#3b82f6', 
-                      label: 'Downloads',
-                      area: true,
-                      showMark: true, 
-                    }]}
+                    xAxis={[{ scaleType: 'point', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], tickLabelStyle: { fontSize: 12, fill: '#64748b', fontWeight: 500 } }]}
+                    series={[{ data: monthlyDownloads, color: '#3b82f6', label: 'Downloads', area: true, showMark: true }]}
                     height={350}
                     margin={{ top: 40, bottom: 40, left: 50, right: 20 }}
                   />
@@ -379,14 +508,7 @@ const Dashboard = () => {
               </Box>
               <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <PieChart
-                  series={[{ 
-                    innerRadius: 55, outerRadius: 110, paddingAngle: 5,
-                    arcLabel: (item) => `${item.value}`, arcLabelMinAngle: 35,
-                    data: [
-                      { id: 0, value: stats.books, label: 'Books', color: '#ec4899' },
-                      { id: 1, value: stats.papers, label: 'Papers', color: '#0ea5e9' }
-                    ] 
-                  }]}
+                  series={[{ innerRadius: 55, outerRadius: 110, paddingAngle: 5, arcLabel: (item) => `${item.value}`, arcLabelMinAngle: 35, data: [{ id: 0, value: stats.books, label: 'Books', color: '#ec4899' }, { id: 1, value: stats.papers, label: 'Papers', color: '#0ea5e9' }] }]}
                   sx={{ '& .MuiPieArcLabel-root': { fill: 'white', fontWeight: 'bold', fontSize: 18 } }}
                   height={300}
                 />
@@ -426,88 +548,31 @@ const Dashboard = () => {
                 </Paper>
               </Grid>
 
-              {/* Ginawa nating md={12} para full width sa laptop, pero pwede ring md={8} kung may katabi */}
-<Grid item xs={8} md={12}>
-  <Paper 
-    sx={{ 
-      ...commonPaperStyle, 
-      height: '100%', 
-      width: '100%', 
-      // Inalis ang minWidth: 500 para maging fluid ang width
-      minWidth: 0, 
-      display: 'flex',
-      flexDirection: 'column'
-    }}
-  >
-    <Box sx={headerBoxStyle}>
-      <Typography sx={headerTextStyle}>Top Performing PDFs</Typography>
-    </Box>
-    <List disablePadding>
-      {topPdfs.map((pdf, i) => (
-        <ListItem 
-          key={pdf.id} 
-          divider={i !== topPdfs.length - 1} 
-          sx={{ 
-            px: 0, 
-            py: 1.5,
-            display: 'flex', 
-            alignItems: 'center'
-          }}
-        >
-          <ListItemAvatar>
-            <Avatar sx={{ bgcolor: '#f59e0b15', color: '#f59e0b' }}>
-              <Typography variant="caption" fontWeight="900">#{i + 1}</Typography>
-            </Avatar>
-          </ListItemAvatar>
-          
-          <ListItemText 
-            sx={{ 
-              // Pinipigilan nito ang text na itulak yung icon palabas
-              minWidth: isMobile ? 'auto' : 300, 
-              mr: 2 
-            }}
-            primary={
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  fontWeight: 800, 
-                  color: isDarkMode ? '#f8fafc' : '#1e293b', 
-                  display: 'block', 
-                  whiteSpace: 'nowrap', 
-                  overflow: 'hidden', 
-                  textOverflow: 'ellipsis' 
-                }}
-              >
-                {pdf.title}
-              </Typography>
-            } 
-            secondary={
-              <Typography 
-                variant="caption" 
-                color="textSecondary" 
-                sx={{ 
-                  fontWeight: 600, 
-                  display: 'block',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}
-              >
-                {pdf.author || 'Unknown'} • {pdf.genre || 'General'}
-              </Typography>
-            } 
-          />
-          
-          {/* ml: 'auto' ensures the icon stays at the far right regardless of width */}
-                  <Stack direction="row" alignItems="center" spacing={0.5} sx={{ color: '#f59e0b', ml: 'auto', flexShrink: 0 }}>
-                    <DownloadIcon sx={{ fontSize: '0.9rem' }} />
-                    <Typography variant="caption" sx={{ fontWeight: 900 }}>{pdf.download_count}</Typography>
-                  </Stack>
-                </ListItem>
-                  ))}
-                </List>
-              </Paper>
-            </Grid>
+              <Grid item xs={8} md={12}>
+                <Paper sx={{ ...commonPaperStyle, height: '100%', width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                  <Box sx={headerBoxStyle}>
+                    <Typography sx={headerTextStyle}>Top Performing PDFs</Typography>
+                  </Box>
+                  <List disablePadding>
+                    {topPdfs.map((pdf, i) => (
+                      <ListItem key={pdf.id} divider={i !== topPdfs.length - 1} sx={{ px: 0, py: 1.5, display: 'flex', alignItems: 'center' }}>
+                        <ListItemAvatar>
+                          <Avatar sx={{ bgcolor: '#f59e0b15', color: '#f59e0b' }}><Typography variant="caption" fontWeight="900">#{i + 1}</Typography></Avatar>
+                        </ListItemAvatar>
+                        <ListItemText 
+                          sx={{ minWidth: isMobile ? 'auto' : 300, mr: 2 }}
+                          primary={<Typography variant="caption" sx={{ fontWeight: 800, color: isDarkMode ? '#f8fafc' : '#1e293b', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pdf.title}</Typography>} 
+                          secondary={<Typography variant="caption" color="textSecondary" sx={{ fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pdf.author || 'Unknown'} • {pdf.genre || 'General'}</Typography>} 
+                        />
+                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ color: '#f59e0b', ml: 'auto', flexShrink: 0 }}>
+                          <DownloadIcon sx={{ fontSize: '0.9rem' }} />
+                          <Typography variant="caption" sx={{ fontWeight: 900 }}>{pdf.download_count}</Typography>
+                        </Stack>
+                      </ListItem>
+                    ))}
+                  </List>
+                </Paper>
+              </Grid>
             </Grid>
           </Grid>
         </Grid>
