@@ -3,7 +3,8 @@ import {
   Drawer, List, ListItem, ListItemButton, ListItemIcon, 
   ListItemText, Typography, Box, useTheme, useMediaQuery, 
   Avatar, Tooltip, Stack, Divider, Alert, Snackbar, MenuItem,
-  FormControl, InputLabel, Select, TextField
+  FormControl, InputLabel, Select, TextField, Dialog, DialogActions,
+  Button, Paper
 } from '@mui/material';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -47,7 +48,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   
-  const [initialData, setInitialData] = useState({}); // Original data store
+  const [initialData, setInitialData] = useState({});
   const [userData, setUserData] = useState({ 
     id: '', 
     full_name: '', 
@@ -115,7 +116,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           setUserRoleText(profile.role.toUpperCase());
         }
 
-        // Fetch latest role request for status/remarks
         const { data: lastReq } = await supabase
           .from('role_requests')
           .select('status, remarks, requested_role')
@@ -141,7 +141,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
     setLoading(true);
 
-    // 1. UPDATE PROFILE IN SUPABASE
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ 
@@ -159,7 +158,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       return;
     }
 
-    // 2. CHECK EXACT CHANGES (Past value to New value format)
     const changes = [];
     if ((initialData.full_name || '') !== (userData.full_name || '')) {
       changes.push(`name from "${initialData.full_name || 'N/A'}" to "${userData.full_name}"`);
@@ -174,7 +172,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       changes.push(`ID number from "${initialData.id_number || 'N/A'}" to "${userData.id_number}"`);
     }
 
-    // Insert into audit_logs if profile fields changed
     if (changes.length > 0) {
       const logDetails = `Updated ${changes.join(', ')}`;
 
@@ -192,7 +189,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       }
     }
 
-    // 3. HANDLE CHANGE PASSWORD
     if (newPassword.trim() !== '') {
       const { error: pwdError } = await supabase.auth.updateUser({ password: newPassword });
       
@@ -203,7 +199,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       }
     }
 
-    // 4. HANDLE ROLE REQUEST (IF ANY)
     if (requestData.role) {
       const { error: roleError } = await supabase
         .from('role_requests')
@@ -355,7 +350,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         borderTop: '1px solid rgba(255,255,255,0.12)',
         background: 'rgba(15,23,42,0.28)'
       }}>
-        {/* PROFILE SECTION - CLICKABLE */}
         <Tooltip title={isMini ? "Profile Settings" : ""} placement="right">
           <Box
             onClick={() => setIsProfileModalOpen(true)}
@@ -456,18 +450,106 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         {drawerContent}
       </Drawer>
 
-      {/* LOGOUT CONFIRMATION MODAL */}
-      <ActionModal
+      {/* MATCHED LOGOUT CONFIRMATION DIALOG DESIGN */}
+      <Dialog
         open={isLogoutModalOpen}
         onClose={() => setIsLogoutModalOpen(false)}
-        title="Confirm Logout"
-        onConfirm={handleConfirmLogout}
-        confirmText="Logout"
+        PaperProps={{
+          elevation: 12,
+          sx: {
+            backgroundColor: '#434e5e',
+            color: '#ffffff',
+            borderRadius: '24px',
+            maxWidth: 480,
+            width: '100%',
+            px: 3.5,
+            pt: 3.5,
+            pb: 2.5,
+            boxShadow: '0px 10px 30px rgba(0, 0, 0, 0.35)',
+          }
+        }}
+        BackdropProps={{
+          sx: {
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+          }
+        }}
       >
-        <Typography variant="body1" sx={{ mt: 1 }}>
-          Are you sure you want to log out?
-        </Typography>
-      </ActionModal>
+        <Box sx={{ mb: 2 }}>
+          <Typography 
+            variant="h5" 
+            sx={{ 
+              fontWeight: 500, 
+              color: '#ffffff', 
+              fontSize: '1.65rem',
+              letterSpacing: '-0.3px',
+              mb: 1
+            }}
+          >
+            Confirm Logout
+          </Typography>
+
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              color: '#bdc5d1', 
+              fontSize: '1.05rem',
+              fontWeight: 400,
+              lineHeight: 1.4
+            }}
+          >
+            Are you sure you want to log out of your account?
+          </Typography>
+        </Box>
+
+        <DialogActions 
+          sx={{ 
+            p: 0, 
+            pt: 1, 
+            justifyContent: 'flex-end', 
+            gap: 1.5 
+          }}
+        >
+          <Button
+            onClick={() => setIsLogoutModalOpen(false)}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '1rem',
+              color: '#d1d5db',
+              px: 2,
+              py: 1,
+              borderRadius: '8px',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                color: '#ffffff'
+              }
+            }}
+          >
+            Cancel
+          </Button>
+
+          <Button
+            onClick={handleConfirmLogout}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '1rem',
+              backgroundColor: '#ff4d39',
+              color: '#ffffff',
+              px: 3,
+              py: 1,
+              borderRadius: '16px',
+              boxShadow: 'none',
+              '&:hover': {
+                backgroundColor: '#e03e2b',
+                boxShadow: 'none'
+              }
+            }}
+          >
+            Logout
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* PROFILE SETTINGS MODAL */}
       <ActionModal 
@@ -510,7 +592,6 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
           <FormInput label="Employee / ID Number" value={userData.id_number || ''} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
 
-          {/* Change Password Section */}
           <Divider sx={{ my: 1 }}><Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', px: 1 }}>CHANGE PASSWORD</Typography></Divider>
           
           <FormInput 

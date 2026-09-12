@@ -353,8 +353,8 @@ const Dashboard = () => {
         <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Box>
             <Typography variant="h3" sx={{ fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px' }}>
-              Super Admin Dashboard
-            </Typography>
+            SUPERADMIN DASHBOARD
+              </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
               System Repository Performance & Analytics Overview
             </Typography>
@@ -385,7 +385,7 @@ const Dashboard = () => {
 
         {/* Export Confirmation Dialog */}
         <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-          <DialogTitle sx={{ fontWeight: 800, color: '#213C51' }}>Confirm Report Export</DialogTitle>
+          <DialogTitle sx={{ fontWeight: 800, color: '#FFFFf' }}>Confirm Report Export</DialogTitle>
           <DialogContent>
             <DialogContentText sx={{ mt: 1 }}>
               Are you sure you want to generate the repository system summary? <br /><br />
@@ -395,7 +395,7 @@ const Dashboard = () => {
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
             <Button onClick={() => setConfirmOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>Cancel</Button>
-            <Button onClick={handleConfirmExport} variant="contained" sx={{ bgcolor: '#213C51', fontWeight: 700 }}>Proceed</Button>
+            <Button onClick={handleConfirmExport} variant="contained" sx={{ color: '#ffffff', bgcolor: '#213C51', fontWeight: 700 }}>Proceed</Button>
           </DialogActions>
         </Dialog>
 

@@ -2,7 +2,8 @@ import React, { useContext, useEffect, useState } from 'react';
 import { 
   Drawer, List, ListItem, ListItemButton, ListItemIcon, 
   ListItemText, Typography, Box, useTheme, useMediaQuery, 
-  Avatar, Tooltip, Stack, Divider, Alert, Snackbar, MenuItem
+  Tooltip, Stack, Divider, Alert, Snackbar, MenuItem,
+  Dialog, DialogTitle, DialogContent, DialogActions, Button
 } from '@mui/material';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -41,6 +42,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   // MODAL STATES
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   const [initialData, setInitialData] = useState({}); // Original data store
   const [userData, setUserData] = useState({ id: '', full_name: '', department: '', id_number: '', year_level: '' });
@@ -188,7 +190,10 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   };
 
   const handleConfirmLogout = async () => {
+    setLogoutLoading(true);
     await supabase.auth.signOut();
+    setLogoutLoading(false);
+    setIsLogoutModalOpen(false);
     navigate('/login');
   };
 
@@ -239,7 +244,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         />
       </Box>
 
-      {/* NAVIGATION - Responsive sizing and scaling applied */}
+      {/* NAVIGATION */}
       <List sx={{ px: 1.5, py: 2, flexGrow: 1 }}>
         {navLinks.superadmin.map((item) => {
           const isActive = location.pathname === item.path;
@@ -298,7 +303,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         borderTop: '1px solid rgba(255,255,255,0.12)',
         background: 'rgba(15,23,42,0.28)'
       }}>
-        {/* PROFILE SECTION - CLICKABLE */}
+        {/* PROFILE SECTION */}
         <Tooltip title={isMini ? "Profile Settings" : ""} placement="right">
           <Box
             onClick={() => setIsProfileModalOpen(true)}
@@ -343,7 +348,16 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           {!isMini && <ListItemText primary="Appearance" primaryTypographyProps={{ fontSize: { xs: '0.8rem', md: '0.85rem' }, color: '#ffffff', whiteSpace: 'nowrap' }} />}
         </ListItemButton>
 
-        <ListItemButton onClick={() => setIsLogoutModalOpen(true)} sx={{ borderRadius: '8px', color: '#ff5252', justifyContent: isMini ? 'center' : 'flex-start' }}>
+        {/* LOGOUT BUTTON TRIGGER */}
+        <ListItemButton 
+          onClick={() => setIsLogoutModalOpen(true)} 
+          sx={{ 
+            borderRadius: '8px', 
+            color: '#ff5252', 
+            justifyContent: isMini ? 'center' : 'flex-start',
+            '&:hover': { bgcolor: 'rgba(255, 82, 82, 0.1)' } 
+          }}
+        >
           <ListItemIcon sx={{ color: 'inherit', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
             <LogoutIcon fontSize="small" />
           </ListItemIcon>
@@ -367,18 +381,94 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         {drawerContent}
       </Drawer>
 
-      {/* LOGOUT CONFIRMATION MODAL */}
-      <ActionModal
+      {/* MATCHED LOGOUT CONFIRMATION DIALOG */}
+      <Dialog
         open={isLogoutModalOpen}
-        onClose={() => setIsLogoutModalOpen(false)}
-        title="Confirm Logout"
-        onConfirm={handleConfirmLogout}
-        confirmText="Logout"
+        onClose={() => !logoutLoading && setIsLogoutModalOpen(false)}
+        PaperProps={{
+          sx: {
+            borderRadius: '18px',
+            bgcolor: '#424d5d',
+            color: '#ffffff',
+            px: 2,
+            py: 2,
+            width: '100%',
+            minWidth: 100,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)'
+          }
+        }}
       >
-        <Typography variant="body1" sx={{ mt: 1 }}>
-          Are you sure you want to log out?
-        </Typography>
-      </ActionModal>
+        <DialogTitle sx={{ pt: 1, pb: 0.5, px: 2 }}>
+          <Typography 
+            variant="h3" 
+     w       sx={{ 
+              fontWeight: 400, 
+              color: '#ffffff', 
+              letterSpacing: '-0.02em',
+              fontSize: '1.65rem'
+            }}
+          >
+            Confirm Logout
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent sx={{ py: 1.5, px: 2 }}>
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              color: '#d1d5db', 
+              fontWeight: 400,
+              fontSize: '1.05rem',
+              lineHeight: 1.4
+            }}
+          >
+            Are you sure you want to log out of your account?
+          </Typography>
+        </DialogContent>
+
+        <DialogActions sx={{ pt: 2, pb: 1, px: 2, gap: 1.5, justifyContent: 'flex-end' }}>
+          <Button
+            onClick={() => setIsLogoutModalOpen(false)}
+            disabled={logoutLoading}
+            disableRipple
+            sx={{
+              fontWeight: 600,
+              color: '#cbd5e1',
+              textTransform: 'none',
+              fontSize: '1rem',
+              px: 1.5,
+              '&:hover': {
+                bgcolor: 'transparent',
+                color: '#ffffff'
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmLogout}
+            disabled={logoutLoading}
+            sx={{
+              bgcolor: '#ff4d39',
+              color: '#ffffff',
+              fontWeight: 500,
+              textTransform: 'none',
+              borderRadius: '12px',
+              fontSize: '1rem',
+              px: 3,
+              py: 1,
+              boxShadow: 'none',
+              '&:hover': {
+                bgcolor: '#e03e2b',
+                boxShadow: 'none'
+              }
+            }}
+          >
+            {logoutLoading ? 'Logging out...' : 'Logout'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* PROFILE SETTINGS MODAL */}
       <ActionModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} title="Edit Super Admin Profile" onConfirm={handleUpdateProfile} confirmText={loading ? "Saving..." : "Save Changes"}>
