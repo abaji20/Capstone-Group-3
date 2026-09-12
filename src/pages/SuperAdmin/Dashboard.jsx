@@ -1,132 +1,182 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Box, Typography, Grid, Paper, List, ListItem, 
-  ListItemAvatar, Avatar, ListItemText, useTheme,
-  Select, MenuItem, FormControl, Container, useMediaQuery, Stack, Button,
-  Menu, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
+  Box, Typography, Grid, Paper, Avatar, useTheme,
+  Container, Stack, Button, Menu, MenuItem, Dialog, 
+  DialogTitle, DialogContent, DialogContentText, DialogActions,
+  Select, Chip, Table, TableBody, TableCell, 
+  TableContainer, TableHead, TableRow, List, ListItem, 
+  ListItemAvatar, ListItemText, CardMedia, Divider, IconButton
 } from '@mui/material';
-import { PieChart } from '@mui/x-charts/PieChart';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { supabase } from '../../supabaseClient';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import glclogo from '../../assets/glclogo.png';
 
 // MUI Icons
-import DescriptionIcon from '@mui/icons-material/Description';
 import GroupIcon from '@mui/icons-material/Group';
-import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import SecurityIcon from '@mui/icons-material/Security'; 
-import DownloadIcon from '@mui/icons-material/Download';
-import HistoryIcon from '@mui/icons-material/History';
-import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'; 
-import PublishIcon from '@mui/icons-material/Publish'; 
-import PeopleIcon from '@mui/icons-material/People';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import DescriptionIcon from '@mui/icons-material/Description';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import SecurityIcon from '@mui/icons-material/Security';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import PersonIcon from '@mui/icons-material/Person';
+import BookIcon from '@mui/icons-material/Book';
+import HistoryIcon from '@mui/icons-material/History';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import CloseIcon from '@mui/icons-material/Close';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+
+const getStorageImageUrl = (imageUrl) => {
+  if (!imageUrl) return null;
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+
+  return supabase.storage.from('pdfs').getPublicUrl(imageUrl).data.publicUrl;
+};
 
 const Dashboard = () => {
+  const currentYear = new Date().getFullYear();
+  const firstDownloadYear = 2026;
   const [stats, setStats] = useState({ 
-    books: 0, papers: 0, clients: 0, admins: 0, superAdmins: 0, 
-    total: 0, downloads: 0, deleteRequests: 0, clientRequests: 0,
-    totalAccounts: 0 
+    totalPdf: 0, totalAccounts: 0, users: 0, superAdmin: 0, 
+    totalAdmins: 0, downloads: 0, deleteRequest: 0, usersRequest: 0 
   });
-  const [activities, setActivities] = useState([]);
+  const [recentAccounts, setRecentAccounts] = useState([]);
+  const [recentBooks, setRecentBooks] = useState([]);
+  const [recentActivities, setRecentActivities] = useState([]);
   const [topPdfs, setTopPdfs] = useState([]);
-  const [monthlyDownloads, setMonthlyDownloads] = useState(new Array(12).fill(0));
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [downloadYear, setDownloadYear] = useState(currentYear);
+  const [downloadYears, setDownloadYears] = useState([currentYear]);
+  const [monthlyDownloads, setMonthlyDownloads] = useState([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   
-  // Export states & Dialog states
+  // Export State
   const [anchorEl, setAnchorEl] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [exportType, setExportType] = useState(null); // 'excel' or 'pdf'
+  const [exportType, setExportType] = useState(null);
   const [fileSizeEst, setFileSizeEst] = useState('~120 KB');
-  
+
+  // Book Detail Modal State ("See More")
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [bookDialogOpen, setBookDialogOpen] = useState(false);
+
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
-  const years = [2026, 2027, 2028, 2029, 2030];
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data: rankedPdfs } = await supabase
-        .from('pdfs')
-        .select(`
-          id, title, author, genre,
-          downloads:downloads(count)
-        `)
-        .eq('is_archived', false);
+      // 1. Fetch Recent Accounts
+      const { data: accountsData } = await supabase
+        .from('profiles')
+        .select('id, email, role, created_at, full_name, department, id_number, year_level')
+        .order('created_at', { ascending: false })
+        .limit(5);
 
-      if (rankedPdfs) {
-        const sortedDocs = rankedPdfs
-          .map(pdf => ({
-            ...pdf,
-            download_count: pdf.downloads?.[0]?.count || 0
-          }))
-          .sort((a, b) => b.download_count - a.download_count)
-          .slice(0, 5);
-        setTopPdfs(sortedDocs);
+      if (accountsData) setRecentAccounts(accountsData);
+
+      // 2. Fetch Recent Books
+      const { data: booksData } = await supabase
+        .from('pdfs')
+        .select('id, created_at, title, author, genre, published_date, description, image_url, file_url, category, is_archived')
+        .eq('category', 'book')
+        .eq('is_archived', false)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (booksData) {
+        setRecentBooks(booksData.map(book => ({
+          ...book,
+          imageUrl: getStorageImageUrl(book.image_url)
+        })));
       }
 
-      const { count: books } = await supabase.from('pdfs').select('*', { count: 'exact', head: true }).eq('category', 'book').eq('is_archived', false);
-      const { count: papers } = await supabase.from('pdfs').select('*', { count: 'exact', head: true }).eq('category', 'academic paper').eq('is_archived', false);
+      // 3. Fetch Metric Counts
+      const { count: totalPdf } = await supabase.from('pdfs').select('*', { count: 'exact', head: true }).eq('is_archived', false);
       const { count: clients } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'client');
       const { count: admins } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
       const { count: superAdmins } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'superadmin');
       const { count: deleteReqs } = await supabase.from('delete_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
       const { count: clientReqs } = await supabase.from('upload_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+      const { count: totalDownloads } = await supabase.from('downloads').select('*', { count: 'exact', head: true });
 
-      const { data: downloadList } = await supabase
-        .from('downloads')
-        .select('downloaded_at')
-        .gte('downloaded_at', `${selectedYear}-01-01`)
-        .lte('downloaded_at', `${selectedYear}-12-31`);
-      
       setStats({ 
-        books: books || 0, 
-        papers: papers || 0, 
-        clients: clients || 0, 
-        admins: admins || 0, 
-        superAdmins: superAdmins || 0,
-        deleteRequests: deleteReqs || 0,
-        clientRequests: clientReqs || 0,
-        totalAccounts: (clients || 0) + (admins || 0) + (superAdmins || 0),
-        total: (books || 0) + (papers || 0), 
-        downloads: downloadList?.length || 0 
+        totalPdf: totalPdf || 0, 
+        totalAccounts: (clients || 0) + (admins || 0) + (superAdmins || 0), 
+        users: clients || 0, 
+        superAdmin: superAdmins || 0, 
+        totalAdmins: admins || 0,
+        downloads: totalDownloads || 0,
+        deleteRequest: deleteReqs || 0,
+        usersRequest: clientReqs || 0
       });
 
-      const trends = new Array(12).fill(0);
-      downloadList?.forEach((item) => {
-        const month = new Date(item.downloaded_at).getMonth();
-        trends[month]++;
-      });
-      setMonthlyDownloads(trends);
+      // 4. Fetch Monthly Download Trends
+      const { data: downloadRecords } = await supabase.from('downloads').select('downloaded_at, pdf_id');
+      if (downloadRecords) {
+        const yearsWithDownloads = downloadRecords
+          .filter(record => record.downloaded_at)
+          .map(record => new Date(record.downloaded_at).getFullYear())
+          .filter(year => year >= firstDownloadYear);
+        setDownloadYears([...new Set([currentYear, ...yearsWithDownloads])].sort((a, b) => b - a));
 
-      const { data: logs, error: logError } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
+        const monthsCount = Array(12).fill(0);
+        const downloadCountsMap = {};
 
-      if (!logError && logs) {
-        const logsWithProfiles = await Promise.all(logs.map(async (log) => {
-          const { data: profile } = await supabase.from('profiles').select('full_name, role').eq('id', log.user_id).single();
-          return { ...log, profiles: profile };
-        }));
-        setActivities(logsWithProfiles);
+        downloadRecords.forEach(record => {
+          if (record.downloaded_at) {
+            const date = new Date(record.downloaded_at);
+            if (date.getFullYear() === Number(downloadYear)) {
+              monthsCount[date.getMonth()] += 1;
+            }
+          }
+          if (record.pdf_id) {
+            downloadCountsMap[record.pdf_id] = (downloadCountsMap[record.pdf_id] || 0) + 1;
+          }
+        });
+
+        setMonthlyDownloads(monthsCount);
+
+        // Calculate Dynamic Top Performing PDFs
+        const sortedPdfIds = Object.keys(downloadCountsMap)
+          .sort((a, b) => downloadCountsMap[b] - downloadCountsMap[a])
+          .slice(0, 5);
+
+        if (sortedPdfIds.length > 0) {
+          const { data: topPdfsDetails } = await supabase
+            .from('pdfs')
+            .select('*')
+            .in('id', sortedPdfIds);
+
+          if (topPdfsDetails) {
+            const rankedPdfs = topPdfsDetails.map(pdf => ({
+              ...pdf,
+              downloadCount: downloadCountsMap[pdf.id] || 0
+            })).sort((a, b) => b.downloadCount - a.downloadCount);
+
+            setTopPdfs(rankedPdfs);
+          }
+        } else {
+          // Fallback if no downloads recorded yet
+          const { data: fallbackPdfs } = await supabase.from('pdfs').select('*').limit(5);
+          if (fallbackPdfs) {
+            setTopPdfs(fallbackPdfs.map(pdf => ({ ...pdf, downloadCount: 0 })));
+          }
+        }
       }
+
+      // 5. Fetch Audit Logs
+      const { data: auditData } = await supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(5);
+      setRecentActivities(auditData || []);
     };
+
     fetchData();
-  }, [selectedYear]);
+  }, [downloadYear]);
 
-  // Handlers for Export Menu & Confirmation Dialog
-  const handleMenuClick = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  // Export Handlers
+  const handleMenuClick = (event) => setAnchorEl(event.currentTarget);
+  const handleMenuClose = () => setAnchorEl(null);
 
   const handleSelectExportType = (type) => {
     setExportType(type);
@@ -137,446 +187,674 @@ const Dashboard = () => {
 
   const handleConfirmExport = () => {
     setConfirmOpen(false);
-    if (exportType === 'excel') {
-      executeExcelExport();
-    } else if (exportType === 'pdf') {
-      executePdfExport();
-    }
+    if (exportType === 'excel') executeExcelExport();
+    else if (exportType === 'pdf') executePdfExport();
   };
 
+  const formatReportDate = (value) => value ? new Date(value).toLocaleString() : 'N/A';
+
   const executeExcelExport = async () => {
-    const { data: allPDFs } = await supabase.from('pdfs').select('*').eq('is_archived', false);
-    const { data: allProfiles } = await supabase.from('profiles').select('*');
-
     const now = new Date();
-    const dateString = `${now.toLocaleString('default', { month: 'long' })}-${now.getDate()}-${now.getFullYear()}`;
+    const dateString = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const [{ data: accounts }, { data: materials }, { data: requests }, { data: downloads }, { data: logs }] = await Promise.all([
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at').order('created_at', { ascending: false }),
+      supabase.from('pdfs').select('id, title, author, category, genre, published_date, created_at, is_archived').order('created_at', { ascending: false }),
+      supabase.from('upload_requests').select('id, status, created_at, user_id').order('created_at', { ascending: false }),
+      supabase.from('downloads').select('id, user_id, pdf_id, downloaded_at').order('downloaded_at', { ascending: false }),
+      supabase.from('audit_logs').select('id, action_type, description, created_at, user_id').order('created_at', { ascending: false })
+    ]);
     const wb = XLSX.utils.book_new();
-
-    let dashboardSheetData = [
+    const dashboardSheetData = [
       ["LIBRARY REPOSITORY SYSTEM SUMMARY REPORT"],
       ["Generated on:", now.toLocaleString()],
       [],
       ["OVERVIEW STATS"],
       ["Metric", "Value"],
-      ["Total PDF", stats.total],
+      ["Total PDF", stats.totalPdf],
       ["Total Accounts", stats.totalAccounts],
-      ["Clients", stats.clients],
-      ["Super Admins", stats.superAdmins],
-      ["Total Admins", stats.admins],
-      ["Total Downloads", stats.downloads],
-      ["Pending Delete Requests", stats.deleteRequests],
-      ["Pending Client Requests", stats.clientRequests],
-      [],
-      ["RESOURCE RATIO"],
-      ["Category", "Count"],
-      ["Books", stats.books],
-      ["Academic Papers", stats.papers],
+      ["Users", stats.users],
+      ["Super Admin", stats.superAdmin],
+      ["Total Admins", stats.totalAdmins],
+      ["Downloads", stats.downloads],
+      ["Delete Requests", stats.deleteRequest],
+      ["Users Requests", stats.usersRequest],
     ];
-    const wsDashboard = XLSX.utils.aoa_to_sheet(dashboardSheetData);
-    XLSX.utils.book_append_sheet(wb, wsDashboard, "Dashboard Summary");
-
-    let accountsSheetData = [["USER ACCOUNTS CATEGORIZED BY ROLE"], ["Generated on:", now.toLocaleString()], []];
-    ['superadmin', 'admin', 'client'].forEach(role => {
-      const filtered = allProfiles?.filter(acc => acc.role === role) || [];
-      accountsSheetData.push([`${role.toUpperCase()} ACCOUNTS`]);
-      if (filtered.length > 0) {
-        accountsSheetData.push(["Full Name", "ID Number", "Department", "Email", "Role", "Created At"]);
-        filtered.forEach(item => {
-          accountsSheetData.push([
-            item.full_name || 'N/A', item.id_number || 'N/A', item.department || 'N/A',
-            item.email || 'N/A', item.role, new Date(item.created_at).toLocaleDateString()
-          ]);
-        });
-      } else {
-        accountsSheetData.push(["No accounts found for this role."]);
-      }
-      accountsSheetData.push([]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dashboardSheetData), "Dashboard Summary");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((accounts || []).map(account => ({
+      Name: account.full_name || 'N/A', Email: account.email || 'N/A', Role: account.role || 'N/A',
+      'ID Number': account.id_number || 'N/A', Department: account.department || 'N/A',
+      'Year Level': account.year_level || 'N/A', 'Date Joined': formatReportDate(account.created_at)
+    }))), 'Account Information');
+    const categories = [...new Set((materials || []).map(material => material.category || 'Uncategorized'))];
+    categories.forEach(category => {
+      const categoryRows = (materials || []).filter(material => (material.category || 'Uncategorized') === category);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(categoryRows.map(material => ({
+        Title: material.title || 'Untitled', Author: material.author || 'N/A', Genre: material.genre || 'General',
+        'Published Date': material.published_date || 'N/A', 'Date Added': formatReportDate(material.created_at),
+        Archived: material.is_archived ? 'Yes' : 'No'
+      }))), String(category).slice(0, 31) || 'Materials');
     });
-    const wsAccounts = XLSX.utils.aoa_to_sheet(accountsSheetData);
-    XLSX.utils.book_append_sheet(wb, wsAccounts, "Accounts");
-
-    let pdfSheetData = [["PDF LIBRARY CATEGORIZED BY TYPE"], ["Generated on:", now.toLocaleString()], []];
-    ['book', 'academic paper'].forEach(cat => {
-      const filtered = allPDFs?.filter(p => p.category?.toLowerCase() === cat.toLowerCase()) || [];
-      pdfSheetData.push([`${cat.toUpperCase()}S`]);
-      if (filtered.length > 0) {
-        pdfSheetData.push(["ID", "Title", "Author", "Genre", "Category", "Uploaded At"]);
-        filtered.forEach(item => {
-          pdfSheetData.push([
-            item.id, item.title, item.author || 'N/A', item.genre || 'Uncategorized',
-            item.category, new Date(item.created_at).toLocaleDateString()
-          ]);
-        });
-      } else {
-        pdfSheetData.push([`No ${cat}s found in the library.`]);
-      }
-      pdfSheetData.push([]);
-    });
-    const wsPDFs = XLSX.utils.aoa_to_sheet(pdfSheetData);
-    XLSX.utils.book_append_sheet(wb, wsPDFs, "PDF Library");
-
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((requests || []).map(request => ({
+      'Request ID': request.id, Status: request.status || 'N/A', 'User ID': request.user_id || 'N/A',
+      'Requested At': formatReportDate(request.created_at)
+    }))), 'Upload Requests');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((downloads || []).map(download => ({
+      'Download ID': download.id, 'User ID': download.user_id || 'N/A', 'PDF ID': download.pdf_id || 'N/A',
+      'Downloaded At': formatReportDate(download.downloaded_at)
+    }))), 'Downloads');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((logs || []).map(log => ({
+      Action: log.action_type || 'N/A', Description: log.description || 'N/A', 'User ID': log.user_id || 'N/A',
+      'Created At': formatReportDate(log.created_at)
+    }))), 'Audit Logs');
     XLSX.writeFile(wb, `Library_Repository_Report_${dateString}.xlsx`);
   };
 
   const executePdfExport = async () => {
-    const { data: allPDFs } = await supabase.from('pdfs').select('*').eq('is_archived', false);
     const now = new Date();
-    const dateTimeString = now.toLocaleString('en-US', { 
-      month: 'long', day: 'numeric', year: 'numeric', 
-      hour: '2-digit', minute: '2-digit', second: '2-digit' 
-    });
-
+    const generatedDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
+      supabase.from('pdfs').select('id, title, author, category, genre, published_date, created_at, is_archived').order('category').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, role'),
+      supabase.from('upload_requests').select('id').eq('status', 'pending'),
+      supabase.from('downloads').select('id')
+    ]);
+    const accountTotals = (accounts || []).reduce((totals, account) => {
+      totals.totalAccounts += 1;
+      if (account.role === 'client') totals.users += 1;
+      if (account.role === 'admin') totals.admins += 1;
+      if (account.role === 'superadmin') totals.superAdmins += 1;
+      return totals;
+    }, { totalAccounts: 0, users: 0, admins: 0, superAdmins: 0 });
     const doc = new jsPDF();
-
-    // Formal Header Design
-    doc.setFillColor(33, 60, 81); // #213C51
+    doc.setFillColor(33, 60, 81);
     doc.rect(0, 0, 210, 30, 'F');
-    
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text("LIBRARY REPOSITORY SYSTEM", 14, 15);
-    
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Generated: ${dateTimeString}`, 14, 22);
-
-    // Summary Section Text
+    doc.text("LIBRARY MANAGEMENT SYSTEM REPORT", 14, 18);
     doc.setTextColor(33, 60, 81);
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("Executive Summary & Statistics", 14, 42);
-
-    const summaryData = [
-      ["Total Documents", stats.total],
-      ["Total Books", stats.books],
-      ["Academic Papers", stats.papers],
-      ["Total System Downloads", stats.downloads],
-      ["Pending Delete Requests", stats.deleteRequests],
-      ["Pending Client Requests", stats.clientRequests]
-    ];
-
+    doc.setFontSize(10);
+    doc.text(`Generated: ${now.toLocaleString()}`, 14, 40);
     autoTable(doc, {
-      startY: 46,
-      head: [["Metric Description", "Count"]],
-      body: summaryData,
+      startY: 48,
+      head: [['Summary Metric', 'Total']],
+      body: [
+        ['Total Accounts', accountTotals.totalAccounts],
+        ['Total Users', accountTotals.users],
+        ['Total Admins', accountTotals.admins],
+        ['Total Super Admins', accountTotals.superAdmins],
+        ['Total PDFs / Materials', materials?.length || 0],
+        ['Pending PDF Requests', requests?.length || 0],
+        ['Total Downloads', downloads?.length || 0]
+      ],
       theme: 'grid',
-      headStyles: { fillColor: [33, 60, 81], textColor: [255, 255, 255], fontStyle: 'bold' },
-      styles: { fontSize: 9, cellPadding: 4 }
+      headStyles: { fillColor: [33, 60, 81] }
     });
-
-    let currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 12 : 90;
-
-    // Books Table Section
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("Categorized Materials: Books", 14, currentY);
-
-    const booksList = allPDFs?.filter(p => p.category?.toLowerCase() === 'book') || [];
-    const booksRows = booksList.map(item => [
-      item.title || 'N/A', 
-      item.author || 'N/A', 
-      item.genre || 'General', 
-      new Date(item.created_at).toLocaleDateString()
-    ]);
-
-    autoTable(doc, {
-      startY: currentY + 4,
-      head: [["Title", "Author", "Genre", "Uploaded At"]],
-      body: booksRows.length > 0 ? booksRows : [["No books found in the repository.", "", "", ""]],
-      theme: 'striped',
-      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
-      styles: { fontSize: 8, cellPadding: 3 }
+    let nextY = doc.lastAutoTable.finalY + 14;
+    const categories = [...new Set((materials || []).map(material => material.category || 'Uncategorized'))];
+    categories.forEach(category => {
+      if (nextY > 245) { doc.addPage(); nextY = 18; }
+      const categoryRows = (materials || []).filter(material => (material.category || 'Uncategorized') === category);
+      doc.setFontSize(12);
+      doc.setTextColor(33, 60, 81);
+      doc.text(String(category).toUpperCase(), 14, nextY);
+      autoTable(doc, {
+        startY: nextY + 4,
+        head: [['Title', 'Author', 'Genre', 'Published', 'Date Added', 'Status']],
+        body: categoryRows.map(material => [
+          material.title || 'Untitled', material.author || 'N/A', material.genre || 'General',
+          material.published_date || 'N/A', formatReportDate(material.created_at), material.is_archived ? 'Archived' : 'Active'
+        ]),
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [33, 60, 81] },
+        theme: 'grid'
+      });
+      nextY = doc.lastAutoTable.finalY + 12;
     });
-
-    currentY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 12 : currentY + 50;
-
-    // Check page overflow to add page if needed
-    if (currentY > 240) {
-      doc.addPage();
-      currentY = 20;
-    }
-
-    // Academic Papers Table Section
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("Categorized Materials: Academic Papers", 14, currentY);
-
-    const papersList = allPDFs?.filter(p => p.category?.toLowerCase() === 'academic paper') || [];
-    const papersRows = papersList.map(item => [
-      item.title || 'N/A', 
-      item.author || 'N/A', 
-      item.genre || 'General', 
-      new Date(item.created_at).toLocaleDateString()
-    ]);
-
-    autoTable(doc, {
-      startY: currentY + 4,
-      head: [["Title", "Author", "Genre", "Uploaded At"]],
-      body: papersRows.length > 0 ? papersRows : [["No academic papers found in the repository.", "", "", ""]],
-      theme: 'striped',
-      headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
-      styles: { fontSize: 8, cellPadding: 3 }
-    });
-
-    // Footer with page count
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text(`Page ${i} of ${pageCount} - Library Repository System Report`, 14, 290);
-    }
-
-    const fileDateStr = `${now.getMonth() + 1}-${now.getDate()}-${now.getFullYear()}`;
-    doc.save(`Library_Official_Report_${fileDateStr}.pdf`);
+    doc.save(`Library_Official_Report_${generatedDate}.pdf`);
   };
 
-  const statItems = [
-    { title: 'Total PDF', val: stats.total, icon: <DescriptionIcon />, color: '#3b82f6' },
-    { title: 'Total Accounts', val: stats.totalAccounts, icon: <PeopleIcon />, color: '#6366f1' },
-    { title: 'Users', val: stats.clients, icon: <GroupIcon />, color: '#10b981' },
-    { title: 'Super Admin', val: stats.superAdmins, icon: <SecurityIcon />, color: '#7c3aed' },
-    { title: 'Total Admins', val: stats.admins, icon: <AdminPanelSettingsIcon />, color: '#8b5cf6' },
-    { title: 'Downloads', val: stats.downloads, icon: <DownloadIcon />, color: '#f59e0b' },
-    { title: 'Delete Request', val: stats.deleteRequests, icon: <DeleteSweepIcon />, color: '#ef4444' },
-    { title: 'Users Request', val: stats.clientRequests, icon: <PublishIcon />, color: '#06b6d4' }
-  ];
+  // Book detail dialog handlers
+  const handleOpenBookDetail = (book) => {
+    setSelectedBook(book);
+    setBookDialogOpen(true);
+  };
+
+  const handleCloseBookDetail = () => {
+    setBookDialogOpen(false);
+    setSelectedBook(null);
+  };
 
   const commonPaperStyle = {
-    p: 3, borderRadius: '16px',
+    borderRadius: '16px',
     backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
-    border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0'}`,
-    color: isDarkMode ? '#f8fafc' : '#213C51',
-    display: 'flex', flexDirection: 'column',
-    boxShadow: isDarkMode ? 'none' : '0 2px 10px rgba(0,0,0,0.03)',
-    overflow: 'hidden'
+    border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
+    color: isDarkMode ? '#f8fafc' : '#1e293b',
+    boxShadow: isDarkMode ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(0,0,0,0.03)',
+    width: '100%',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
   };
 
-  const headerBoxStyle = {
-    bgcolor: '#213C51', p: 2, mt: -3, mx: -3, mb: 3,
-    borderTopLeftRadius: '16px', borderTopRightRadius: '16px',
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-  };
-
-  const headerTextStyle = {
-    fontFamily: "'Montserrat', sans-serif", color: '#ffffff', fontWeight: 900, fontSize: '0.9rem',
-    textTransform: 'uppercase', letterSpacing: '1px'
-  };
-
-  const getRoleStyles = (role, darkMode) => {
-    const r = role?.toLowerCase();
-    if (darkMode) {
-      if (r === 'superadmin') return { bg: '#f3e8ff1a', text: '#d8b4fe' }; 
-      if (r === 'admin') return { bg: '#fef3c71a', text: '#fbbf24' }; 
-      if (r === 'client') return { bg: '#dbeafe1a', text: '#60a5fa' }; 
-      return { bg: '#1e293b', text: '#94a3b8' };
-    }
-    if (r === 'superadmin') return { bg: '#F3E8FF', text: '#7C3AED' }; 
-    if (r === 'admin') return { bg: '#FEF3C7', text: '#D97706' }; 
-    if (r === 'client') return { bg: '#DBEAFE', text: '#2563EB' }; 
-    return { bg: '#F1F5F9', text: '#475569' };
-  };
-
-  const getActionStyles = (action, darkMode) => {
-    const type = action?.toLowerCase();
-    const base = { bg: 'transparent', label: action?.toUpperCase() || 'ACTION' };
-    if (type?.includes('upload')) return { ...base, text: darkMode ? '#4ade80' : '#ffffff', bg: darkMode ? 'transparent' : '#2F6B3F', label: 'UPLOAD' };
-    if (type?.includes('edit')) return { ...base, text: darkMode ? '#facc15' : '#7c6800', bg: darkMode ? 'transparent' : '#ffd500', label: 'EDIT' };
-    if (type?.includes('delete')) return { ...base, text: darkMode ? '#f87171' : '#ffffff', bg: darkMode ? 'transparent' : '#A82323', label: 'DELETE' };
-    if (type?.includes('download')) return { ...base, text: darkMode ? '#818cf8' : '#ffffff', bg: darkMode ? 'transparent' : '#261CC1', label: 'DOWNLOAD' };
-    return { ...base, text: darkMode ? '#94a3b8' : '#475569', bg: darkMode ? 'transparent' : '#f1f5f9' };
-  };
+  const statCardsData = [
+    { label: 'PDF', value: stats.totalPdf, color: '#60a5fa', bg: 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)', darkBg: 'linear-gradient(135deg, #172554 0%, #1e3a8a 100%)', icon: <DescriptionIcon sx={{ color: '#2563eb', fontSize: 28, opacity: 1 }} /> },
+    { label: 'Accounts', value: stats.totalAccounts, color: '#c084fc', bg: 'linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%)', darkBg: 'linear-gradient(135deg, #3b0764 0%, #581c87 100%)', icon: <GroupIcon sx={{ color: '#9333ea', fontSize: 28, opacity: 1 }} /> },
+    { label: 'Users', value: stats.users, color: '#34d399', bg: 'linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%)', darkBg: 'linear-gradient(135deg, #064e3b 0%, #065f46 100%)', icon: <PersonIcon sx={{ color: '#059669', fontSize: 28, opacity: 1 }} /> },
+    { label: 'Super Admin', value: stats.superAdmin, color: '#d8b4fe', bg: 'linear-gradient(135deg, #e9d5ff 0%, #f3e8ff 100%)', darkBg: 'linear-gradient(135deg, #4c1d95 0%, #6b21a8 100%)', icon: <SecurityIcon sx={{ color: '#9333ea', fontSize: 28, opacity: 1 }} /> },
+    { label: 'Admins', value: stats.totalAdmins, color: '#818cf8', bg: 'linear-gradient(135deg, #e0e7ff 0%, #eef2ff 100%)', darkBg: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', icon: <AdminPanelSettingsIcon sx={{ color: '#4f46e5', fontSize: 28, opacity: 1 }} /> },
+    { label: 'Downloads', value: stats.downloads, color: '#fbbf24', bg: 'linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%)', darkBg: 'linear-gradient(135deg, #78350f 0%, #92400e 100%)', icon: <FileDownloadIcon sx={{ color: '#d97706', fontSize: 28, opacity: 1 }} /> },
+    { label: 'Delete Request', value: stats.deleteRequest, color: '#f87171', bg: 'linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%)', darkBg: 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%)', icon: <DeleteSweepIcon sx={{ color: '#dc2626', fontSize: 28, opacity: 1 }} /> },
+    { label: 'Users Request', value: stats.usersRequest, color: '#2dd4bf', bg: 'linear-gradient(135deg, #ccfbf1 0%, #f0fdfa 100%)', darkBg: 'linear-gradient(135deg, #134e4a 0%, #115e59 100%)', icon: <UploadFileIcon sx={{ color: '#0f9f91', fontSize: 28, opacity: 1 }} /> },
+  ];
 
   return (
-    <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#ffffff', minHeight: '100vh', pb: 6 }}>
-      <Container maxWidth="xls" sx={{ mt: { xs: 1, md: 7 } }}>
-        <Box sx={{ mb: 4 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
-            <Box>
-              <Typography variant="h3" sx={{ fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px' }}>
-                DASHBOARD OVERVIEW
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
-                SYSTEM OVERVIEW & ANALYTICS
-              </Typography>
-            </Box>
-            
-            {/* Export Report Button & Dropdown Menu */}
-            <Button 
-              variant="contained" 
-              startIcon={<FileDownloadIcon />} 
-              onClick={handleMenuClick} 
-              sx={{ bgcolor: '#213C51', color: '#ffffff', '&:hover': { bgcolor: '#162836' }, fontFamily: "'Montserrat', sans-serif", fontWeight: 700, borderRadius: '8px' }}
-            >
-              Generate Report
-            </Button>
-            <Menu
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={handleMenuClose}
-            >
-              <MenuItem onClick={() => handleSelectExportType('pdf')}>Generate PDF Report</MenuItem>
-              <MenuItem onClick={() => handleSelectExportType('excel')}>Generate Excel Workbook</MenuItem>
-            </Menu>
-          </Stack>
+    <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#f8fafc', minHeight: '100vh', pb: 6, width: '100%' }}>
+      <Container maxWidth={false} sx={{ mt: { xs: 2, md: 4 }, px: { xs: 2, sm: 3, md: 5 } }}>
+        
+        {/* Top Header Title & Export Button */}
+        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+          <Box>
+            <Typography variant="h3" sx={{ fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontFamily: "'Montserrat', sans-serif", fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' }, letterSpacing: '1px' }}>
+              Super Admin Dashboard
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
+              System Repository Performance & Analytics Overview
+            </Typography>
+          </Box>
+          <Button 
+            variant="contained" 
+            startIcon={<FileDownloadIcon />} 
+            onClick={handleMenuClick} 
+            sx={{ 
+              bgcolor: '#213C51', 
+              color: '#ffffff', 
+              '&:hover': { bgcolor: '#162836', transform: 'translateY(-2px)' }, 
+              fontWeight: 700, 
+              borderRadius: '10px',
+              px: 3,
+              py: 1,
+              boxShadow: '0 4px 14px rgba(33, 60, 81, 0.25)',
+              transition: 'all 0.2s ease-in-out'
+            }}
+          >
+            Generate Report
+          </Button>
+          <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+            <MenuItem onClick={() => handleSelectExportType('pdf')}>Generate PDF Report</MenuItem>
+            <MenuItem onClick={() => handleSelectExportType('excel')}>Generate Excel Workbook</MenuItem>
+          </Menu>
         </Box>
 
-        {/* Confirmation Dialog */}
+        {/* Export Confirmation Dialog */}
         <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-          <DialogTitle sx={{ fontWeight: 800, color: '#213C51' }}>Confirm Generate Report</DialogTitle>
+          <DialogTitle sx={{ fontWeight: 800, color: '#213C51' }}>Confirm Report Export</DialogTitle>
           <DialogContent>
             <DialogContentText sx={{ mt: 1 }}>
-              Do you want to Generate this system report now? 
-              <br /><br />
-              <strong>Format:</strong> {exportType?.toUpperCase()}
-              <br />
+              Are you sure you want to generate the repository system summary? <br /><br />
+              <strong>Selected Format:</strong> {exportType?.toUpperCase()}<br />
               <strong>Estimated File Size:</strong> {fileSizeEst}
-              <br />
-              <strong>Generated Timestamp:</strong> {new Date().toLocaleString()}
             </DialogContentText>
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
-            <Button onClick={() => setConfirmOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmExport} variant="contained" sx={{ bgcolor: '#213C51', fontWeight: 700 }}>
-              Proceed
-            </Button>
+            <Button onClick={() => setConfirmOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>Cancel</Button>
+            <Button onClick={handleConfirmExport} variant="contained" sx={{ bgcolor: '#213C51', fontWeight: 700 }}>Proceed</Button>
           </DialogActions>
         </Dialog>
 
-        <Grid container spacing={2} sx={{ mb: 5 }}>
-          {statItems.map((item, i) => (
-            <Grid item xs={6} sm={4} md={1.5} key={i}> 
-              <Paper sx={{ ...commonPaperStyle, alignItems: 'center', textAlign: 'center', minWidth: 130, p: 2 }}>
-                <Avatar sx={{ bgcolor: `${item.color}15`, color: item.color, mb: 1 }}>{item.icon}</Avatar>
-                <Typography variant="caption" fontWeight="700" color="textSecondary" sx={{ whiteSpace: 'nowrap' }}>{item.title}</Typography>
-                <Typography variant="h5" fontWeight="900" sx={{ color: item.color }}>{item.val}</Typography>
+        {/* 8 Metric Cards Grid - Fully Responsive */}
+        <Grid container spacing={{ xs: 2, md: 2.5 }} sx={{ mb: 4 }}>
+          {statCardsData.map((item, idx) => (
+            <Grid key={idx} size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
+              <Paper sx={{ 
+                ...commonPaperStyle, 
+                p: 2, 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                textAlign: 'center',
+                borderRadius: '14px',
+                cursor: 'pointer',
+                '&:hover': { 
+                  transform: 'translateY(-5px)',
+                  boxShadow: isDarkMode ? '0 8px 25px rgba(0,0,0,0.45)' : '0 8px 25px rgba(0,0,0,0.08)',
+                  borderColor: item.color
+                }
+              }}>
+                <Box sx={{ background: isDarkMode ? 'rgba(255,255,255,0.14)' : item.bg, p: 1.5, borderRadius: '12px', mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {item.icon}
+                </Box>
+                <Typography variant="caption" sx={{ color: isDarkMode ? 'rgba(255,255,255,0.78)' : 'text.secondary', fontWeight: 700, mb: 0.5 }}>
+                  {item.label}
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 900, color: item.color }}>
+                  {item.value}
+                </Typography>
               </Paper>
             </Grid>
           ))}
         </Grid>
 
-        <Box sx={{ mb: 4 }}>
-          <Paper sx={commonPaperStyle}>
-            <Box sx={headerBoxStyle}>
-              <Typography sx={headerTextStyle}>Download Trends</Typography>
-              <FormControl size="small" sx={{ minWidth: 100, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: '8px' }}>
-                <Select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} sx={{ color: 'white', '.MuiSvgIcon-root': { color: 'white' }, fontWeight: 700 }}>
-                  {years.map(y => <MenuItem key={y} value={y}>{y}</MenuItem>)}
+        {/* Download Trends Line Chart Section */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid size={{ xs: 12 }}>
+            <Paper sx={{ ...commonPaperStyle, overflow: 'hidden' }}>
+              <Box sx={{ 
+                background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)', 
+                px: 3, 
+                py: 2.5, 
+                display: 'flex', 
+                justify: 'space-between', 
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 2 
+              }}>
+                <Typography variant="subtitle1" fontWeight="800" sx={{ color: '#ffffff', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                 DOWNLOAD OVERVIEW
+                </Typography>
+                <Select
+                  value={downloadYear}
+                  onChange={(e) => setDownloadYear(e.target.value)}
+                  size="small"
+                  sx={{
+                    color: '#ffffff',
+                    bgcolor: 'rgba(255,255,255,0.1)',
+                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.2)' },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#ffffff' },
+                    '.MuiSvgIcon-root': { color: '#ffffff' },
+                    fontWeight: 700,
+                    borderRadius: '8px',
+                    height: 38
+                  }}
+                >
+                  {downloadYears.map(year => (
+                    <MenuItem key={year} value={year}>Year {year}</MenuItem>
+                  ))}
                 </Select>
-              </FormControl>
-            </Box>
-            
-            <Box sx={{ width: '100%', overflowX: isMobile ? 'auto' : 'hidden', backgroundColor: '#fff', overflowY: 'hidden', borderRadius: '12px', p: 1 }}>
-              <Box sx={{ minWidth: isMobile ? 100 : '100%', height: 350 }}>
-                {isMobile ? (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {monthlyDownloads.map((val, index) => {
-                      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                      if (val === 0) return null; 
-                      return (
-                        <Box key={index} sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0px 2px 8px rgba(0,0,0,0.05)', borderLeft: '5px solid #3b82f6' }}>
-                          <Typography sx={{ fontWeight: 'bold', color: '#1e293b' }}>{months[index]}</Typography>
-                          <Box sx={{ textAlign: 'right' }}>
-                            <Typography variant="h6" sx={{ color: '#3b82f6', fontWeight: 800 }}>{val}</Typography>
-                            <Typography variant="caption" sx={{ color: '#64748b' }}>Downloads</Typography>
-                          </Box>
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                ) : (
-                  <LineChart
-                    xAxis={[{ scaleType: 'point', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], tickLabelStyle: { fontSize: 12, fill: '#64748b', fontWeight: 500 } }]}
-                    series={[{ data: monthlyDownloads, color: '#3b82f6', label: 'Downloads', area: true, showMark: true }]}
-                    height={350}
-                    margin={{ top: 40, bottom: 40, left: 50, right: 20 }}
-                  />
-                )}
               </Box>
-            </Box>
-          </Paper>
-        </Box>
-
-        <Grid container spacing={4} sx={{ mb: 4 }}>
-          <Grid item xs={1} md={4}>
-            <Paper sx={{ ...commonPaperStyle, height: '100%', minHeight: 450, width: '100%' }}>
-              <Box sx={headerBoxStyle}>
-                <Typography sx={headerTextStyle}>Resources Ratio</Typography>
-              </Box>
-              <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <PieChart
-                  series={[{ innerRadius: 55, outerRadius: 110, paddingAngle: 5, arcLabel: (item) => `${item.value}`, arcLabelMinAngle: 35, data: [{ id: 0, value: stats.books, label: 'Books', color: '#ec4899' }, { id: 1, value: stats.papers, label: 'Papers', color: '#0ea5e9' }] }]}
-                  sx={{ '& .MuiPieArcLabel-root': { fill: 'white', fontWeight: 'bold', fontSize: 18 } }}
-                  height={300}
+              <Box sx={{ width: '100%', height: 300, p: { xs: 1, sm: 2 } }}>
+                <LineChart
+                  xAxis={[{ scaleType: 'point', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] }]}
+                  series={[{ data: monthlyDownloads, color: '#3b82f6', area: true, showMark: true, label: 'Downloads' }]}
+                  height={280}
+                  margin={{ top: 20, bottom: 25, left: 45, right: 25 }}
                 />
               </Box>
             </Paper>
           </Grid>
+        </Grid>
 
-          <Grid item xs={12} md={8}>
-            <Grid container spacing={4} sx={{ height: '100%' }}>
-              <Grid item xs={12} md={6}>
-                <Paper sx={{ ...commonPaperStyle, height: '100%', width: '100%' }}>
-                  <Box sx={headerBoxStyle}>
-                    <Typography sx={headerTextStyle}>Recent Activities</Typography>
-                  </Box>
-                  <List disablePadding>
-                    {activities.map((act, i) => {
-                      const roleStyle = getRoleStyles(act.profiles?.role, isDarkMode);
-                      const actionStyle = getActionStyles(act.action_type, isDarkMode);
-                      return (
-                        <ListItem key={i} divider={i !== activities.length - 1} sx={{ px: 0, py: 1.5 }}>
-                          <ListItemAvatar>
-                            <Avatar sx={{ bgcolor: isDarkMode ? '#334155' : '#f1f5f9', color: '#3b82f6' }}><HistoryIcon /></Avatar> 
-                          </ListItemAvatar>
-                          <ListItemText 
-                            primary={
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                <Box sx={{ px: 1, py: 0.2, borderRadius: '4px', fontSize: '0.6rem', fontWeight: 900, bgcolor: actionStyle.bg, color: actionStyle.text, border: isDarkMode ? `1px solid ${actionStyle.text}` : 'none', textAlign: 'center', minWidth: '70px' }}>{actionStyle.label}</Box>
-                                <Typography variant="caption" sx={{ fontWeight: 900, color: roleStyle.text }}>{act.profiles?.role?.toUpperCase() || 'USER'}</Typography>
+        {/* SECTION 1: Recent Accounts (Full-Width Responsive Table) */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid size={{ xs: 12 }}>
+            <Paper sx={{ ...commonPaperStyle, p: { xs: 2, sm: 3 } }}>
+              <Box sx={{ background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)', mx: { xs: -2, sm: -3 }, mt: { xs: -2, sm: -3 }, mb: 2.5, px: { xs: 2, sm: 3 }, py: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <Typography variant="h6" fontWeight="800" sx={{ color: '#ffffff' }}>
+                 RECENT ACCOUNTS REGISTERED
+                </Typography>
+                <Chip label={`${recentAccounts.length} Total Registered`} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff', fontWeight: 800 }} />
+              </Box>
+              
+              <TableContainer sx={{ width: '100%', overflowX: 'auto' }}>
+                <Table sx={{ minWidth: 650 }}>
+                  <TableHead>
+                    <TableRow sx={{ borderBottom: '2px solid', borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#e2e8f0' }}>
+                      <TableCell sx={{ fontWeight: 800, color: 'text.secondary' }}>User / Member</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: 'text.secondary' }}>ID / Number</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: 'text.secondary' }}>Role</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: 'text.secondary' }}>Department</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: 'text.secondary' }}>Year Level</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 800, color: 'text.secondary' }}>Date Joined</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {recentAccounts.length > 0 ? (
+                      recentAccounts.map((account) => (
+                        <TableRow key={account.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 }, transition: 'background-color 0.2s' }}>
+                          <TableCell>
+                            <Stack direction="row" spacing={1.5} alignItems="center">
+                              <Avatar sx={{ bgcolor: '#facc15', color: '#713f12', width: 38, height: 38 }}>
+                                <PersonIcon fontSize="small" />
+                              </Avatar>
+                              <Box>
+                                <Typography variant="body2" fontWeight="700">
+                                  {account.full_name || 'No Name Provided'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {account.email}
+                                </Typography>
                               </Box>
-                            }
-                            secondary={<Typography variant="caption" color="textSecondary" sx={{ fontWeight: 500, display: 'block', lineHeight: 1.2 }}><span style={{ fontWeight: 800, color: isDarkMode ? '#f8fafc' : '#1e293b' }}>{act.profiles?.full_name || 'System'}</span>: {act.description}</Typography>} 
-                          />
-                        </ListItem>
-                      );
-                    })}
-                  </List>
-                </Paper>
-              </Grid>
-
-              <Grid item xs={8} md={12}>
-                <Paper sx={{ ...commonPaperStyle, height: '100%', width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                  <Box sx={headerBoxStyle}>
-                    <Typography sx={headerTextStyle}>Top Performing PDFs</Typography>
-                  </Box>
-                  <List disablePadding>
-                    {topPdfs.map((pdf, i) => (
-                      <ListItem key={pdf.id} divider={i !== topPdfs.length - 1} sx={{ px: 0, py: 1.5, display: 'flex', alignItems: 'center' }}>
-                        <ListItemAvatar>
-                          <Avatar sx={{ bgcolor: '#f59e0b15', color: '#f59e0b' }}><Typography variant="caption" fontWeight="900">#{i + 1}</Typography></Avatar>
-                        </ListItemAvatar>
-                        <ListItemText 
-                          sx={{ minWidth: isMobile ? 'auto' : 300, mr: 2 }}
-                          primary={<Typography variant="caption" sx={{ fontWeight: 800, color: isDarkMode ? '#f8fafc' : '#1e293b', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pdf.title}</Typography>} 
-                          secondary={<Typography variant="caption" color="textSecondary" sx={{ fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pdf.author || 'Unknown'} • {pdf.genre || 'General'}</Typography>} 
-                        />
-                        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ color: '#f59e0b', ml: 'auto', flexShrink: 0 }}>
-                          <DownloadIcon sx={{ fontSize: '0.9rem' }} />
-                          <Typography variant="caption" sx={{ fontWeight: 900 }}>{pdf.download_count}</Typography>
-                        </Stack>
-                      </ListItem>
-                    ))}
-                  </List>
-                </Paper>
-              </Grid>
-            </Grid>
+                            </Stack>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color="text.secondary" fontWeight="600">
+                              {account.id_number || `#${String(account.id).slice(0, 6)}`}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={account.role === 'client' ? 'USER' : account.role ? account.role.toUpperCase() : 'USER'}
+                              size="small" 
+                              sx={{ 
+                                bgcolor: account.role === 'superadmin' ? '#faf5ff' : account.role === 'admin' ? '#eef2ff' : '#f0fdf4',
+                                color: account.role === 'superadmin' ? '#9333ea' : account.role === 'admin' ? '#6366f1' : '#16a34a',
+                                fontWeight: 800, 
+                                fontSize: '0.65rem',
+                                border: '1px solid',
+                                borderColor: account.role === 'superadmin' ? '#f3e8ff' : account.role === 'admin' ? '#c7d2fe' : '#bbf7d0',
+                                width: 84,
+                                justifyContent: 'center',
+                                '& .MuiChip-label': { width: '100%', px: 0, textAlign: 'center' }
+                              }} 
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="600">
+                              {account.department || 'N/A'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="600">
+                              {account.year_level || 'N/A'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="caption" fontWeight="600" color="text.secondary">
+                              {account.created_at ? new Date(account.created_at).toLocaleDateString() : 'N/A'}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                          No account records found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
           </Grid>
         </Grid>
+
+        {/* SECTION 2: Books / Academic Materials (Clickable Rows -> Opens Modal) */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid size={{ xs: 12 }}>
+            <Paper sx={{ ...commonPaperStyle, p: { xs: 2, sm: 3 } }}>
+              <Box sx={{ background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)', mx: { xs: -2, sm: -3 }, mt: { xs: -2, sm: -3 }, mb: 2.5, px: { xs: 2, sm: 3 }, py: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <Typography variant="h6" fontWeight="800" sx={{ color: '#ffffff' }}>
+                  RECENT ACADEMIC MATERIALS
+                </Typography>
+                <Chip label="Click row to view details" size="small" sx={{ bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff', fontWeight: 700 }} />
+              </Box>
+
+              <TableContainer sx={{ width: '100%', overflowX: 'auto' }}>
+                <Table sx={{ minWidth: 650 }}>
+                  <TableHead>
+                    <TableRow sx={{ borderBottom: '2px solid', borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#e2e8f0' }}>
+                      <TableCell sx={{ fontWeight: 800, color: 'text.secondary' }}>Book Title</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: 'text.secondary' }}>Author</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: 'text.secondary' }}>Genre</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: 'text.secondary' }}>Category</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 800, color: 'text.secondary' }}>Date Added</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {recentBooks.length > 0 ? (
+                      recentBooks.map((book) => (
+                        <TableRow 
+                          key={book.id} 
+                          hover 
+                          onClick={() => handleOpenBookDetail(book)}
+                          sx={{ 
+                            cursor: 'pointer',
+                            '&:last-child td, &:last-child th': { border: 0 },
+                            '&:hover': { bgcolor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(59, 130, 246, 0.04)' },
+                            transition: 'background-color 0.15s ease-in-out'
+                          }}
+                        >
+                          <TableCell>
+                            <Stack direction="row" spacing={1.5} alignItems="center">
+                              {book.imageUrl ? (
+                                <Box component="img" src={book.imageUrl} alt="" sx={{ width: 34, height: 34, borderRadius: '8px', objectFit: 'cover' }} />
+                              ) : (
+                                <Avatar sx={{ bgcolor: '#f43f5e', width: 34, height: 34 }}><BookIcon sx={{ fontSize: '1.1rem' }} /></Avatar>
+                              )}
+                              <Typography variant="body2" fontWeight="700" sx={{ color: '#2563eb', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+                                {book.title || 'Untitled Material'}
+                              </Typography>
+                            </Stack>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="600" color="text.secondary">
+                              {book.author || 'Unknown Author'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={book.genre || 'General'} size="small" variant="outlined" sx={{ fontWeight: 700, fontSize: '0.7rem' }} />
+                          </TableCell>
+                          <TableCell>
+                            <Chip 
+                              label={book.category ? book.category.toUpperCase() : 'BOOK'} 
+                              size="small" 
+                              sx={{ bgcolor: '#f1f5f9', color: '#334155', fontWeight: 800, fontSize: '0.65rem' }} 
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="caption" fontWeight="600" color="text.secondary">
+                              {book.created_at ? new Date(book.created_at).toLocaleDateString() : 'N/A'}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                          No recent books found in repository.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          </Grid>
+        </Grid>
+
+        {/* Bottom Section: Recent Activities & Dynamic Top Performing PDFs */}
+        <Grid container spacing={3}>
+          {/* Recent Activities Panel */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Paper sx={{ ...commonPaperStyle, overflow: 'hidden', height: '100%' }}>
+              <Box sx={{ background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)', px: 3, py: 2 }}>
+                <Typography variant="subtitle1" fontWeight="800" sx={{ color: '#ffffff', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                   RECENT SYSTEM ACTIVITY
+                </Typography>
+              </Box>
+              <List sx={{ p: 1.5 }}>
+                {recentActivities.length > 0 ? (
+                  recentActivities.map((activity, index) => (
+                    <ListItem key={activity.id || index} divider={index !== recentActivities.length - 1} sx={{ px: { xs: 1, sm: 2 }, py: 2, alignItems: 'flex-start', gap: { xs: 1, sm: 2 } }}>
+                      <ListItemAvatar sx={{ minWidth: 44, mt: 0.5 }}>
+                        <Avatar sx={{ bgcolor: '#e0e7ff', color: '#4f46e5', width: 34, height: 34 }}>
+                          <HistoryIcon sx={{ fontSize: '1.1rem' }} />
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText sx={{ minWidth: 0, pr: 1 }}
+                        primary={
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
+                            <Chip 
+                              label={activity.action_type || 'ACTION'} 
+                              size="small" 
+                              sx={{ bgcolor: '#e2e8f0', color: '#1e293b', fontWeight: 800, fontSize: '0.65rem', height: 20, borderRadius: '4px' }} 
+                            />
+                            <Chip 
+                              label={activity.role || 'SYSTEM'} 
+                              size="small" 
+                              sx={{ bgcolor: '#f3e8ff', color: '#7c3aed', fontWeight: 800, fontSize: '0.65rem', height: 20, borderRadius: '4px' }} 
+                            />
+                          </Stack>
+                        }
+                        secondary={
+                          <Typography variant="body2" sx={{ color: isDarkMode ? '#cbd5e1' : '#334155', fontWeight: 600, mt: 0.5 }}>
+                            <strong>{activity.performed_by || 'Admin'}:</strong> {activity.description || 'Performed system activity action.'}
+                          </Typography>
+                        }
+                      />
+                    </ListItem>
+                  ))
+                ) : (
+                  <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
+                    <Typography variant="body2">No recent system activity recorded.</Typography>
+                  </Box>
+                )}
+              </List>
+            </Paper>
+          </Grid>
+
+          {/* Dynamic Top Performing PDFs Panel */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Paper sx={{ ...commonPaperStyle, overflow: 'hidden', height: '100%' }}>
+              <Box sx={{ background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)', px: 3, py: 2 }}>
+                <Typography variant="subtitle1" fontWeight="800" sx={{ color: '#ffffff', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                   MOST DOWNLOADED MATERIALS
+                </Typography>
+              </Box>
+              <List sx={{ p: 1.5 }}>
+                {topPdfs.length > 0 ? (
+                  topPdfs.map((pdf, idx) => (
+                    <ListItem 
+                      key={pdf.id || idx} 
+                      divider={idx !== topPdfs.length - 1} 
+                      onClick={() => handleOpenBookDetail(pdf)}
+                      sx={{ 
+                        px: 1.5, 
+                        py: 1.5, 
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        '&:hover': { bgcolor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(245, 158, 11, 0.05)' }
+                      }}
+                    >
+                      <ListItemAvatar sx={{ minWidth: 45 }}>
+                        {getStorageImageUrl(pdf.image_url) ? (
+                          <Box component="img" src={getStorageImageUrl(pdf.image_url)} alt={pdf.title || 'Book cover'} sx={{ width: 36, height: 48, borderRadius: '6px', objectFit: 'cover' }} />
+                        ) : (
+                          <Box component="img" src={glclogo} alt="GCLC logo" sx={{ width: 42, height: 48, borderRadius: '6px', objectFit: 'contain' }} />
+                        )}
+                      </ListItemAvatar>
+                      <ListItemText 
+                        primary={<Typography variant="body2" fontWeight="800" sx={{ color: isDarkMode ? '#f8fafc' : '#1e293b' }}>{pdf.title || 'Untitled Book'}</Typography>}
+                        secondary={
+                          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                            {pdf.author ? `By ${pdf.author}` : 'Unknown Author'} • {pdf.genre || 'General'}
+                          </Typography>
+                        }
+                      />
+                      <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: '#d97706', fontWeight: 800, bgcolor: '#fffbeb', px: 1.5, py: 0.5, borderRadius: '20px' }}>
+                        <TrendingUpIcon fontSize="small" />
+                        <Typography variant="body2" fontWeight="800">{pdf.downloadCount || 0}</Typography>
+                      </Stack>
+                    </ListItem>
+                  ))
+                ) : (
+                  <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
+                    <Typography variant="body2">No PDF downloads recorded yet.</Typography>
+                  </Box>
+                )}
+              </List>
+            </Paper>
+          </Grid>
+        </Grid>
+
       </Container>
+
+      {/* "SEE MORE" BOOK DETAILS DIALOG */}
+      <Dialog 
+        open={bookDialogOpen} 
+        onClose={handleCloseBookDetail}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '20px',
+            bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
+            color: isDarkMode ? '#f8fafc' : '#1e293b',
+            p: 1
+          }
+        }}
+      >
+        {selectedBook && (
+          <>
+            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <PictureAsPdfIcon color="primary" />
+                <Typography variant="h6" fontWeight="800">
+                  Book Details
+                </Typography>
+              </Stack>
+              <IconButton onClick={handleCloseBookDetail} size="small">
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+            <Divider />
+            <DialogContent sx={{ mt: 2 }}>
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  {getStorageImageUrl(selectedBook.image_url) ? (
+                    <CardMedia
+                      component="img"
+                      image={getStorageImageUrl(selectedBook.image_url)}
+                      alt={selectedBook.title}
+                      sx={{ borderRadius: '12px', height: 260, objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+                    />
+                  ) : (
+                    <Box sx={{ 
+                      height: 260, 
+                      borderRadius: '12px', 
+                      bgcolor: isDarkMode ? '#0f172a' : '#f1f5f9', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      justify: 'center',
+                      color: 'text.secondary'
+                    }}>
+                      <BookIcon sx={{ fontSize: 60, mb: 1, color: '#94a3b8' }} />
+                      <Typography variant="caption" fontWeight="700">No Cover Available</Typography>
+                    </Box>
+                  )}
+                </Grid>
+                <Grid size={{ xs: 12, md: 8 }}>
+                  <Typography variant="h5" fontWeight="900" sx={{ mb: 1 }}>
+                    {selectedBook.title || 'Untitled Material'}
+                  </Typography>
+                  <Typography variant="subtitle1" fontWeight="700" color="text.secondary" sx={{ mb: 2 }}>
+                    Author: {selectedBook.author || 'Unknown'}
+                  </Typography>
+
+                  <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                    <Chip label={`Genre: ${selectedBook.genre || 'General'}`} color="primary" variant="outlined" size="small" sx={{ fontWeight: 700 }} />
+                    <Chip label={`Category: ${selectedBook.category || 'Book'}`} color="secondary" variant="outlined" size="small" sx={{ fontWeight: 700 }} />
+                    {selectedBook.published_date && (
+                      <Chip label={`Published: ${selectedBook.published_date}`} variant="outlined" size="small" sx={{ fontWeight: 700 }} />
+                    )}
+                  </Stack>
+
+                  <Typography variant="subtitle2" fontWeight="800" sx={{ mb: 0.5, color: 'text.secondary' }}>
+                    DESCRIPTION / ABSTRACT
+                  </Typography>
+                  <Typography variant="body2" sx={{ lineHeight: 1.7, color: isDarkMode ? '#cbd5e1' : '#475569', mb: 3 }}>
+                    {selectedBook.description || 'No detailed description available for this academic material.'}
+                  </Typography>
+                </Grid>
+              </Grid>
+            </DialogContent>
+            <DialogActions sx={{ p: 2, pt: 0 }}>
+              <Button onClick={handleCloseBookDetail} variant="outlined" sx={{ fontWeight: 700, borderRadius: '8px' }}>
+                Close
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 };

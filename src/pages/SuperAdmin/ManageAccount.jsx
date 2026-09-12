@@ -21,7 +21,6 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import BusinessIcon from '@mui/icons-material/Business'; 
 import FingerprintIcon from '@mui/icons-material/Fingerprint';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -46,7 +45,8 @@ const ManageAccount = () => {
     "BEED-Elementary Education",
     "BS-Mathematics",
     "BS-Science",
-    "BS-Psychology"
+    "BS-Psychology",
+    "N/A"
   ];
   
   // Year Levels List
@@ -59,11 +59,17 @@ const ManageAccount = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [requestSearch, setRequestSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
-  const [dateFilter, setDateFilter] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [dayFilter, setDayFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [requestRoleFilter, setRequestRoleFilter] = useState('All Roles');
-  const [requestDateFilter, setRequestDateFilter] = useState('');
+  const [requestMonthFilter, setRequestMonthFilter] = useState('');
+  const [requestDayFilter, setRequestDayFilter] = useState('');
+  const [requestYearFilter, setRequestYearFilter] = useState('');
+  const [requestPage, setRequestPage] = useState(1);
   
   // Modal/Dialog States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -372,10 +378,26 @@ const ManageAccount = () => {
     );
   };
 
+  const getRoleLabel = (role) => role?.toLowerCase() === 'client' ? 'USER' : role?.toUpperCase() || 'N/A';
+
+  const monthOptions = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' }
+  ];
+  const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+  const accountYears = [...new Set(users
+    .filter(user => user.created_at)
+    .map(user => new Date(user.created_at).getFullYear()))].sort((a, b) => b - a);
+  const requestYears = [...new Set(roleRequests
+    .filter(request => request.created_at)
+    .map(request => new Date(request.created_at).getFullYear()))].sort((a, b) => b - a);
+
   const RoleChip = ({ role }) => {
     const mainBlue = isDarkMode ? theme.palette.primary.light : theme.palette.primary.main;
     return (
-      <Chip label={role} variant="outlined" sx={{ borderColor: mainBlue, color: mainBlue, fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} />
+      <Chip label={getRoleLabel(role)} variant="outlined" sx={{ borderColor: mainBlue, color: mainBlue, fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} />
     );
   };
 
@@ -384,13 +406,30 @@ const ManageAccount = () => {
                           (u.email?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
                           (u.id_number?.toLowerCase() || "").includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === 'All Roles' || u.role?.toLowerCase() === roleFilter.toLowerCase();
-    let matchesDate = true;
-    if (dateFilter) {
-      const userDate = new Date(u.created_at).toISOString().split('T')[0];
-      matchesDate = userDate === dateFilter;
-    }
+    const userDate = u.created_at ? new Date(u.created_at) : null;
+    const matchesMonth = !monthFilter || userDate?.getMonth() + 1 === Number(monthFilter);
+    const matchesDay = !dayFilter || userDate?.getDate() === Number(dayFilter);
+    const matchesYear = !yearFilter || userDate?.getFullYear() === Number(yearFilter);
+    const matchesDate = matchesMonth && matchesDay && matchesYear;
     return matchesSearch && matchesRole && matchesDate;
   });
+
+  const accountsPerPage = 12;
+  const totalPages = Math.ceil(filteredUsers.length / accountsPerPage);
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * accountsPerPage,
+    currentPage * accountsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, roleFilter, monthFilter, dayFilter, yearFilter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const filteredRequests = roleRequests.filter((req) => {
     const name = req.profiles?.full_name?.toLowerCase() || '';
@@ -398,13 +437,30 @@ const ManageAccount = () => {
     const term = requestSearch.toLowerCase();
     const matchesSearch = name.includes(term) || email.includes(term);
     const matchesRole = requestRoleFilter === 'All Roles' || req.requested_role?.toLowerCase() === requestRoleFilter.toLowerCase();
-    let matchesDate = true;
-    if (requestDateFilter) {
-      const requestDate = new Date(req.created_at).toISOString().split('T')[0];
-      matchesDate = requestDate === requestDateFilter;
-    }
+    const requestDate = req.created_at ? new Date(req.created_at) : null;
+    const matchesMonth = !requestMonthFilter || requestDate?.getMonth() + 1 === Number(requestMonthFilter);
+    const matchesDay = !requestDayFilter || requestDate?.getDate() === Number(requestDayFilter);
+    const matchesYear = !requestYearFilter || requestDate?.getFullYear() === Number(requestYearFilter);
+    const matchesDate = matchesMonth && matchesDay && matchesYear;
     return matchesSearch && matchesRole && matchesDate;
   });
+
+  const requestsPerPage = 12;
+  const totalRequestPages = Math.ceil(filteredRequests.length / requestsPerPage);
+  const paginatedRequests = filteredRequests.slice(
+    (requestPage - 1) * requestsPerPage,
+    requestPage * requestsPerPage
+  );
+
+  useEffect(() => {
+    setRequestPage(1);
+  }, [requestSearch, requestRoleFilter, requestMonthFilter, requestDayFilter, requestYearFilter]);
+
+  useEffect(() => {
+    if (totalRequestPages > 0 && requestPage > totalRequestPages) {
+      setRequestPage(totalRequestPages);
+    }
+  }, [requestPage, totalRequestPages]);
 
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, minHeight: '100vh', bgcolor: pageBg }}>
@@ -442,19 +498,30 @@ const ManageAccount = () => {
         <>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 4 }}>
             <TextField placeholder="Search accounts or ID..." size="medium" fullWidth={isMobile} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
-            <TextField type="date" size="medium" label="Date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5, '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' } }} InputProps={{ startAdornment: ( <InputAdornment position="start"> <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} /> </InputAdornment> ) }} />
+            <TextField select size="medium" label="Month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="">All Months</MenuItem>
+              {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
+            </TextField>
+            <TextField select size="medium" label="Date" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="">All Dates</MenuItem>
+              {dayOptions.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+            </TextField>
+            <TextField select size="medium" label="Year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="">All Years</MenuItem>
+              {accountYears.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+            </TextField>
             <TextField select size="medium" label="Filter Role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} sx={{ minWidth: 200, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
               <MenuItem value="All Roles">All Roles</MenuItem>
               <MenuItem value="superadmin">Superadmin</MenuItem>
               <MenuItem value="admin">Admin</MenuItem>
-              <MenuItem value="client">Client</MenuItem>
+              <MenuItem value="client">User</MenuItem>
             </TextField>
             <PrimaryButton fullWidth={isMobile} sx={{color: '#ffffff', bgcolor: '#28334e', '&:hover': { bgcolor: '#1e293b' }}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}> New Account </PrimaryButton>
           </Stack>   
 
           {isMobile ? (
             <Stack spacing={2} alignItems="center">
-              {filteredUsers.map((user) => (
+              {paginatedUsers.map((user) => (
                 <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
                   <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={user} size={40} /></Box>
                   <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
@@ -483,7 +550,7 @@ const ManageAccount = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredUsers.map((user) => (
+                  {paginatedUsers.map((user) => (
                     <TableRow key={user.id} hover>
                       <TableCell>
                         <Stack direction="row" spacing={2} alignItems="center">
@@ -513,20 +580,63 @@ const ManageAccount = () => {
               </Table>
             </TableContainer>
           )}
+
+          {totalPages > 1 && (
+            <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page - 1)}
+                disabled={currentPage === 1}
+                sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <Button
+                  key={page}
+                  size="small"
+                  onClick={() => setCurrentPage(page)}
+                  variant={currentPage === page ? 'contained' : 'text'}
+                  sx={{ minWidth: 32, fontWeight: 700 }}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page + 1)}
+                disabled={currentPage === totalPages}
+                sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+              >
+                Next
+              </Button>
+            </Stack>
+          )}
         </>
       ) : (
         <>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
             <TextField placeholder="Search by name or email..." size="medium" fullWidth={isMobile} value={requestSearch} onChange={(e) => setRequestSearch(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
-            <TextField type="date" size="medium" label="Request Date" InputLabelProps={{ shrink: true }} value={requestDateFilter} onChange={(e) => setRequestDateFilter(e.target.value)} sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5, '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' } }} InputProps={{ startAdornment: ( <InputAdornment position="start"> <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} /> </InputAdornment> ) }} />
+            <TextField select size="medium" label="Month" value={requestMonthFilter} onChange={(e) => setRequestMonthFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="">All Months</MenuItem>
+              {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
+            </TextField>
+            <TextField select size="medium" label="Date" value={requestDayFilter} onChange={(e) => setRequestDayFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="">All Dates</MenuItem>
+              {dayOptions.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+            </TextField>
+            <TextField select size="medium" label="Year" value={requestYearFilter} onChange={(e) => setRequestYearFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="">All Years</MenuItem>
+              {requestYears.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+            </TextField>
             <TextField select size="medium" label="Requested Role" value={requestRoleFilter} onChange={(e) => setRequestRoleFilter(e.target.value)} sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
               <MenuItem value="All Roles">All Roles</MenuItem>
               <MenuItem value="superadmin">Superadmin</MenuItem>
               <MenuItem value="admin">Admin</MenuItem>
-              <MenuItem value="client">Client</MenuItem>
+              <MenuItem value="client">User</MenuItem>
             </TextField>
-            {(requestSearch || requestDateFilter || requestRoleFilter !== 'All Roles') && (
-              <Button variant="text" onClick={() => { setRequestSearch(''); setRequestDateFilter(''); setRequestRoleFilter('All Roles'); }} sx={{ fontWeight: 700 }}> RESET </Button>
+            {(requestSearch || requestMonthFilter || requestDayFilter || requestYearFilter || requestRoleFilter !== 'All Roles') && (
+              <Button variant="text" onClick={() => { setRequestSearch(''); setRequestMonthFilter(''); setRequestDayFilter(''); setRequestYearFilter(''); setRequestRoleFilter('All Roles'); }} sx={{ fontWeight: 700 }}> RESET </Button>
             )}
           </Stack>
 
@@ -535,12 +645,12 @@ const ManageAccount = () => {
               {filteredRequests.length === 0 ? (
                 <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600, py: 8 }}> No pending role requests found. </Typography>
               ) : (
-                filteredRequests.map((req) => (
+                paginatedRequests.map((req) => (
                   <Paper key={req.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
                     <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={{ role: req.current_role, full_name: req.profiles?.full_name }} size={40} /></Box>
                     <Typography variant="h6" fontWeight={800}>{req.profiles?.full_name}</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{req.profiles?.email}</Typography>
-                    <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}><RoleChip role={req.current_role} /><Chip label={req.requested_role} sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} /></Stack>
+                    <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}><RoleChip role={req.current_role} /><Chip label={getRoleLabel(req.requested_role)} sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} /></Stack>
                     <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', mb: 2 }}> "{req.reason || 'No reason provided'}" </Typography>
                     <Divider sx={{ mb: 2 }} />
                     <Stack direction="row" spacing={1.5} justifyContent="center">
@@ -567,7 +677,7 @@ const ManageAccount = () => {
                   {filteredRequests.length === 0 ? (
                     <TableRow><TableCell colSpan={5} align="center" sx={{ py: 8 }}><Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}> No pending role requests found. </Typography></TableCell></TableRow>
                   ) : (
-                    filteredRequests.map((req) => (
+                    paginatedRequests.map((req) => (
                       <TableRow key={req.id} hover>
                         <TableCell>
                           <Stack direction="row" spacing={2} alignItems="center">
@@ -576,7 +686,7 @@ const ManageAccount = () => {
                           </Stack>
                         </TableCell>
                         <TableCell align="center"><RoleChip role={req.current_role} /></TableCell>
-                        <TableCell align="center"><Chip label={req.requested_role} sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} /></TableCell>
+                        <TableCell align="center"><Chip label={getRoleLabel(req.requested_role)} sx={{ bgcolor: '#3b82f6', color: 'white', fontWeight: 800, textTransform: 'uppercase', borderRadius: '10px', width: '120px', fontSize: '0.7rem' }} /></TableCell>
                         <TableCell sx={{ maxWidth: 250 }}><Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, fontStyle: 'italic' }}> "{req.reason || 'No reason provided'}" </Typography></TableCell>
                         <TableCell align="right">
                           <Stack direction="row" spacing={1.5} justifyContent="flex-end">
@@ -590,6 +700,38 @@ const ManageAccount = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+          )}
+
+          {totalRequestPages > 1 && (
+            <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+              <Button
+                size="small"
+                onClick={() => setRequestPage((page) => page - 1)}
+                disabled={requestPage === 1}
+                sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalRequestPages }, (_, index) => index + 1).map((page) => (
+                <Button
+                  key={page}
+                  size="small"
+                  onClick={() => setRequestPage(page)}
+                  variant={requestPage === page ? 'contained' : 'text'}
+                  sx={{ minWidth: 32, fontWeight: 700 }}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                size="small"
+                onClick={() => setRequestPage((page) => page + 1)}
+                disabled={requestPage === totalRequestPages}
+                sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+              >
+                Next
+              </Button>
+            </Stack>
           )}
         </>
       )}
@@ -635,6 +777,12 @@ const ManageAccount = () => {
         title="Create New Account" 
         onConfirm={handleCreateAccount} 
         confirmText={loading ? "Creating..." : "Create Account"}
+        PaperProps={{
+    sx: {
+      bgcolor: '#1e293b', // Ensures a consistent dark container background
+      color: '#ffffff'
+    }
+  }}
       >
         <Stack spacing={2} sx={{ mt: 2 }}>
           <FormInput 
@@ -709,7 +857,7 @@ const ManageAccount = () => {
             onChange={(e) => setFormData({ ...formData, role: e.target.value })}
             InputProps={{ startAdornment: <AdminPanelSettingsIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
           >
-            <MenuItem value="client">Client</MenuItem>
+            <MenuItem value="client">User</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
             <MenuItem value="superadmin">Superadmin</MenuItem>
           </FormInput>
@@ -775,7 +923,7 @@ const ManageAccount = () => {
             onChange={(e) => setEditData({ ...editData, role: e.target.value })}
             InputProps={{ startAdornment: <AdminPanelSettingsIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
           >
-            <MenuItem value="client">Client</MenuItem>
+            <MenuItem value="client">User</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
             <MenuItem value="superadmin">Superadmin</MenuItem>
           </FormInput>

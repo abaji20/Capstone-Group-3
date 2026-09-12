@@ -42,7 +42,6 @@ export const ColorModeContext = createContext({ toggleColorMode: () => {} });
 function App() {
   const [role, setRole] = useState(() => sessionStorage.getItem('current_tab_role') || null);
   const [loading, setLoading] = useState(() => !sessionStorage.getItem('current_tab_role'));
-  const [isFocusSyncing, setIsFocusSyncing] = useState(false);
   const [mode, setMode] = useState(localStorage.getItem('themeMode') || 'light');
 
   const colorMode = useMemo(() => ({
@@ -71,9 +70,9 @@ function App() {
     typography: { fontFamily: 'Inter, sans-serif' }
   }), [mode]);
 
-  const fetchUserRole = async (userId, isFocusEvent = false) => {
+  const fetchUserRole = async (userId) => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', userId)
@@ -87,17 +86,16 @@ function App() {
       console.error("Error fetching role:", err);
     } finally {
       setLoading(false);
-      if (isFocusEvent) {
-        setTimeout(() => setIsFocusSyncing(false), 150);
-      }
     }
   };
 
   useEffect(() => {
     const isResetting = window.location.pathname === '/forgot-password';
 
+    // 1. Initial check scoped strictly to this tab's sessionStorage
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session && !isResetting) {
+      const activeRole = sessionStorage.getItem('current_tab_role');
+      if (session && activeRole && !isResetting) {
         fetchUserRole(session.user.id);
       } else {
         setRole(null);
@@ -106,6 +104,7 @@ function App() {
       }
     });
 
+    // 2. Listen to local auth events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const isCurrentlyResetting = window.location.pathname === '/forgot-password';
       
@@ -116,37 +115,33 @@ function App() {
         return;
       }
 
-      if (session) {
-        fetchUserRole(session.user.id);
-      } else {
+      if (event === 'SIGNED_OUT' || !session) {
         setRole(null);
         sessionStorage.removeItem('current_tab_role');
         setLoading(false);
+        return;
+      }
+
+      // ONLY process login if this tab was explicitly on the login page or already logged in
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        const storedRole = sessionStorage.getItem('current_tab_role');
+        const isLoginPage = window.location.pathname === '/login';
+
+        if (session && (storedRole || isLoginPage)) {
+          fetchUserRole(session.user.id);
+        } else {
+          // If another tab logged in, ignore the broadcast event for this unauthenticated tab
+          setLoading(false);
+        }
       }
     });
 
-    const handleFocus = () => {
-      setIsFocusSyncing(true);
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          fetchUserRole(session.user.id, true);
-        } else {
-          setRole(null);
-          sessionStorage.removeItem('current_tab_role');
-          setIsFocusSyncing(false);
-        }
-      });
-    };
-
-    window.addEventListener('focus', handleFocus);
-
     return () => {
       subscription.unsubscribe();
-      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
-  if (loading || isFocusSyncing) return (
+  if (loading) return (
     <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: 'background.default', gap: 2 }}>
       <Box 
         component="img" 

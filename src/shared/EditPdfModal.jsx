@@ -243,7 +243,7 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
 
       <DialogActions sx={{ p: 3, gap: 1 }}>
         <Button onClick={onClose} sx={{ color: 'text.secondary', fontWeight: 600 }}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained" disabled={loading} sx={{ borderRadius: '25px', px: 4, fontWeight: 800, bgcolor: '#3b82f6' }}>
+        <Button onClick={handleSave} variant="contained" disabled={loading} sx={{ color: isDarkMode ? '#ffffff' : '#ffffff',borderRadius: '25px', px: 4, fontWeight: 700, bgcolor: '#3b82f6' }}>
           {loading ? "Saving..." : "Save Changes"}
         </Button>
       </DialogActions>

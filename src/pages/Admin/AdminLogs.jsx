@@ -8,7 +8,6 @@ import { supabase } from '../../supabaseClient';
 
 // Icons
 import SearchIcon from '@mui/icons-material/Search';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import AssignmentLateIcon from '@mui/icons-material/AssignmentLate';
 
 const AdminLogs = () => {
@@ -30,10 +29,24 @@ const AdminLogs = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
-  const [dateFilter, setDateFilter] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [dayFilter, setDayFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
 
   useEffect(() => { fetchLogs(); }, []);
-  useEffect(() => { applyFilters(); }, [logs, searchTerm, roleFilter, dateFilter]);
+  useEffect(() => { applyFilters(); }, [logs, searchTerm, roleFilter, monthFilter, dayFilter, yearFilter]);
+
+  // --- FILTER OPTIONS ---
+  const monthOptions = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' }
+  ];
+  const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+  const logYears = [...new Set(logs
+    .filter(log => log.created_at)
+    .map(log => new Date(log.created_at).getFullYear()))].sort((a, b) => b - a);
 
   // --- DATE FORMATTER FUNCTION (MM/DD/YYYY) ---
   const formatDate = (dateString) => {
@@ -47,18 +60,15 @@ const AdminLogs = () => {
 
   // --- TARGET EXTRACTION HELPER ---
   const getTargetName = (log) => {
-    // 1. PDF Title (if present from relation query)
     if (log.pdfs?.title) return log.pdfs.title;
 
     const action = log.action_type?.toLowerCase() || '';
     const desc = log.description || '';
 
-    // 2. Profile changes
     if (action.includes('profile')) {
       return log.profiles?.full_name ? `${log.profiles.full_name} (Profile)` : 'User Profile';
     }
 
-    // 3. Fallback extraction logic
     if (desc.includes('for ')) {
       return desc.split('for ').pop().trim();
     }
@@ -95,24 +105,41 @@ const AdminLogs = () => {
 
   const applyFilters = () => {
     let tempLogs = [...logs];
-    tempLogs = tempLogs.filter(log => 
-        log.profiles?.role?.toLowerCase() === 'admin' || 
-        log.profiles?.role?.toLowerCase() === 'client'
-    );
+    tempLogs = tempLogs.filter(log => {
+      const r = log.profiles?.role?.toLowerCase();
+      return r === 'admin' || r === 'client';
+    });
+
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      tempLogs = tempLogs.filter(log => 
-        log.profiles?.full_name?.toLowerCase().includes(term) ||
-        log.action_type?.toLowerCase().includes(term) ||
-        log.description?.toLowerCase().includes(term) ||
-        getTargetName(log).toLowerCase().includes(term)
-      );
+      tempLogs = tempLogs.filter(log => {
+        const displayRole = log.profiles?.role?.toLowerCase() === 'client' ? 'user' : log.profiles?.role?.toLowerCase();
+        const displayAction = log.action_type?.toLowerCase().replace(/client/g, 'user') || '';
+        return (
+          log.profiles?.full_name?.toLowerCase().includes(term) ||
+          displayAction.includes(term) ||
+          log.description?.toLowerCase().includes(term) ||
+          getTargetName(log).toLowerCase().includes(term) ||
+          displayRole?.includes(term)
+        );
+      });
     }
+
     if (roleFilter !== 'All') {
-      tempLogs = tempLogs.filter(log => log.profiles?.role?.toLowerCase() === roleFilter.toLowerCase());
+      tempLogs = tempLogs.filter(log => {
+        const dbRole = log.profiles?.role?.toLowerCase();
+        const targetRole = roleFilter.toLowerCase() === 'user' ? 'client' : roleFilter.toLowerCase();
+        return dbRole === targetRole;
+      });
     }
-    if (dateFilter) {
-      tempLogs = tempLogs.filter(log => log.created_at.startsWith(dateFilter));
+
+    if (monthFilter || dayFilter || yearFilter) {
+      tempLogs = tempLogs.filter(log => {
+        const logDate = log.created_at ? new Date(log.created_at) : null;
+        return (!monthFilter || logDate?.getMonth() + 1 === Number(monthFilter)) &&
+          (!dayFilter || logDate?.getDate() === Number(dayFilter)) &&
+          (!yearFilter || logDate?.getFullYear() === Number(yearFilter));
+      });
     }
     setFilteredLogs(tempLogs);
   };
@@ -140,7 +167,10 @@ const AdminLogs = () => {
     if (type?.includes('download')) return { bg: '#261CC1', text: '#adc3ff', label: 'DOWNLOAD' };
     if (type?.includes('request')) return { bg: '#261CC1', text: '#fdfdff', label: 'REQUEST' };
     if (type?.includes('approved')) return { bg: '#2F6B3F', text: '#fdfdff', label: 'APPROVED' };
-    return { bg: '#f1f5f9', text: '#475569', label: action?.toUpperCase() };
+    
+    // UI Override: Replace 'CLIENT' with 'USER' in action labels
+    const formattedLabel = action?.toUpperCase().replace(/CLIENT/g, 'USER');
+    return { bg: '#f1f5f9', text: '#475569', label: formattedLabel };
   };
 
   const ActionButton = ({ action }) => {
@@ -160,6 +190,7 @@ const AdminLogs = () => {
 
   const RoleChip = ({ role }) => {
     const styles = getRoleStyles(role, isDarkMode);
+    const displayRole = role?.toLowerCase() === 'client' ? 'User' : (role || 'User');
     return (
       <Box sx={{ 
         px: 1.5, py: 0.4, borderRadius: 0.5, fontSize: '0.65rem', fontWeight: 900,
@@ -170,7 +201,7 @@ const AdminLogs = () => {
         display: 'inline-flex',
         justifyContent: 'center'
       }}>
-        {role || 'CLIENT'}
+        {displayRole}
       </Box>
     );
   };
@@ -212,25 +243,20 @@ const AdminLogs = () => {
             }} 
           />
           
-          <TextField
-            type="date"
-            label="Date" 
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            sx={{ 
-              minWidth: 180, 
-              bgcolor: inputBg, 
-              borderRadius: 0.5,
-              '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' },
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} />
-                </InputAdornment>
-              )
-            }}
-          />
+          <TextField select size="medium" label="Month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: inputBg, borderRadius: 0.5 }}>
+            <MenuItem value="">All Months</MenuItem>
+            {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
+          </TextField>
+
+          <TextField select size="medium" label="Date" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}>
+            <MenuItem value="">All Dates</MenuItem>
+            {dayOptions.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+          </TextField>
+
+          <TextField select size="medium" label="Year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}>
+            <MenuItem value="">All Years</MenuItem>
+            {logYears.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+          </TextField>
 
           <TextField 
             select 
@@ -241,7 +267,7 @@ const AdminLogs = () => {
           >
             <MenuItem value="All">All Roles</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
-            <MenuItem value="client">Client</MenuItem>
+            <MenuItem value="user">User</MenuItem>
           </TextField>
         </Stack>
 

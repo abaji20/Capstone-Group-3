@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Stack, Typography, MenuItem, TextField, InputAdornment, Avatar,
@@ -19,7 +19,6 @@ import KeyIcon from '@mui/icons-material/Key';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import SchoolIcon from '@mui/icons-material/School';
 import BusinessIcon from '@mui/icons-material/Business';
 
@@ -30,7 +29,7 @@ const AdminManageAccount = () => {
   const isDarkMode = theme.palette.mode === 'dark';
   
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff';
-  const inputBg = isDarkMode ? '#28334e' : '#ffffff';
+  const inputBg = isDarkMode ? '#28334e' : '#f1f5f9';
   const borderCol = isDarkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0';
   const headerColor = isDarkMode ? '#1e1e2d' : '#213C51';
 
@@ -54,11 +53,16 @@ const AdminManageAccount = () => {
 
   // States
   const [users, setUsers] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterDate, setFilterDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
+  // --- EXPANDED FILTER STATES (Aligned with EditPDFs pattern) ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [dayFilter, setDayFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('All Departments');
+
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
@@ -221,7 +225,6 @@ const AdminManageAccount = () => {
       await createAuditLog('Create Client', `Created GLC account: ${formData.fullName}`);
       setNotify({ open: true, message: 'Client account created! Verify email to activate.', severity: 'success' });
       
-      // Clear saved data upon successful creation
       handleCloseCreateModal();
       fetchClients();
     } catch (err) {
@@ -291,24 +294,47 @@ const AdminManageAccount = () => {
     setLoading(false);
   };
 
-  // Filter Logic
-  const filteredUsers = users.filter((u) => {
-    const term = searchTerm.toLowerCase();
-    const matchesSearch = 
-      (u.full_name || "").toLowerCase().includes(term) || 
-      (u.email || "").toLowerCase().includes(term) ||
-      (u.id_number || "").toLowerCase().includes(term) ||
-      (u.department || "").toLowerCase().includes(term) ||
-      (u.year_level || "").toLowerCase().includes(term);
+  // --- FILTER OPTIONS DERIVATION (Dynamic filters matching reference) ---
+  const uniqueDepartments = useMemo(() => {
+    return ["All Departments", ...new Set(users.map(u => u.department).filter(Boolean))];
+  }, [users]);
 
-    let matchesDate = true;
-    if (filterDate) {
-      const userDate = new Date(u.created_at).toISOString().split('T')[0];
-      matchesDate = userDate === filterDate;
-    }
+  const monthOptions = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' }
+  ];
 
-    return matchesSearch && matchesDate;
-  });
+  const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+
+  const archiveYears = useMemo(() => {
+    return [...new Set(users
+      .filter(user => user.created_at)
+      .map(user => new Date(user.created_at).getFullYear()))].sort((a, b) => b - a);
+  }, [users]);
+
+  // --- COMPREHENSIVE FILTER LOGIC ---
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = 
+        (u.full_name || "").toLowerCase().includes(term) || 
+        (u.email || "").toLowerCase().includes(term) ||
+        (u.id_number || "").toLowerCase().includes(term) ||
+        (u.department || "").toLowerCase().includes(term) ||
+        (u.year_level || "").toLowerCase().includes(term);
+
+      const createdDate = u.created_at ? new Date(u.created_at) : null;
+      const matchesMonth = !monthFilter || (createdDate && createdDate.getMonth() + 1 === Number(monthFilter));
+      const matchesDay = !dayFilter || (createdDate && createdDate.getDate() === Number(dayFilter));
+      const matchesYear = !yearFilter || (createdDate && createdDate.getFullYear() === Number(yearFilter));
+
+      const matchesDepartment = departmentFilter === 'All Departments' || u.department === departmentFilter;
+
+      return matchesSearch && matchesMonth && matchesDay && matchesYear && matchesDepartment;
+    });
+  }, [users, searchTerm, monthFilter, dayFilter, yearFilter, departmentFilter]);
 
   // Pagination Calculations
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -345,18 +371,59 @@ const AdminManageAccount = () => {
         <Alert severity={notify.severity} variant="filled">{notify.message}</Alert>
       </Snackbar>
 
+      {/* --- STANDARDIZED FILTER SECTION (Matching EditPDFs Format) --- */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
-        <TextField fullWidth placeholder="Search by name, email, ID, dept, or year..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} sx={{ bgcolor: inputBg, borderRadius: 0.5, ...removeAutofillBg }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
-        
-        {/* Single Date Filter */}
         <TextField 
-          type="date" 
-          size="medium" 
-          value={filterDate} 
-          onChange={(e) => { setFilterDate(e.target.value); setCurrentPage(1); }} 
-          sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5, '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' }, ...removeAutofillBg }} 
-          InputProps={{ startAdornment: ( <InputAdornment position="start"> <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} /> </InputAdornment> ) }} 
+          fullWidth 
+          placeholder="Search by name, email, ID, dept, or year..." 
+          value={searchTerm} 
+          onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
+          sx={{ bgcolor: inputBg, borderRadius: 0.5, ...removeAutofillBg }} 
+          InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} 
         />
+        
+        <TextField 
+          select 
+          label="Month" 
+          value={monthFilter} 
+          onChange={(e) => { setMonthFilter(e.target.value); setCurrentPage(1); }} 
+          sx={{ minWidth: 145, bgcolor: inputBg, borderRadius: 0.5 }}
+        >
+          <MenuItem value="">All Months</MenuItem>
+          {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
+        </TextField>
+
+        <TextField 
+          select 
+          label="Date" 
+          value={dayFilter} 
+          onChange={(e) => { setDayFilter(e.target.value); setCurrentPage(1); }} 
+          sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}
+        >
+          <MenuItem value="">All Dates</MenuItem>
+          {dayOptions.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+        </TextField>
+
+        <TextField 
+          select 
+          label="Year" 
+          value={yearFilter} 
+          onChange={(e) => { setYearFilter(e.target.value); setCurrentPage(1); }} 
+          sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}
+        >
+          <MenuItem value="">All Years</MenuItem>
+          {archiveYears.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+        </TextField>
+
+        <TextField 
+          select 
+          label="Department" 
+          value={departmentFilter} 
+          onChange={(e) => { setDepartmentFilter(e.target.value); setCurrentPage(1); }} 
+          sx={{ minWidth: { md: 220 }, bgcolor: inputBg, borderRadius: 0.5 }}
+        >
+          {uniqueDepartments.map(dept => <MenuItem key={dept} value={dept}>{dept}</MenuItem>)}
+        </TextField>
 
         <PrimaryButton 
           sx={{ 

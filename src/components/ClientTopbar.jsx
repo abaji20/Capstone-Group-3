@@ -17,8 +17,8 @@ import { supabase } from '../supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { navLinks } from '../navConfig';
 import { LogoutButton, ActionModal, FormInput } from '../shared';
-import logo from '../assets/logo.png'; 
-import nonamelogo from '../assets/glclogo.png'; 
+import glclogo from '../assets/glclogo.png';
+import glclogdesktop from '../assets/glclogdesktop.png';
 import { ColorModeContext } from '../App';
 
 const expandedWidth = 280;
@@ -38,7 +38,6 @@ const customAnimations = `
 const ClientTopbar = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [username, setUsername] = useState('Loading...');
   
   // Lists for Dropdowns
   const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
@@ -70,7 +69,6 @@ const ClientTopbar = () => {
     if (user) {
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       if (data) {
-        setUsername(data.full_name);
         setUserData(data);
         setInitialUserData({ full_name: data.full_name || '', year_level: data.year_level || '' });
 
@@ -160,7 +158,6 @@ const ClientTopbar = () => {
       setNotify({ open: true, message: 'Profile updated successfully!', severity: 'success' });
     }
 
-    setUsername(userData.full_name);
     setInitialUserData({ full_name: userData.full_name, year_level: userData.year_level });
     setIsProfileModalOpen(false);
     setRequestData({ role: '', reason: '' }); 
@@ -208,10 +205,7 @@ const ClientTopbar = () => {
           <AccountCircleIcon sx={{ fontSize: 28 }} />
         </Avatar>
         <Box sx={{ ml: 2, textAlign: 'left', whiteSpace: 'nowrap' }}>
-          <Typography variant="body1" sx={{ fontWeight: 800, color: 'white' }}>{username}</Typography>
-          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.7rem' }}>
-            User Account
-          </Typography>
+          <Typography variant="body1" sx={{ fontWeight: 800, color: 'white' }}>USER</Typography>
         </Box>
       </Box>
 
@@ -265,11 +259,18 @@ const ClientTopbar = () => {
                 <MenuIcon fontSize="medium" />
               </IconButton>
             )}
-            <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: { xs: 2, md: 2 } }} onClick={() => navigate('/')}>
-              <Box component="img" src={nonamelogo} sx={{ height: { xs: 30, md: 60 }, filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))' }} />
-              <Typography fontFamily="Paytone One" sx={{ fontStyle: 'italic', fontWeight: 200, color: 'white', fontSize: { xs: '0.85rem', sm: '1.1rem', md: '1.25rem' }, letterSpacing: { xs: 1, md: 2 }, display: 'block', whiteSpace: 'nowrap', textShadow: '2px 2px 4px rgba(0,0,0,0.3)' }}>
-                Library Repository
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => navigate('/')}>
+              <Box
+                component="img"
+                src={isMobile ? glclogo : glclogdesktop}
+                alt="Golden Link College Foundation"
+                sx={{
+                  width: isMobile ? 44 : { sm: 260, md: 330 },
+                  height: isMobile ? 44 : { sm: 58, md: 64 },
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.2))'
+                }}
+              />
             </Box>
           </Box>
 
@@ -294,19 +295,21 @@ const ClientTopbar = () => {
             <ButtonBase onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'white', p: 0.5, px: 1, borderRadius: '10px', bgcolor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', transition: 'all 0.3s ease', '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' } }}>
               {!isMobile && (
                 <Box sx={{ textAlign: 'right', mr: 0.5 }}>
-                  <Typography sx={{ fontSize: '0.9rem', fontWeight: 900, lineHeight: 1 }}>{username === 'Loading...' ? '...' : username.split(' ')[0].toUpperCase()}</Typography>
-                  <Typography sx={{ fontSize: '0.6rem', color: '#3b82f6', fontWeight: 800, mt: 0.3 }}>User Account</Typography>
+                  <Typography sx={{ fontSize: '0.9rem', fontWeight: 900, lineHeight: 1 }}>USER</Typography>
                 </Box>
               )}
-              <Avatar sx={{ bgcolor: '#3b82f6', color: '#fff', width: { xs: 35, md: 45 }, height: { xs: 35, md: 45 }, fontSize: { xs: '1rem', md: '1.2rem' }, fontWeight: 900, border: '2px solid rgba(255,255,255,0.3)' }}>{username.charAt(0).toUpperCase()}</Avatar>
+              <Avatar sx={{ bgcolor: '#3b82f6', color: '#fff', width: { xs: 35, md: 45 }, height: { xs: 35, md: 45 }, border: '2px solid rgba(255,255,255,0.3)' }}>
+                <PersonIcon sx={{ fontSize: { xs: 22, md: 28 } }} />
+              </Avatar>
             </ButtonBase>
           </Box>
 
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} PaperProps={{ sx: { mt: 2, borderRadius: 2, minWidth: 240, bgcolor: theme.palette.mode === 'dark' ? '#1f2937' : '#fff' } }}>
             <Box sx={{ px: 3, py: 2 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 900, color: 'text.primary' }}>{username}</Typography>
-              <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', color: 'text.secondary' }}>ID: {userData.id_number || 'N/A'}</Typography>
-              <Typography variant="caption" color="primary" sx={{ fontWeight: 800, textTransform: 'uppercase' }}>{userData.department || 'No Department'}</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 900, color: 'text.primary' }}>USER</Typography>
+              <Typography variant="caption" color="primary" sx={{ fontWeight: 800, textTransform: 'uppercase' }}>
+                {userData.department || 'No Department'}
+              </Typography>
             </Box>
             <Divider />
             

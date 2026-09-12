@@ -25,6 +25,7 @@ const ActionModal = ({ open, onClose, title, children, onConfirm, confirmText = 
           onClick={onConfirm} 
           variant="contained" 
           sx={{ 
+            color: isDarkMode ? '#ffffff' : '#ffffff',
             bgcolor: '#1976d2', 
             '&:hover': { bgcolor: '#115293' }, 
             ...confirmBtnSx 

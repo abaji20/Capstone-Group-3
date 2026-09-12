@@ -12,12 +12,11 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 
 import EditPdfModal from '../../shared/EditPdfModal';
 import { supabase } from '../../supabaseClient'; 
-import logo from '../../assets/nonamelogo.png'; 
+import glclogo from '../../assets/glclogo.png';
 
 const SuperAdminEditPDFs = () => {
   const theme = useTheme();
@@ -34,8 +33,11 @@ const SuperAdminEditPDFs = () => {
 
   // --- FILTER STATE ---
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGenre, setSelectedGenre] = useState("All");
-  const [dateFilter, setDateFilter] = useState("");
+  const [selectedGenre, setSelectedGenre] = useState("All Genres");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [monthFilter, setMonthFilter] = useState("");
+  const [dayFilter, setDayFilter] = useState("");
+  const [yearFilter, setYearFilter] = useState("");
 
   // --- STYLING ---
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff';
@@ -84,8 +86,19 @@ const SuperAdminEditPDFs = () => {
     const allGenres = pdfs.flatMap(p => 
       p.genre ? p.genre.split(',').map(g => g.trim()) : []
     );
-    return ["All", ...new Set(allGenres)].sort();
+    return ["All Genres", ...new Set(allGenres)].sort();
   }, [pdfs]);
+
+  const monthOptions = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' }
+  ];
+  const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+  const uploadYears = [...new Set(pdfs
+    .filter(pdf => pdf.created_at)
+    .map(pdf => new Date(pdf.created_at).getFullYear()))].sort((a, b) => b - a);
 
   const filteredPdfs = useMemo(() => {
     return pdfs.filter(pdf => {
@@ -95,18 +108,19 @@ const SuperAdminEditPDFs = () => {
         pdf.author?.toLowerCase().includes(query) ||
         pdf.genre?.toLowerCase().includes(query);
       
-      const matchesGenre = selectedGenre === "All" || 
+      const matchesGenre = selectedGenre === "All Genres" || 
         (pdf.genre && pdf.genre.split(',').map(g => g.trim()).includes(selectedGenre));
+      const matchesCategory = selectedCategory === "All" || pdf.category === selectedCategory;
       
-      let matchesDate = true;
-      if (dateFilter) {
-        const fileDate = new Date(pdf.created_at).toISOString().split('T')[0];
-        matchesDate = fileDate === dateFilter;
-      }
+      const fileDate = pdf.created_at ? new Date(pdf.created_at) : null;
+      const matchesMonth = !monthFilter || fileDate?.getMonth() + 1 === Number(monthFilter);
+      const matchesDay = !dayFilter || fileDate?.getDate() === Number(dayFilter);
+      const matchesYear = !yearFilter || fileDate?.getFullYear() === Number(yearFilter);
+      const matchesDate = matchesMonth && matchesDay && matchesYear;
 
-      return matchesSearch && matchesGenre && matchesDate;
+      return matchesSearch && matchesGenre && matchesCategory && matchesDate;
     });
-  }, [pdfs, searchQuery, selectedGenre, dateFilter]);
+  }, [pdfs, searchQuery, selectedGenre, selectedCategory, monthFilter, dayFilter, yearFilter]);
 
   const getImageUrl = (path) => {
     if (!path) return null;
@@ -184,26 +198,20 @@ const SuperAdminEditPDFs = () => {
           InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }}
         />
         
-        <TextField
-          type="date"
-          size="medium"
-          label="Date"  
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-          sx={{ 
-            minWidth: 180, 
-            bgcolor: inputBg, 
-            borderRadius: 0.5,
-            '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' },
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} />
-              </InputAdornment>
-            )
-          }}
-        />
+        <TextField select size="medium" label="Month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: inputBg, borderRadius: 0.5 }}>
+          <MenuItem value="">All Months</MenuItem>
+          {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
+        </TextField>
+
+        <TextField select size="medium" label="Date" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}>
+          <MenuItem value="">All Dates</MenuItem>
+          {dayOptions.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+        </TextField>
+
+        <TextField select size="medium" label="Year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}>
+          <MenuItem value="">All Years</MenuItem>
+          {uploadYears.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+        </TextField>
 
         <TextField 
           select 
@@ -214,6 +222,19 @@ const SuperAdminEditPDFs = () => {
           sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5 }}
         >
           {genres.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
+        </TextField>
+
+        <TextField
+          select
+          size="medium"
+          label="Category"
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5 }}
+        >
+          <MenuItem value="All">All Categories</MenuItem>
+          <MenuItem value="book">Book</MenuItem>
+          <MenuItem value="academic paper">Academic Materials</MenuItem>
         </TextField>
       </Stack>
 
@@ -230,7 +251,7 @@ const SuperAdminEditPDFs = () => {
                   <TableRow>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }}>AUTHOR</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">CATEGORY</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">GENRE</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">DATE UPLOADED</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTIONS</TableCell>
                   </TableRow>
@@ -241,7 +262,7 @@ const SuperAdminEditPDFs = () => {
                       <TableCell>
                         <Stack direction="row" alignItems="center" spacing={2}>
                           <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
-                            {!pdf.image_url && <Box component="img" src={logo} sx={{ width: '80%', opacity: 0.8 }} />}
+                            {!pdf.image_url && <Box component="img" src={glclogo} sx={{ width: '80%', opacity: 0.8 }} />}
                           </Avatar>
                           <Typography sx={{ fontWeight: 700 }}>{pdf.title}</Typography>
                         </Stack>
@@ -274,7 +295,7 @@ const SuperAdminEditPDFs = () => {
               {filteredPdfs.map((pdf) => (
                 <Paper key={pdf.id} sx={{ p: 2, bgcolor: cardBg, borderRadius: 4, border: `1px solid ${borderCol}`, textAlign: 'center' }}>
                   <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 90, height: 120, mx: 'auto', mb: 2, bgcolor: 'transparent' }}>
-                    {!pdf.image_url && <Box component="img" src={logo} sx={{ width: '70%', opacity: 0.8 }} />}
+                    {!pdf.image_url && <Box component="img" src={glclogo} sx={{ width: '70%', opacity: 0.8 }} />}
                   </Avatar> 
                   <Typography variant="h6" sx={{ fontWeight: 800 }}>{pdf.title}</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{pdf.author || 'Unknown Author'}</Typography>

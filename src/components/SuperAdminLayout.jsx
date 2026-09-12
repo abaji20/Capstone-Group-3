@@ -13,18 +13,18 @@ const SuperAdminLayout = () => {
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: theme.palette.mode === 'dark' ? '#0f172a' : '#ffffff', zoom: '90%' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: theme.palette.mode === 'dark' ? '#0f172a' : '#ffffff', zoom: '80%' }}>
 
       {/* Mobile Top Bar */}
       <AppBar 
         position="fixed" 
-        sx={{ 
-          display: { md: 'none' }, 
+        sx={{   
+          display: { md: 'none' },
           bgcolor: theme.palette.mode === 'dark' ? '#1e293b' : '#213C51', 
           zIndex: theme.zIndex.appBar 
         }}
       >
-        <Toolbar>
+        <Toolbar>f
           <IconButton color="inherit" onClick={handleDrawerToggle} edge="start" sx={{ mr: 2 }}>
             <MenuIcon />
           </IconButton>

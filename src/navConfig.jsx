@@ -26,7 +26,7 @@ export const navLinks = {
     { name: 'Update PDFs', path: '/edit', icon: <EditNoteIcon /> },
     { name: 'Manage Users', path: '/admin-manage-accounts', icon: <PeopleIcon /> },
     { name: 'Activity Logs', path: '/admin-logs', icon: <HistoryIcon /> },
-    { name: 'Client Requests', path: '/pending-upload', icon: <PendingActionsIcon /> },
+    { name: 'User Requests', path: '/pending-upload', icon: <PendingActionsIcon /> },
     { name: 'Pending Request', path: '/pending', icon: <PendingActionsIcon /> },  
   ],
   client: [ 

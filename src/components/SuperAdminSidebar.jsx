@@ -7,11 +7,9 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Logout as LogoutIcon,
-  AccountCircle as AccountCircleIcon,
   Brightness4 as Brightness4Icon,
   Brightness7 as Brightness7Icon,
   Person as PersonIcon,
-  Business as BusinessIcon,
   Fingerprint as FingerprintIcon,
   School as SchoolIcon,
   Lock as LockIcon
@@ -20,6 +18,8 @@ import { navLinks } from '../navConfig';
 import { supabase } from '../supabaseClient';
 import { ColorModeContext } from '../App'; 
 import { ActionModal, FormInput } from '../shared';
+import glclogo from '../assets/glclogo.png';
+import glclogdesktop from '../assets/glclogdesktop.png';
 
 const expandedWidth = 280;
 const collapsedWidth = 85;
@@ -30,12 +30,12 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
   const colorMode = useContext(ColorModeContext);
+  const isDarkMode = theme.palette.mode === 'dark';
   
-  const [fullName, setFullName] = useState('Loading...');
+  const [userRoleText, setUserRoleText] = useState('SUPER ADMIN');
   const [isHovered, setIsHovered] = useState(false);
 
   // Constants
-  const departments = ["Staff", "Steward"];
   const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year", "N/A"];
 
   // MODAL STATES
@@ -94,9 +94,11 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     if (user) {
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       if (profile) {
-        setFullName(profile.full_name);
         setUserData(profile);
         setInitialData(profile);
+        if (profile.role) {
+          setUserRoleText(profile.role.toUpperCase());
+        }
       }
     }
   };
@@ -175,8 +177,10 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     }
 
     setNotify({ open: true, message: 'Profile updated successfully!', severity: 'success' });
-    setFullName(userData.full_name);
     setInitialData(userData);
+    if (userData.role) {
+      setUserRoleText(userData.role.toUpperCase());
+    }
     setNewPassword('');
     setPasswordError('');
     setIsProfileModalOpen(false);
@@ -198,7 +202,10 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         height: '100%', 
         display: 'flex', 
         flexDirection: 'column', 
-        backgroundColor: theme.palette.mode === 'dark' ? '#111827' : '#213C51', 
+        backgroundColor: theme.palette.mode === 'dark' ? '#0f172a' : '#213C51',
+        backgroundImage: theme.palette.mode === 'dark'
+          ? 'linear-gradient(180deg, #1e293b 0%, #111827 48%, #0f172a 100%)'
+          : 'linear-gradient(180deg, #294d65 0%, #213c51 48%, #172f43 100%)',
         color: 'white',
         transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         width: isMini ? collapsedWidth : expandedWidth,
@@ -207,51 +214,33 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         overflow: 'visible', 
       }}
     >
-      {/* PROFILE SECTION - CLICKABLE */}
-      <Tooltip title={isMini ? "Profile Settings" : ""} placement="right">
-        <Box 
-          onClick={() => setIsProfileModalOpen(true)}
-          sx={{ 
-            display: 'flex', 
-            alignItems: 'center',
-            justifyContent: isMini ? 'center' : 'flex-start',
-            px: isMini ? 0 : 3,
-            minHeight: 100,
-            cursor: 'pointer',
-            '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' },
-            transition: 'background 0.2s'
+      {/* BRAND SECTION */}
+      <Box sx={{
+        minHeight: 110,
+        px: isMini ? 1.5 : 2,
+        py: 2.5,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderBottom: '1px solid rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(15,23,42,0.16)'
+      }}>
+        <Box
+          component="img"
+          src={isMini ? glclogo : glclogdesktop}
+          alt="Golden Link College Foundation"
+          sx={{
+            width: isMini ? 48 : '100%',
+            maxWidth: 240,
+            height: isMini ? 48 : 62,
+            objectFit: 'contain',
+            transition: 'all 0.2s ease'
           }}
-        >
-          <Avatar 
-            sx={{ 
-              bgcolor: '#3b82f6', 
-              width: isMini ? 32 : 45, 
-              height: isMini ? 32 : 45, 
-              mx: isMini ? 'auto' : 0,
-              border: '2px solid rgba(255,255,255,0.2)',
-              transition: 'all 0.2s'
-            }}
-          >
-            <AccountCircleIcon sx={{ fontSize: isMini ? 20 : 28 }} />
-          </Avatar>
-          {!isMini && (
-            <Box sx={{ ml: 2, textAlign: 'left', whiteSpace: 'nowrap' }}>
-              <Typography variant="body1" sx={{ fontWeight: 800, color: 'white' }}>
-                {fullName}
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontSize: '0.7rem', display: 'block' }}>
-                Super Admin
-              </Typography>
-              <Typography variant="caption" sx={{ color: '#3b82f6', fontSize: '0.65rem', fontWeight: 600, display: 'block' }}>
-                Manage Profile
-              </Typography>
-            </Box>
-          )}
-        </Box>
-      </Tooltip>
+        />
+      </Box>
 
-      {/* NAVIGATION */}
-      <List sx={{ px: 1.5, flexGrow: 1 }}>
+      {/* NAVIGATION - Responsive sizing and scaling applied */}
+      <List sx={{ px: 1.5, py: 2, flexGrow: 1 }}>
         {navLinks.superadmin.map((item) => {
           const isActive = location.pathname === item.path;
           const buttonContent = (
@@ -261,24 +250,37 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
               to={item.path}
               onClick={() => isMobile && handleDrawerToggle()}
               sx={{ 
-                borderRadius: '8px',
-                py: 1.2, mb: 0.5,
+                borderRadius: '10px',
+                py: { xs: 1.2, sm: 1.5, md: 1.8 }, 
+                px: { xs: 1.5, sm: 1.8, md: 2 }, 
+                mb: { xs: 1, md: 1.5 },
                 justifyContent: isMini ? 'center' : 'flex-start',
-                backgroundColor: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.05)' },
+                background: isActive ? 'rgba(96,165,250,0.18)' : 'transparent',
+                '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.08)' },
                 position: 'relative',
-                transition: 'all 0.1s ease',
-                borderLeft: isActive ? '4px solid #3b82f6' : '3px solid transparent',
+                transition: 'all 0.2s ease',
+                borderLeft: isActive ? '4px solid #60a5fa' : '4px solid transparent',
               }}
             >
               <ListItemIcon sx={{ 
-                color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)', 
-                minWidth: isMini ? 0 : 40, 
+                color: isActive ? '#3b82f6' : '#ffffff', 
+                minWidth: isMini ? 0 : 45, 
                 display: 'flex', justifyContent: 'center' 
               }}>
-                {React.isValidElement(item.icon) ? React.cloneElement(item.icon, { sx: { fontSize: 22 } }) : null}
+                {React.isValidElement(item.icon) ? React.cloneElement(item.icon, { sx: { fontSize: { xs: 24, sm: 26, md: 28 } } }) : null}
               </ListItemIcon>
-              {!isMini && <ListItemText primary={item.name} primaryTypographyProps={{ fontSize: '0.85rem', fontWeight: isActive ? 600 : 400, color: isActive ? 'white' : 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap' }} />}
+              
+              {!isMini && (
+                <ListItemText 
+                  primary={item.name} 
+                  primaryTypographyProps={{ 
+                    fontSize: { xs: '0.95rem', sm: '1rem', md: '1.1rem' }, 
+                    fontWeight: isActive ? 500 : 500, 
+                    color: isActive ? '#3b82f6' : '#ffffff', 
+                    whiteSpace: 'nowrap' 
+                  }} 
+                />  
+              )}
             </ListItemButton>
           );
           return (
@@ -290,19 +292,62 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       </List>
 
       {/* BOTTOM TOOLS */}
-      <Box sx={{ p: 2, mt: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+      <Box sx={{
+        p: 1.5,
+        mt: 'auto',
+        borderTop: '1px solid rgba(255,255,255,0.12)',
+        background: 'rgba(15,23,42,0.28)'
+      }}>
+        {/* PROFILE SECTION - CLICKABLE */}
+        <Tooltip title={isMini ? "Profile Settings" : ""} placement="right">
+          <Box
+            onClick={() => setIsProfileModalOpen(true)}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: isMini ? 'center' : 'flex-start',
+              px: isMini ? 0 : 1,
+              py: 1,
+              mb: 1,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+              transition: 'background 0.2s'
+            }}
+          >
+            <ListItemIcon sx={{
+              color: '#ffffff',
+              minWidth: 40,
+              width: 40,
+              justifyContent: 'center'
+            }}>
+              <PersonIcon fontSize="small" />
+            </ListItemIcon>
+            {!isMini && (
+              <Box sx={{ ml: 0.5, textAlign: 'left', whiteSpace: 'nowrap' }}>
+                <Typography variant="body2" sx={{ fontWeight: 800, color: '#ffea00', textTransform: 'uppercase' }}>
+                  {userData.role || userRoleText}
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#93c5fd', fontSize: '0.65rem', fontWeight: 600 }}>
+                  Manage Profile
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </Tooltip>
+
         <ListItemButton onClick={colorMode.toggleColorMode} sx={{ borderRadius: '8px', justifyContent: isMini ? 'center' : 'flex-start', mb: 1 }}>
-          <ListItemIcon sx={{ color: 'rgba(255,255,255,0.7)', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
-            {theme.palette.mode === 'dark' ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}
+          <ListItemIcon sx={{ color: isDarkMode ? '#ffea00' : 'rgba(255,255,255,0.7)', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
+            {isDarkMode ? <Brightness7Icon fontSize="small" sx={{ color: '#ffea00' }} /> : <Brightness4Icon fontSize="small" />}
           </ListItemIcon>
-          {!isMini && <ListItemText primary="Appearance" primaryTypographyProps={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }} />}
+          {!isMini && <ListItemText primary="Appearance" primaryTypographyProps={{ fontSize: { xs: '0.8rem', md: '0.85rem' }, color: '#ffffff', whiteSpace: 'nowrap' }} />}
         </ListItemButton>
 
         <ListItemButton onClick={() => setIsLogoutModalOpen(true)} sx={{ borderRadius: '8px', color: '#ff5252', justifyContent: isMini ? 'center' : 'flex-start' }}>
           <ListItemIcon sx={{ color: 'inherit', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
             <LogoutIcon fontSize="small" />
           </ListItemIcon>
-          {!isMini && <ListItemText primary="Logout" primaryTypographyProps={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap' }} />}
+          {!isMini && <ListItemText primary="Logout" primaryTypographyProps={{ fontWeight: 600, fontSize: { xs: '0.8rem', md: '0.85rem' }, whiteSpace: 'nowrap' }} />}
         </ListItemButton>
       </Box>
     </Box>
@@ -340,19 +385,11 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name || ''} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
           
-          <Stack direction="row" spacing={2}>
-            <FormInput select label="User Type" fullWidth value={userData.department || ''} onChange={(e) => setUserData({...userData, department: e.target.value})} InputProps={{ startAdornment: <BusinessIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
-              {departments.map((dept) => (
-                <MenuItem key={dept} value={dept}>{dept}</MenuItem>
-              ))}
-            </FormInput>
-
-            <FormInput select label="Year Level" fullWidth value={userData.year_level || ''} onChange={(e) => setUserData({...userData, year_level: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
+          <FormInput select label="Year Level" fullWidth value={userData.year_level || ''} onChange={(e) => setUserData({...userData, year_level: e.target.value})} InputProps={{ startAdornment: <SchoolIcon sx={{ mr: 1, opacity: 0.7 }} /> }}>
               {yearLevels.map((year) => (
                 <MenuItem key={year} value={year}>{year}</MenuItem>
               ))}
-            </FormInput>
-          </Stack>
+          </FormInput>
 
           <FormInput label="Employee / ID Number" value={userData.id_number || ''} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
 

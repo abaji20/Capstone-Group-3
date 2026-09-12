@@ -5,10 +5,18 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert,
   Avatar, Card, CardContent, Grid, Divider
 } from '@mui/material';
+import InfoIcon from '@mui/icons-material/Info';
+import TitleIcon from '@mui/icons-material/Title';
+import PersonIcon from '@mui/icons-material/Person';
+import CategoryIcon from '@mui/icons-material/Category';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import EventIcon from '@mui/icons-material/Event';
+import StorageIcon from '@mui/icons-material/Storage';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faFilePdf, faImage, faCloudUploadAlt, faCheckCircle, 
-  faHistory, faFileAlt, faDownload, faBook, faGraduationCap, faInfoCircle
+  faFileAlt, faDownload, faBook, faGraduationCap, faInfoCircle
 } from '@fortawesome/free-solid-svg-icons';
 import { 
   uploadPdfWithFiles, 
@@ -18,6 +26,7 @@ import {
   fetchPdfs 
 } from '../../services/pdfService'; 
 import { supabase } from '../../supabaseClient';
+import glclogo from '../../assets/glclogo.png';
 
 const PdfUploads = () => {
   const theme = useTheme();
@@ -54,13 +63,14 @@ const PdfUploads = () => {
     totalDownloads: 0
   });
 
-  // Selected item para sa "See Info" Modal
+  // Selected item for "See Info" Modal
   const [selectedItemInfo, setSelectedItemInfo] = useState(null);
+  const [selectedItemFileSize, setSelectedItemFileSize] = useState('Fetching size...');
 
   const [status, setStatus] = useState({ open: false, type: 'success', message: '' });
   const [confirmData, setConfirmData] = useState({ open: false, record: null });
   
-  // New state for Review/Pre-Upload Confirmation Modal
+  // Review/Pre-Upload Confirmation Modal State
   const [reviewOpen, setReviewOpen] = useState(false);
 
   // --- REAL-TIME SUBSCRIPTION & DATA FETCHING ---
@@ -160,6 +170,29 @@ const PdfUploads = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const handleOpenItemInfo = async (item) => {
+    setSelectedItemInfo(item);
+    setSelectedItemFileSize(item?.file_size || 'Fetching size...');
+
+    if (!item?.file_url || item.file_size) return;
+
+    try {
+      const { data } = supabase.storage.from('pdfs').getPublicUrl(item.file_url);
+      const response = await fetch(data.publicUrl, { method: 'HEAD' });
+      const size = response.headers.get('content-length');
+      setSelectedItemFileSize(size ? formatFileSize(parseInt(size, 10)) : 'Unknown size');
+    } catch (error) {
+      console.error('Error fetching file size:', error);
+      setSelectedItemFileSize('Unknown size');
+    }
+  };
+
+  const handleViewPdf = (item) => {
+    if (!item?.file_url) return;
+    const { data } = supabase.storage.from('pdfs').getPublicUrl(item.file_url);
+    if (data?.publicUrl) window.open(data.publicUrl, '_blank');
+  };
+
   // --- TRIGGER REVIEW MODAL & VALIDATE FIELDS ---
   const handlePreUploadCheck = () => {
     if (!selectedFile) {
@@ -178,7 +211,6 @@ const PdfUploads = () => {
       showStatus('error', "All fields are required to fill up!");
       return;
     }
-    // Open review modal if validation passes
     setReviewOpen(true);
   };
 
@@ -400,11 +432,8 @@ const PdfUploads = () => {
           <Stack spacing={3} sx={{ height: '100%' }}>
             
             {/* RECENT ACTIVITIES */}
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, bgcolor: cardBg, border: `1px solid ${borderCol}` }}>
-              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-                <FontAwesomeIcon icon={faHistory} style={{ color: '#3b82f6', fontSize: '20px' }} />
-                <Typography variant="h6" sx={{ fontWeight: 900 }}>Recent Activities</Typography>
-              </Stack>
+            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, bgcolor: cardBg, border: `1px solid ${borderCol}`, order: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>Recent Activities</Typography>
 
               <Stack spacing={1.5}>
                 {recentUploads.length === 0 ? (
@@ -413,7 +442,7 @@ const PdfUploads = () => {
                   recentUploads.map((item) => (
                     <Card 
                       key={item.id} 
-                      onClick={() => setSelectedItemInfo(item)}
+                      onClick={() => handleOpenItemInfo(item)}
                       sx={{ 
                         bgcolor: inputBg, 
                         borderRadius: 2, 
@@ -426,8 +455,12 @@ const PdfUploads = () => {
                     >
                       <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                         <Stack direction="row" spacing={1.5} alignItems="center">
-                          <Avatar variant="rounded" src={getImageUrl(item.image_url)} sx={{ width: 42, height: 54, bgcolor: cardBg }}>
-                            <FontAwesomeIcon icon={faFileAlt} style={{ color: '#3b82f6' }} />
+                          <Avatar 
+                            variant="rounded" 
+                            src={item.image_url ? getImageUrl(item.image_url) : glclogo} 
+                            sx={{ width: 45, height: 50, bgcolor: cardBg }}
+                          >
+                            {!item.image_url && <FontAwesomeIcon icon={faFileAlt} style={{ color: '#3b82f6' }} />}
                           </Avatar>
                           <Box sx={{ flex: 1, minWidth: 0 }}>
                             <Typography variant="subtitle2" sx={{ fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -449,7 +482,7 @@ const PdfUploads = () => {
             </Paper>
 
             {/* SYSTEM OVERVIEW (TOTALS) */}
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, bgcolor: cardBg, border: `1px solid ${borderCol}` }}>
+            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, bgcolor: cardBg, border: `1px solid ${borderCol}`, order: 1 }}>
               <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>System Overview</Typography>
               
               <Grid container spacing={1}>
@@ -516,15 +549,15 @@ const PdfUploads = () => {
               <Stack direction="row" spacing={2} alignItems="center">
                 <Avatar 
                   variant="rounded" 
-                  src={selectedImage ? URL.createObjectURL(selectedImage) : null} 
-                  sx={{ width: 60, height: 80, borderRadius: 2 }}
+                  src={selectedImage ? URL.createObjectURL(selectedImage) : glclogo} 
+                  sx={{ width: 60, height: 60, borderRadius: 2 }}
                 >
-                  <FontAwesomeIcon icon={faImage} style={{ fontSize: '24px' }} />
+                  {!selectedImage && <FontAwesomeIcon icon={faImage} style={{ fontSize: '24px' }} />}
                 </Avatar>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>COVER IMAGE</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 700, color: '#a855f7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {selectedImage ? `${selectedImage.name} (${formatFileSize(selectedImage.size)})` : 'No cover image selected'}
+                    {selectedImage ? `${selectedImage.name} (${formatFileSize(selectedImage.size)})` : 'No cover image selected (Using default)'}
                   </Typography>
                 </Box>
               </Stack>
@@ -575,42 +608,81 @@ const PdfUploads = () => {
       <Dialog 
         open={Boolean(selectedItemInfo)} 
         onClose={() => setSelectedItemInfo(null)}
-        PaperProps={{ sx: { borderRadius: 3, bgcolor: cardBg, maxWidth: '500px', width: '100%' } }}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{ sx: { bgcolor: cardBg, borderRadius: 3, p: 1 } }}
       >
         {selectedItemInfo && (
           <>
-            <DialogTitle sx={{ fontWeight: 900 }}>Document Information</DialogTitle>
-            <DialogContent>
-              <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-                <Avatar variant="rounded" src={getImageUrl(selectedItemInfo.image_url)} sx={{ width: 80, height: 110, borderRadius: 2 }}>
-                  <FontAwesomeIcon icon={faFilePdf} style={{ fontSize: '30px' }} />
+            <DialogTitle sx={{ fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <InfoIcon color="primary" /> Document Info
+            </DialogTitle>
+            <DialogContent dividers sx={{ borderColor: borderCol }}>
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, alignItems: { xs: 'center', md: 'flex-start' } }}>
+                <Avatar
+                  variant="rounded"
+                  src={selectedItemInfo.image_url ? getImageUrl(selectedItemInfo.image_url) : glclogo}
+                  sx={{
+                    width: { xs: 160, md: 210 },
+                    height: { xs: 200, md: 200 },
+                    boxShadow: 3,
+                    border: `1px solid ${borderCol}`,
+                    bgcolor: 'transparent',
+                    objectFit: 'cover'
+                  }}
+                >
+                  {!selectedItemInfo.image_url && <FontAwesomeIcon icon={faFilePdf} style={{ fontSize: '60px', color: '#ef4444' }} />}
                 </Avatar>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.2 }}>{selectedItemInfo.title}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 700, mt: 0.5 }}>{selectedItemInfo.author}</Typography>
-                  <Typography variant="caption" sx={{ display: 'inline-block', mt: 1, px: 1, py: 0.3, bgcolor: '#3b82f6', color: '#fff', borderRadius: 1, fontWeight: 800, textTransform: 'uppercase' }}>
-                    {selectedItemInfo.category}
+
+                <Box sx={{ flexGrow: 1, width: '100%' }}>
+                  <Stack spacing={1.5}>
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <TitleIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Title:</strong> {selectedItemInfo.title || 'N/A'}</Typography>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <PersonIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Author:</strong> {selectedItemInfo.author || 'N/A'}</Typography>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <MenuBookIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Type:</strong> {selectedItemInfo.category || 'book'}</Typography>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <CategoryIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Genre:</strong> {selectedItemInfo.genre || 'N/A'}</Typography>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <EventIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Published:</strong> {selectedItemInfo.published_date || 'N/A'}</Typography>
+                    </Stack>
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <StorageIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Size:</strong> {selectedItemFileSize}</Typography>
+                    </Stack>
+                  </Stack>
+
+                  <Divider sx={{ my: 2, opacity: 0.2 }} />
+
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Description</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6, maxHeight: '180px', overflowY: 'auto' }}>
+                    {selectedItemInfo.description || 'No description available for this document.'}
                   </Typography>
                 </Box>
-              </Stack>
-
-              <Divider sx={{ my: 1.5 }} />
-
-              <Stack spacing={1}>
-                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>GENRE / FIELD</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{selectedItemInfo.genre || 'N/A'}</Typography>
-
-                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>PUBLICATION YEAR</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{selectedItemInfo.published_date || 'N/A'}</Typography>
-
-                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>DESCRIPTION</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.5 }}>
-                  {selectedItemInfo.description || 'No description available for this document.'}
-                </Typography>
-              </Stack>
+              </Box>
             </DialogContent>
-            <DialogActions sx={{ p: 2 }}>
-              <Button fullWidth onClick={() => setSelectedItemInfo(null)} variant="contained" sx={{ borderRadius: 2, fontWeight: 800 }}>Close</Button>
+            <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
+              <Button
+                variant="contained"
+                startIcon={<VisibilityIcon />}
+                onClick={() => handleViewPdf(selectedItemInfo)}
+                sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: '#1e1b4b', '&:hover': { bgcolor: '#312e81' }, textTransform: 'none', fontWeight: 700 }}
+              >
+                Read PDF
+              </Button>
+              <Button onClick={() => setSelectedItemInfo(null)} sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                Close
+              </Button>
             </DialogActions>
           </>
         )}
@@ -637,8 +709,12 @@ const PdfUploads = () => {
           {confirmData.record && (
             <Box sx={{ p: 2.5, bgcolor: inputBg, borderRadius: 2, border: `1px solid ${borderCol}` }}>
               <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-                <Avatar variant="rounded" src={getImageUrl(confirmData.record.image_url)} sx={{ width: 70, height: 95, borderRadius: 2 }}>
-                  <FontAwesomeIcon icon={faFilePdf} style={{ fontSize: '26px' }} />
+                <Avatar 
+                  variant="rounded" 
+                  src={confirmData.record.image_url ? getImageUrl(confirmData.record.image_url) : glclogo} 
+                  sx={{ width: 70, height: 95, borderRadius: 2 }}
+                >
+                  {!confirmData.record.image_url && <FontAwesomeIcon icon={faFilePdf} style={{ fontSize: '26px' }} />}
                 </Avatar>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 900, lineHeight: 1.2 }}>{confirmData.record.title}</Typography>

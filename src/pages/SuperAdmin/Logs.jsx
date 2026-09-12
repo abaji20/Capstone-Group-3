@@ -14,7 +14,6 @@ import SearchIcon from '@mui/icons-material/Search';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import AssignmentLateIcon from '@mui/icons-material/AssignmentLate';
 
 const Logs = () => {
@@ -35,13 +34,15 @@ const Logs = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
-  const [dateFilter, setDateFilter] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [dayFilter, setDayFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteConfig, setDeleteConfig] = useState({ type: null, id: null });
 
   useEffect(() => { fetchLogs(); }, []);
-  useEffect(() => { applyFilters(); }, [logs, searchTerm, roleFilter, dateFilter]);
+  useEffect(() => { applyFilters(); }, [logs, searchTerm, roleFilter, monthFilter, dayFilter, yearFilter]);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -81,8 +82,13 @@ const Logs = () => {
     if (roleFilter !== 'All') {
       tempLogs = tempLogs.filter(log => log.profiles?.role?.toLowerCase() === roleFilter.toLowerCase());
     }
-    if (dateFilter) {
-      tempLogs = tempLogs.filter(log => log.created_at.startsWith(dateFilter));
+    if (monthFilter || dayFilter || yearFilter) {
+      tempLogs = tempLogs.filter(log => {
+        const logDate = log.created_at ? new Date(log.created_at) : null;
+        return (!monthFilter || logDate?.getMonth() + 1 === Number(monthFilter)) &&
+          (!dayFilter || logDate?.getDate() === Number(dayFilter)) &&
+          (!yearFilter || logDate?.getFullYear() === Number(yearFilter));
+      });
     }
     setFilteredLogs(tempLogs);
   };
@@ -195,6 +201,17 @@ const Logs = () => {
     );
   };
 
+  const monthOptions = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' }
+  ];
+  const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+  const logYears = [...new Set(logs
+    .filter(log => log.created_at)
+    .map(log => new Date(log.created_at).getFullYear()))].sort((a, b) => b - a);
+
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, bgcolor: pageBg, minHeight: '100vh' }}>
       <Container maxWidth="xls">
@@ -246,26 +263,20 @@ const Logs = () => {
             InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="secondary" /></InputAdornment>) }}
           />
           
-          <TextField
-            type="month"
-            size="medium"
-            label="Date" 
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            sx={{ 
-              minWidth: 180, 
-              bgcolor: inputBg, 
-              borderRadius: 0.5,
-              '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' },
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'secondary.main' }} />
-                </InputAdornment>
-              )
-            }}
-          />
+          <TextField select size="medium" label="Month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: inputBg, borderRadius: 0.5 }}>
+            <MenuItem value="">All Months</MenuItem>
+            {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
+          </TextField>
+
+          <TextField select size="medium" label="Date" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}>
+            <MenuItem value="">All Dates</MenuItem>
+            {dayOptions.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+          </TextField>
+
+          <TextField select size="medium" label="Year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}>
+            <MenuItem value="">All Years</MenuItem>
+            {logYears.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+          </TextField>
 
           <TextField 
             select 

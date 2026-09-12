@@ -11,8 +11,7 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday'; 
-import VisibilityIcon from '@mui/icons-material/Visibility'; // Inimport ang View icon
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 import { fetchPdfs, submitDeleteRequest } from '../../services/pdfService';
 import EditPdfModal from '../../shared/EditPdfModal';
@@ -35,10 +34,13 @@ const EditPDFs = () => {
   const [deleteReason, setDeleteReason] = useState("");
   const [status, setStatus] = useState({ open: false, type: 'success', message: '' });
 
-  // --- NEW FILTER STATE ---
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGenre, setSelectedGenre] = useState("All Genres"); 
-  const [selectedYear, setSelectedYear] = useState(""); 
+  // --- EXPANDED FILTER STATES ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [dayFilter, setDayFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
+  const [genreFilter, setGenreFilter] = useState('All Genres');
+  const [categoryFilter, setCategoryFilter] = useState('All Categories');
 
   // --- STYLING ---
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff';
@@ -63,7 +65,6 @@ const EditPDFs = () => {
     }
   };
 
-  // --- NEW VIEW PDF FUNCTION ---
   const handleViewPdf = (pdf) => {
     const filePath = pdf?.file_url || pdf?.pdf_url;
     if (!filePath) return;
@@ -73,27 +74,55 @@ const EditPDFs = () => {
     }
   };
 
-  const genres = useMemo(() => {
+  // --- FILTER OPTIONS DERIVATION ---
+  const uniqueGenres = useMemo(() => {
     const allGenres = pdfs.flatMap(p => 
       p.genre ? p.genre.split(',').map(g => g.trim()) : []
     );
     return ["All Genres", ...new Set(allGenres)].sort(); 
   }, [pdfs]);
 
+  const categories = useMemo(() => {
+    return ["All Categories", ...new Set(pdfs.map(file => file.category).filter(Boolean))];
+  }, [pdfs]);
+
+  const monthOptions = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' }
+  ];
+
+  const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+
+  const archiveYears = useMemo(() => {
+    return [...new Set(pdfs
+      .filter(file => file.created_at)
+      .map(file => new Date(file.created_at).getFullYear()))].sort((a, b) => b - a);
+  }, [pdfs]);
+
+  // --- COMPREHENSIVE FILTER LOGIC ---
   const filteredPdfs = useMemo(() => {
     return pdfs.filter(pdf => {
+      const searchLower = searchTerm.toLowerCase();
       const matchesSearch = 
-        pdf.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        pdf.author?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesGenre = selectedGenre === "All Genres" || 
-        (pdf.genre && pdf.genre.split(',').map(g => g.trim()).includes(selectedGenre));
-      
-      const matchesDate = !selectedYear || pdf.created_at?.includes(selectedYear);
+        pdf.title?.toLowerCase().includes(searchLower) ||
+        pdf.author?.toLowerCase().includes(searchLower) ||
+        pdf.genre?.toLowerCase().includes(searchLower);
 
-      return matchesSearch && matchesGenre && matchesDate;
+      const createdDate = pdf.created_at ? new Date(pdf.created_at) : null;
+      const matchesMonth = !monthFilter || (createdDate && createdDate.getMonth() + 1 === Number(monthFilter));
+      const matchesDay = !dayFilter || (createdDate && createdDate.getDate() === Number(dayFilter));
+      const matchesYear = !yearFilter || (createdDate && createdDate.getFullYear() === Number(yearFilter));
+
+      const matchesGenre = genreFilter === 'All Genres' || 
+        (pdf.genre && pdf.genre.split(',').map(g => g.trim()).includes(genreFilter));
+      
+      const matchesCategory = categoryFilter === 'All Categories' || pdf.category === categoryFilter;
+
+      return matchesSearch && matchesMonth && matchesDay && matchesYear && matchesGenre && matchesCategory;
     });
-  }, [pdfs, searchQuery, selectedGenre, selectedYear]);
+  }, [pdfs, searchTerm, monthFilter, dayFilter, yearFilter, genreFilter, categoryFilter]);
 
   const getImageUrl = (path) => {
     if (!path) return null;
@@ -122,10 +151,8 @@ const EditPDFs = () => {
 
         const { data: { user } } = await supabase.auth.getUser();
         
-        // 1. Submit the delete request
         await submitDeleteRequest(selectedPdf.id, deleteReason, user.id);
 
-        // 2. LOG THE ACTION TO audit_logs
         await supabase.from('audit_logs').insert([
           {
             user_id: user.id,
@@ -167,47 +194,56 @@ const EditPDFs = () => {
         </Typography>
       </Box>
 
+      {/* --- STANDARDIZED FILTER SECTION --- */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
         <TextField 
           fullWidth 
-          placeholder="Search by title or author..." 
-          value={searchQuery} 
-          onChange={(e) => setSearchQuery(e.target.value)} 
+          placeholder="Search by title, author, or genre..." 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)} 
           sx={{ bgcolor: inputBg, borderRadius: 0.5 }}
           InputProps={{ 
             startAdornment: <InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment> 
           }} 
         />
         
-        <TextField
-          type="date"
-          label="Date"
-          size="medium"
-          value={selectedYear}
-          onChange={(e) => setSelectedYear(e.target.value)}
-          sx={{ 
-            minWidth: 180, 
-            bgcolor: inputBg, 
-            borderRadius: 0.5,
-            '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' },
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <CalendarTodayIcon fontSize="small" sx={{ color: isDarkMode ? '#ffffff' : 'primary.main' }} />
-              </InputAdornment>
-            )
-          }}
-        />
+        <TextField select label="Month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: inputBg, borderRadius: 0.5 }}>
+          <MenuItem value="">All Months</MenuItem>
+          {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
+        </TextField>
+
+        <TextField select label="Date" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}>
+          <MenuItem value="">All Dates</MenuItem>
+          {dayOptions.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+        </TextField>
+
+        <TextField select label="Year" value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}>
+          <MenuItem value="">All Years</MenuItem>
+          {archiveYears.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+        </TextField>
 
         <TextField 
           select 
           label="Genre" 
-          value={selectedGenre} 
-          onChange={(e) => setSelectedGenre(e.target.value)} 
+          value={genreFilter} 
+          onChange={(e) => setGenreFilter(e.target.value)} 
           sx={{ minWidth: { md: 200 }, bgcolor: inputBg, borderRadius: 0.5 }}
         >
-          {genres.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
+          {uniqueGenres.map(g => <MenuItem key={g} value={g}>{g}</MenuItem>)}
+        </TextField>
+
+        <TextField
+          select
+          label="Category"
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          sx={{ minWidth: 200, bgcolor: inputBg, borderRadius: 0.5 }}
+        >
+          {categories.map((category) => (
+            <MenuItem key={category} value={category}>
+              {category === 'academic paper' ? 'Academic Materials' : category === 'book' ? 'Book' : category}
+            </MenuItem>
+          ))}
         </TextField>
       </Stack>
 
@@ -367,7 +403,7 @@ const EditPDFs = () => {
           <TextField 
             fullWidth placeholder="Reason for deletion" multiline rows={3} 
             value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} 
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: inputBg, '& fieldset': { border: 'none' } } }}
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: inputBg, '& fieldset': { border: 'none' } } }}
           />
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
@@ -376,7 +412,7 @@ const EditPDFs = () => {
             variant="contained" 
             onClick={handleDeleteSubmit} 
             disabled={!deleteReason.trim()}
-            sx={{ bgcolor: '#ff4d4d', '&:hover': { bgcolor: '#ff3333' }, borderRadius: '20px', px: 4, fontWeight: 700 }}
+            sx={{ color: 'white', bgcolor: '#ff4d4d', '&:hover': { bgcolor: '#ff3333' }, borderRadius: '20px', px: 4, fontWeight: 600 }}
           >
             Submit Request
           </Button>

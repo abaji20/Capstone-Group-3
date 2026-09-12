@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext } from 'react';
 import { 
   Box, Paper, TextField, Button, Typography, Container, 
   InputAdornment, IconButton, Alert, Collapse, useTheme, Tooltip, Link,
@@ -11,7 +11,7 @@ import { supabase } from '../../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 import { ColorModeContext } from '../../App'; 
-import glcBG from '../../assets/glcbackgroundlogin.png';
+import glcBG from '../../assets/glclogin.jpg';
 import libraryBG from '../../assets/libraryBG.jpg';
 import glclogo from '../../assets/glclogo.png';
 
@@ -23,44 +23,21 @@ const Login = () => {
   const [message, setMessage] = useState(null); 
   const [loading, setLoading] = useState(false);
 
-  // Modal State
+  // Modal State (Removed automatic first-visit session logic)
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState('privacy'); 
-  const [isFirstVisitSession, setIsFirstVisitSession] = useState(false);
   
   const theme = useTheme();
   const navigate = useNavigate();
   const isDarkMode = theme.palette.mode === 'dark';
   const { toggleColorMode } = useContext(ColorModeContext);
 
-  useEffect(() => {
-    const hasSeenPolicyThisSession = sessionStorage.getItem('hasSeenPolicyThisSession');
-    if (!hasSeenPolicyThisSession) {
-      setIsFirstVisitSession(true);
-      setModalType('privacy');
-      setModalOpen(true);
-    }
-  }, []);
-
   const handleOpenModal = (type) => {
-    setIsFirstVisitSession(false);
     setModalType(type);
     setModalOpen(true);
   };
 
   const handleCloseModal = () => {
-    if (isFirstVisitSession) {
-      if (modalType === 'privacy') {
-        setModalType('terms');
-        return;
-      }
-      if (modalType === 'terms') {
-        sessionStorage.setItem('hasSeenPolicyThisSession', 'true');
-        setIsFirstVisitSession(false);
-        setModalOpen(false);
-        return;
-      }
-    }
     setModalOpen(false);
   };
 
@@ -72,7 +49,6 @@ const Login = () => {
       if (now < parseInt(lockUntil, 10)) {
         return true;
       } else {
-        // Tapos na ang 3 minutes lockout, i-clear ang storage
         localStorage.removeItem('loginLockUntil');
         localStorage.removeItem('loginAttempts');
         return false;
@@ -87,7 +63,6 @@ const Login = () => {
     localStorage.setItem('loginAttempts', attempts.toString());
 
     if (attempts >= 5) {
-      // Mag-set ng 3 minutes lock from now
       const lockUntil = new Date().getTime() + 3 * 60 * 1000;
       localStorage.setItem('loginLockUntil', lockUntil.toString());
     }
@@ -98,13 +73,11 @@ const Login = () => {
     setError(null);
     setMessage(null);
 
-    // 1. Tignan kung nakalock pa ang account/session
     if (checkIsLockedOut()) {
       setError("Too many failed login attempts. Please try again later.");
       return;
     }
 
-    // 2. Domain Restriction
     if (!email.toLowerCase().endsWith('@goldenlink.ph')) {
       setError("Access Denied: Only Authorized accounts are allowed.");
       return;
@@ -116,10 +89,8 @@ const Login = () => {
       const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       
       if (authError) {
-        // Mag-record ng mali / failed attempt
         registerFailedAttempt();
 
-        // Tignan kung nag-5th attempt na pala sa pag-fail na ito
         if (checkIsLockedOut()) {
           setError("Too many failed login attempts. Please try again later.");
         } else {
@@ -135,7 +106,6 @@ const Login = () => {
       }
 
       if (data.user) {
-        // Kapag matagumpay ang login, i-reset ang attempts
         localStorage.removeItem('loginAttempts');
         localStorage.removeItem('loginLockUntil');
         navigate('/');
@@ -178,7 +148,9 @@ const Login = () => {
 
   return (
     <Box sx={{ 
-      minHeight: '100vh', 
+      height: '100vh', 
+      width: '100vw',
+      overflow: 'hidden',
       display: 'flex', 
       alignItems: 'center', 
       justifyContent: 'center', 
@@ -206,16 +178,18 @@ const Login = () => {
       </Box>
 
       {/* MAIN CONTAINER */}
-      <Container maxWidth="xl" sx={{ display: 'flex', justifyContent: 'center' }}>
+      <Container maxWidth="xl" sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', p: 0 }}>
         <Paper 
           elevation={isDarkMode ? 0 : 20}
           sx={{ 
             display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
             width: '100%',
-            maxWidth: { xs: '100%', sm: '500px', md: '900px', lg: '1150px' },
-            maxHeight: { xs: '100%', sm: '450px', md: '650px', lg: '680px' },
+            maxWidth: { xs: '100%', sm: '420px', md: '850px', lg: '1050px' },
+            height: { xs: 'auto', md: '550px', lg: '600px' },
+            maxHeight: '90vh',
             overflow: 'hidden',
-            borderRadius: { xs: 3, sm: 5 },
+            borderRadius: { xs: 2, sm: 3 },
             bgcolor: isDarkMode ? 'rgba(30, 41, 59, 0.95)' : '#ffffff', 
             backdropFilter: 'blur(12px)',
             border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
@@ -230,11 +204,11 @@ const Login = () => {
             flexDirection: 'column',
             p: { md: 4, lg: 5 },
             position: 'relative',
-            justify: 'flex-end',
             backgroundImage: `linear-gradient(to top, rgba(15, 23, 42, 0.92) 0%, rgba(15, 23, 42, 0.2) 60%), url(${libraryBG})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            height: '100%'
           }}>
             <Box sx={{ position: 'relative', zIndex: 2, color: 'white' }}>
               <Typography variant="h4" sx={{ fontWeight: 500, fontFamily: 'Paytone One, sans-serif', letterSpacing: 1 }}>
@@ -250,12 +224,13 @@ const Login = () => {
           <Box 
             sx={{ 
               flex: 1,
-              minHeight: { xs: 'auto', sm: 'auto' }, 
+              height: '100%',
               p: { xs: 3, sm: 4, lg: 5 }, 
               display: 'flex', 
               flexDirection: 'column', 
               justifyContent: 'space-between', 
-              alignItems: 'center', 
+              alignItems: 'center',
+              overflowY: { xs: 'auto', md: 'hidden' }
             }}
           >
             <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -265,7 +240,7 @@ const Login = () => {
                 src={glclogo}
                 alt="GLC Logo"
                 sx={{
-                  width: { xs: 60, md: 75, lg: 85 },
+                  width: { xs: 50, md: 65, lg: 75 },
                   height: 'auto',
                   mb: 0.5,
                   filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))',
@@ -281,7 +256,7 @@ const Login = () => {
                   fontWeight: 800, 
                   color: isDarkMode ? '#38bdf8' : '#1e40af', 
                   textAlign: 'center',
-                  fontSize: { xs: '1.4rem', sm: '1.6rem', lg: '1.9rem' }
+                  fontSize: { xs: '1.3rem', sm: '1.5rem', lg: '1.8rem' }
                 }}
               >
                 Sign In
