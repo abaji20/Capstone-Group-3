@@ -80,6 +80,7 @@ const Logs = () => {
       );
     }
     if (roleFilter !== 'All') {
+      // Keeps internal database value comparison ('client') intact
       tempLogs = tempLogs.filter(log => log.profiles?.role?.toLowerCase() === roleFilter.toLowerCase());
     }
     if (monthFilter || dayFilter || yearFilter) {
@@ -189,6 +190,8 @@ const Logs = () => {
 
   const RoleChip = ({ role }) => {
     const style = getRoleStyles(role, isDarkMode);
+    // Display "USER" instead of "CLIENT" in the UI badge/chip
+    const displayRole = role?.toLowerCase() === 'client' ? 'USER' : (role?.toUpperCase() || 'USER');
     return (
       <Box sx={{ 
         px: 1.5, py: 0.4, borderRadius: 0.5, 
@@ -196,7 +199,7 @@ const Logs = () => {
         bgcolor: style.bg, color: style.text, display: 'inline-flex', 
         justifyContent: 'center', minWidth: '100px'
       }}>
-        {role?.toUpperCase() || 'CLIENT'}
+        {displayRole}
       </Box>
     );
   };
@@ -289,7 +292,8 @@ const Logs = () => {
             <MenuItem value="All">All Roles</MenuItem>
             <MenuItem value="superadmin">Superadmin</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
-            <MenuItem value="client">Client</MenuItem>
+            {/* UI option displays "User", but sends 'client' to match database value */}
+            <MenuItem value="client">User</MenuItem>
           </TextField>
         </Stack>
 
@@ -344,18 +348,21 @@ const Logs = () => {
                           <ActionButton action={log.action_type} />
                         </TableCell>
                      <TableCell sx={{ fontWeight: 600 }}>
-  {/* 1. Try to show the PDF title first */}
   {log.pdfs?.title || 
-    /* 2. Check for "Created client account for" and extract the name */
+    /* Keeps database-matching string search intact, but replaces text displayed in UI if needed */
     (log.description?.includes('Created client account for ') 
-      ? log.description.split('Created client account for ').pop()
-      : /* 3. Existing logic for delete actions and other descriptions */
-      (log.action_type?.toLowerCase().includes('delete') && log.description?.includes('for ') 
-        ? log.description.split('for ').pop() 
-        : (log.description?.includes(': ') ? log.description.split(': ').pop() : '—')))
+      ? log.description.replace('client', 'user')
+      : (log.description?.includes('Created Client account for ')
+        ? log.description.replace('Client', 'User')
+        : (log.action_type?.toLowerCase().includes('delete') && log.description?.includes('for ') 
+          ? log.description.split('for ').pop() 
+          : (log.description?.includes(': ') ? log.description.split(': ').pop() : '—'))))
   }
 </TableCell>
-                        <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{log.description}</TableCell>
+                        <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
+                          {/* Safely displays description with client-to-user terminology update in UI text */}
+                          {log.description ? log.description.replace(/client/gi, 'user') : ''}
+                        </TableCell>
                         <TableCell sx={{ fontSize: '0.85rem' }}>{new Date(log.created_at).toLocaleDateString()}</TableCell>
                         <TableCell align="center">
                           <IconButton onClick={() => openConfirm('single', log.id)} color="error" size="medium"><DeleteOutlineIcon fontSize="medium" /></IconButton>
@@ -388,7 +395,9 @@ const Logs = () => {
                         </Box>
                         <Box>
                           <Typography variant="caption" color="text.secondary" fontWeight={700}>DETAILS</Typography>
-                          <Typography variant="body2" color="text.secondary" fontSize="0.85rem">{log.description || '—'}</Typography>
+                          <Typography variant="body2" color="text.secondary" fontSize="0.85rem">
+                            {log.description ? log.description.replace(/client/gi, 'user') : '—'}
+                          </Typography>
                         </Box>
                       </Stack>
                     </CardContent>

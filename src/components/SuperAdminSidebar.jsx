@@ -3,7 +3,8 @@ import {
   Drawer, List, ListItem, ListItemButton, ListItemIcon, 
   ListItemText, Typography, Box, useTheme, useMediaQuery, 
   Tooltip, Stack, Divider, Alert, Snackbar, MenuItem,
-  Dialog, DialogTitle, DialogContent, DialogActions, Button
+  Dialog, DialogTitle, DialogContent, DialogActions, Button,
+  IconButton, InputAdornment
 } from '@mui/material';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -13,7 +14,9 @@ import {
   Person as PersonIcon,
   Fingerprint as FingerprintIcon,
   School as SchoolIcon,
-  Lock as LockIcon
+  Lock as LockIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon
 } from '@mui/icons-material';
 import { navLinks } from '../navConfig';
 import { supabase } from '../supabaseClient';
@@ -50,6 +53,26 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   // Password state & Validation
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // ID Number state & Validation error
+  const [idNumberError, setIdNumberError] = useState('');
+
+  // --- STUDENT/EMPLOYEE ID FORMATTING (adapted from reference AdminManageAccount.formatIdNumber) ---
+  // Strips non-digits, caps at 10 digits, and inserts dashes progressively to
+  // produce the 00-00-000000 pattern as the user types, e.g. "23-02-000104".
+  const formatIdNumber = (value) => {
+    const raw = value.replace(/\D/g, '').slice(0, 10);
+    if (raw.length <= 2) return raw;
+    if (raw.length <= 4) return `${raw.slice(0, 2)}-${raw.slice(2)}`;
+    return `${raw.slice(0, 2)}-${raw.slice(2, 4)}-${raw.slice(4)}`;
+  };
+
+  const handleIdNumberChange = (e) => {
+    const formatted = formatIdNumber(e.target.value);
+    setUserData({ ...userData, id_number: formatted });
+    if (idNumberError) setIdNumberError('');
+  };
 
   const validatePassword = (password) => {
     if (!password) {
@@ -60,6 +83,8 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     const hasUpper = /[A-Z]/.test(password);
     const hasLower = /[a-z]/.test(password);
     const hasNumber = /[0-9]/.test(password);
+    // --- SPECIAL CHARACTER REQUIREMENT (new) ---
+    const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
 
     if (password.length < minLength) {
       setPasswordError('Password must be at least 8 characters long');
@@ -75,6 +100,10 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     }
     if (!hasNumber) {
       setPasswordError('Password must contain at least one number');
+      return false;
+    }
+    if (!hasSpecial) {
+      setPasswordError('Password must contain at least one special character (e.g. !@#$%^&*)');
       return false;
     }
 
@@ -110,6 +139,18 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   }, []);
 
   const handleUpdateProfile = async () => {
+    // --- STUDENT/EMPLOYEE ID VALIDATION (adapted from reference AdminManageAccount.handleCreateAccount) ---
+    // If an ID Number was entered, it must resolve to exactly 10 digits (00-00-000000 format).
+    if (userData.id_number) {
+      const cleanId = userData.id_number.replace(/-/g, '');
+      if (cleanId.length !== 10) {
+        setIdNumberError('ID Number must be exactly 10 digits in XX-XX-XXXXXX format!');
+        setNotify({ open: true, message: 'ID Number must be exactly 10 digits in XX-XX-XXXXXX format!', severity: 'error' });
+        return;
+      }
+    }
+    setIdNumberError('');
+
     if (newPassword.trim() !== '' && !validatePassword(newPassword)) {
       setNotify({ open: true, message: 'Please fulfill all password requirements!', severity: 'error' });
       return;
@@ -401,7 +442,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         <DialogTitle sx={{ pt: 1, pb: 0.5, px: 2 }}>
           <Typography 
             variant="h3" 
-     w       sx={{ 
+            sx={{ 
               fontWeight: 400, 
               color: '#ffffff', 
               letterSpacing: '-0.02em',
@@ -481,20 +522,37 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
               ))}
           </FormInput>
 
-          <FormInput label="Employee / ID Number" value={userData.id_number || ''} onChange={(e) => setUserData({...userData, id_number: e.target.value})} InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
+          <FormInput 
+            label="Employee / ID Number" 
+            placeholder="23-02-000104"
+            value={userData.id_number || ''} 
+            onChange={handleIdNumberChange}
+            error={Boolean(idNumberError)}
+            helperText={idNumberError || "Format: 00-00-000000"}
+            InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+          />
 
           {/* Change Password Section */}
           <Divider sx={{ my: 1 }}><Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', px: 1 }}>CHANGE PASSWORD</Typography></Divider>
           
           <FormInput 
-            type="password" 
+            type={showNewPassword ? 'text' : 'password'} 
             label="New Password" 
             placeholder="Leave blank to keep current password" 
             value={newPassword} 
             onChange={handlePasswordChange}
             error={Boolean(passwordError)}
-            helperText={passwordError || "Must be at least 8 characters with uppercase, lowercase, and numbers."}
-            InputProps={{ startAdornment: <LockIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+            helperText={passwordError || "Must be at least 8 characters with uppercase, lowercase, a number, and a special character (e.g. !@#$%^&*)."}
+            InputProps={{ 
+              startAdornment: <LockIcon sx={{ mr: 1, opacity: 0.7 }} />,
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton onClick={() => setShowNewPassword(!showNewPassword)} edge="end">
+                    {showNewPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              )
+            }} 
           />
         </Stack>
       </ActionModal>

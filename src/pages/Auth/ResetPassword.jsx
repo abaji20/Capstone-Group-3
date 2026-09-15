@@ -24,7 +24,7 @@ const ResetPassword = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Specific Password Validation (At least 8 characters, uppercase, lowercase, numbers)
+    // Specific Password Validation (At least 8 characters, uppercase, lowercase, numbers, special character)
     const pwdErrors = [];
     if (password.length < 8) {
       pwdErrors.push('at least 8 characters long');
@@ -37,6 +37,9 @@ const ResetPassword = () => {
     }
     if (!/\d/.test(password)) {
       pwdErrors.push('at least one number');
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      pwdErrors.push('at least one special character');
     }
 
     if (pwdErrors.length > 0) {
@@ -181,7 +184,7 @@ const ResetPassword = () => {
           />
 
           <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'left', px: 1 }}>
-            Requirement: Must be at least 8 characters with uppercase, lowercase, and numbers.
+            Requirement: Must be at least 8 characters with uppercase, lowercase, numbers, and a special character.
           </Typography>
 
           <Button 

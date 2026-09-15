@@ -16,14 +16,22 @@ import libraryBG from '../../assets/libraryBG.jpg';
 import glclogo from '../../assets/glclogo.png';
 
 const Login = () => {
+  // Initialize error state from localStorage in case signOut() causes a re-mount/re-render reset
+  const [error, setError] = useState(() => {
+    const savedError = localStorage.getItem('loginError');
+    if (savedError) {
+      localStorage.removeItem('loginError');
+      return savedError;
+    }
+    return null;
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState(null);
   const [message, setMessage] = useState(null); 
   const [loading, setLoading] = useState(false);
 
-  // Modal State (Removed automatic first-visit session logic)
+  // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState('privacy'); 
   
@@ -72,6 +80,7 @@ const Login = () => {
     e.preventDefault();
     setError(null);
     setMessage(null);
+    localStorage.removeItem('loginError');
 
     if (checkIsLockedOut()) {
       setError("Too many failed login attempts. Please try again later.");
@@ -102,15 +111,66 @@ const Login = () => {
             setError(authError.message);
           }
         }
+        setLoading(false);
         return;
       }
 
       if (data.user) {
+        // --- CHECK ACCOUNT STATUS FROM 'profiles' TABLE ---
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles') 
+          .select('is_active, is_archived')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("Error checking account status:", profileError.message);
+          await supabase.auth.signOut();
+          const errMessage = "Unable to verify account status. Please contact the administrator.";
+          localStorage.setItem('loginError', errMessage);
+          setError(errMessage);
+          setLoading(false);
+          return;
+        }
+
+        if (!profileData) {
+          await supabase.auth.signOut();
+          const errMessage = "User profile record not found. Please contact the administrator.";
+          localStorage.setItem('loginError', errMessage);
+          setError(errMessage);
+          setLoading(false);
+          return;
+        }
+
+        // 1. Check if Account is Archived FIRST
+        const isArchived = profileData.is_archived === true || profileData.is_archived === 1;
+        if (isArchived) {
+          await supabase.auth.signOut(); // Terminate session immediately
+          const errMessage = "An unexpected error occurred. Please try again.";
+          localStorage.setItem('loginError', errMessage); // Persist across potential auth state listeners/re-mounts
+          setError(errMessage);
+          setLoading(false);
+          return;
+        }
+
+        // 2. Check if Account is Deactivated
+        const isActiveFalse = profileData.is_active === false || profileData.is_active === 0;
+        if (isActiveFalse) {
+          await supabase.auth.signOut(); // Terminate session immediately
+          const errMessage = "Your account has been deactivated. Please contact the administrator.";
+          localStorage.setItem('loginError', errMessage); // Persist across potential auth state listeners/re-mounts
+          setError(errMessage);
+          setLoading(false);
+          return;
+        }
+
         localStorage.removeItem('loginAttempts');
         localStorage.removeItem('loginLockUntil');
+        localStorage.removeItem('loginError');
         navigate('/');
       }
     } catch (err) {
+      console.error("Unexpected login error:", err);
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
@@ -234,7 +294,6 @@ const Login = () => {
             }}
           >
             <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              {/* LOGO */}
               <Box
                 component="img"
                 src={glclogo}
@@ -247,7 +306,6 @@ const Login = () => {
                 }}
               />
 
-              {/* BLUE SIGN IN TITLE */}
               <Typography 
                 variant="h4" 
                 sx={{ 
@@ -372,7 +430,7 @@ const Login = () => {
               </form>
             </Box>
 
-            {/* PRIVACY POLICY & TERMS LINKS AT THE BOTTOM */}
+            {/* PRIVACY POLICY & TERMS LINKS */}
             <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
                 By signing in, you agree to Golden Link College Policies.
@@ -411,7 +469,7 @@ const Login = () => {
         </Paper>
       </Container>
 
-      {/* POLICY & TERMS MODAL / DIALOG */}
+      {/* POLICY & TERMS MODAL */}
       <Dialog 
         open={modalOpen} 
         onClose={handleCloseModal}
@@ -444,12 +502,10 @@ const Login = () => {
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
                 We collect your college email address and login timestamps purely for authentication and administrative oversight within the Golden Link College Library Repository.
               </Typography>
-
               <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1 }}>2. Use of Information</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
                 Your credentials are used solely to grant access to repository documents, research papers, and institutional resources based on user roles.
               </Typography>
-
               <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1 }}>3. Data Protection</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
                 All data is securely handled via authentication protocols. We do not sell, trade, or share your personal information with external parties.
@@ -459,14 +515,12 @@ const Login = () => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>1. Authorized Use</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
-                Access to the Golden Link College Library Repository is strictly limited to active students, faculty, and authorized personnel holding a valid email account.
+                Execution and access to the Golden Link College Library Repository is strictly limited to active students, faculty, and authorized personnel holding a valid email account.
               </Typography>
-
               <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1 }}>2. Intellectual Property</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
                 All research, capstone papers, and digital archives contained within this repository are protected by intellectual property guidelines. Unauthorized redistribution is strictly prohibited.
               </Typography>
-
               <Typography variant="subtitle1" sx={{ fontWeight: 700, mt: 1 }}>3. Account Conduct</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
                 Users are responsible for maintaining the confidentiality of their login details. Any unauthorized activity performed under your credentials must be reported to the system administrator immediately.
@@ -484,7 +538,7 @@ const Login = () => {
               color: '#fff', 
               fontWeight: 700, 
               borderRadius: 2,
-              px: 3,
+              px: `3px`,
               '&:hover': { backgroundColor: '#182d3e' }
             }}
           >

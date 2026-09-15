@@ -27,6 +27,9 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import SchoolIcon from '@mui/icons-material/School';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import RestoreIcon from '@mui/icons-material/Restore';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import ArchiveIcon from '@mui/icons-material/Archive';
 
 const ManageAccount = () => {
   const theme = useTheme();
@@ -54,6 +57,7 @@ const ManageAccount = () => {
 
   // States
   const [users, setUsers] = useState([]);
+  const [archivedUsers, setArchivedUsers] = useState([]);
   const [roleRequests, setRoleRequests] = useState([]);
   const [activeTab, setActiveTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,6 +79,8 @@ const ManageAccount = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false); // Restore confirmation state
+  const [isPermanentDeleteOpen, setIsPermanentDeleteOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   
   // Data States
@@ -91,24 +97,70 @@ const ManageAccount = () => {
   });
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
-  // Route Protection & Initial Fetch
+  // Route Protection & Initial Fetch with Active Status Validation
   useEffect(() => { 
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate('/login');
-      } else {
-        fetchUsers();
-        fetchRoleRequests();
+        return;
       }
+
+      const { data: currentProfile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('is_active, is_archived')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (profileErr || (currentProfile && (currentProfile.is_active === false || currentProfile.is_archived === true))) {
+        await supabase.auth.signOut();
+        navigate('/login');
+        return;
+      }
+
+      fetchUsers();
+      fetchRoleRequests();
     };
     checkUser();
   }, [navigate]);
 
+  const processInactivityAndStatus = (fetchedProfiles) => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    return (fetchedProfiles || []).map(user => {
+      const lastActivityDate = new Date(user.created_at); 
+      const isInactiveOverAYear = lastActivityDate < oneYearAgo;
+      
+      return {
+        ...user,
+        computed_is_active: isInactiveOverAYear ? false : (user.is_active ?? true)
+      };
+    });
+  };
+
   const fetchUsers = async () => {
-    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    if (error) console.error("Error fetching users:", error);
-    else setUsers(data || []);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('is_archived', false)
+      .order('created_at', { ascending: false });
+      
+    if (error) {
+      console.error("Error fetching users:", error);
+    } else {
+      setUsers(processInactivityAndStatus(data));
+    }
+
+    const { data: archData, error: archErr } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('is_archived', true)
+      .order('created_at', { ascending: false });
+
+    if (!archErr) {
+      setArchivedUsers(processInactivityAndStatus(archData));
+    }
   };
 
   const fetchRoleRequests = async () => {
@@ -134,6 +186,17 @@ const ManageAccount = () => {
     }
   };
 
+  // --- STUDENT ID FORMATTING (adapted from reference AdminManageAccount.formatIdNumber) ---
+  // Formats raw digit input into the 00-00-000000 pattern as the user types,
+  // e.g. "23-02-000104". Non-digit characters are stripped and input is capped
+  // at 10 digits, matching the reference implementation's behavior exactly.
+  const formatIdNumber = (value) => {
+    const raw = value.replace(/\D/g, '').slice(0, 10);
+    if (raw.length <= 2) return raw;
+    if (raw.length <= 4) return `${raw.slice(0, 2)}-${raw.slice(2)}`;
+    return `${raw.slice(0, 2)}-${raw.slice(2, 4)}-${raw.slice(4)}`;
+  };
+
   const getAvatarColors = (role) => {
     switch (role?.toLowerCase()) {
       case 'superadmin': return { bg: '#7b1fa2', text: '#ffffff' }; 
@@ -143,7 +206,34 @@ const ManageAccount = () => {
     }
   };
 
-  // --- ROLE REQUEST HANDLERS ---
+  const handleStatusChange = async (targetUser, newActiveState) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_active: newActiveState })
+        .eq('id', targetUser.id);
+
+      if (error) throw error;
+
+      await createAuditLog(
+        'Status Change', 
+        `${newActiveState ? 'Activated' : 'Deactivated'} account for ${targetUser.full_name}`
+      );
+      setNotify({ 
+        open: true, 
+        message: `Account successfully ${newActiveState ? 'activated' : 'deactivated'}!`, 
+        severity: 'success' 
+      });
+      fetchUsers();
+    } catch (err) {
+      console.error("Status change failed:", err);
+      setNotify({ open: true, message: 'Failed to update account status.', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleApproveRole = async (req) => {
     setLoading(true);
     try {
@@ -203,20 +293,24 @@ const ManageAccount = () => {
       return;
     }
 
-    // Dynamic Specific Password Validation (At least 8 characters, no upper limit)
+    // --- STUDENT ID VALIDATION (adapted from reference AdminManageAccount.handleCreateAccount) ---
+    // If an ID Number was entered, it must resolve to exactly 10 digits (00-00-000000 format),
+    // matching the reference implementation's validation rule and error message.
+    if (formData.idNumber) {
+      const cleanId = formData.idNumber.replace(/-/g, '');
+      if (cleanId.length !== 10) {
+        setNotify({ open: true, message: 'ID Number must be exactly 10 digits in XX-XX-XXXXXX format!', severity: 'error' });
+        return;
+      }
+    }
+
     const pwdErrors = [];
-    if (formData.password.length < 8) {
-      pwdErrors.push('at least 8 characters long');
-    }
-    if (!/[A-Z]/.test(formData.password)) {
-      pwdErrors.push('at least one uppercase letter');
-    }
-    if (!/[a-z]/.test(formData.password)) {
-      pwdErrors.push('at least one lowercase letter');
-    }
-    if (!/\d/.test(formData.password)) {
-      pwdErrors.push('at least one number');
-    }
+    if (formData.password.length < 8) pwdErrors.push('at least 8 characters long');
+    if (!/[A-Z]/.test(formData.password)) pwdErrors.push('at least one uppercase letter');
+    if (!/[a-z]/.test(formData.password)) pwdErrors.push('at least one lowercase letter');
+    if (!/\d/.test(formData.password)) pwdErrors.push('at least one number');
+    // --- SPECIAL CHARACTER REQUIREMENT (new) ---
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(formData.password)) pwdErrors.push('at least one special character (e.g. !@#$%^&*)');
 
     if (pwdErrors.length > 0) {
       setNotify({
@@ -259,7 +353,6 @@ const ManageAccount = () => {
       if (authError) throw authError;
       if (!authData.user) throw new Error("User creation failed.");
 
-      // Sync Profile record
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert([{
@@ -269,7 +362,9 @@ const ManageAccount = () => {
           role: formData.role,
           department: formData.department,
           id_number: formData.idNumber,
-          year_level: formData.yearLevel
+          year_level: formData.yearLevel,
+          is_archived: false,
+          is_active: true
         }]);
 
       if (profileError) {
@@ -307,6 +402,16 @@ const ManageAccount = () => {
   };
 
   const handleUpdateAccount = async () => {
+    // --- STUDENT ID VALIDATION (adapted from reference AdminManageAccount.handleUpdateAccount) ---
+    // Same rule as create: if provided, the ID Number must be exactly 10 digits.
+    if (editData.idNumber) {
+      const cleanId = editData.idNumber.replace(/-/g, '');
+      if (cleanId.length !== 10) {
+        setNotify({ open: true, message: 'ID Number must be exactly 10 digits in XX-XX-XXXXXX format!', severity: 'error' });
+        return;
+      }
+    }
+
     setLoading(true);
     const { error } = await supabase.from('profiles').update({ 
       full_name: editData.fullName, 
@@ -349,7 +454,62 @@ const ManageAccount = () => {
     setIsConfirmOpen(true);
   };
 
-  const handleDeleteAccount = async () => {
+  const handleArchiveAccount = async () => {
+    setLoading(true);
+    const userId = selectedUser?.id;
+    const userName = selectedUser?.full_name;
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_archived: true })
+        .eq('id', userId);
+
+      if (error) throw error;
+      await createAuditLog('Archive Account', `Archived account for ${userName}`);
+      setNotify({ open: true, message: 'Account moved to Archive!', severity: 'success' });
+      setIsConfirmOpen(false);
+      fetchUsers();
+    } catch (err) {
+      console.error("Archive failed:", err);
+      setNotify({ open: true, message: 'Archive failed.', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Trigger Restore Confirmation Modal
+  const handleRestoreTrigger = (user) => {
+    setSelectedUser(user);
+    setIsRestoreConfirmOpen(true);
+  };
+
+  const handleRestoreAccount = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_archived: false })
+        .eq('id', selectedUser.id);
+
+      if (error) throw error;
+      await createAuditLog('Restore Account', `Restored account for ${selectedUser.full_name}`);
+      setNotify({ open: true, message: 'Account restored successfully!', severity: 'success' });
+      setIsRestoreConfirmOpen(false);
+      fetchUsers();
+    } catch (err) {
+      console.error("Restore failed:", err);
+      setNotify({ open: true, message: 'Restore failed.', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePermanentDeleteTrigger = (user) => {
+    setSelectedUser(user);
+    setIsPermanentDeleteOpen(true);
+  };
+
+  const handlePermanentDeleteAccount = async () => {
     setLoading(true);
     const userId = selectedUser?.id;
     const deletedUserName = selectedUser?.full_name;
@@ -357,13 +517,13 @@ const ManageAccount = () => {
       await supabase.from('audit_logs').delete().eq('user_id', userId);
       const { error } = await supabase.from('profiles').delete().eq('id', userId);
       if (error) throw error;
-      await createAuditLog('Delete Account', `Deleted account for ${deletedUserName}`);
-      setNotify({ open: true, message: 'Account deleted!', severity: 'success' });
-      setIsConfirmOpen(false);
+      await createAuditLog('Permanent Delete Account', `Permanently deleted account for ${deletedUserName}`);
+      setNotify({ open: true, message: 'Account permanently deleted!', severity: 'success' });
+      setIsPermanentDeleteOpen(false);
       fetchUsers();
     } catch (err) {
-      console.error("Delete failed:", err);
-      setNotify({ open: true, message: 'Delete failed. User may have active dependencies.', severity: 'error' });
+      console.error("Permanent delete failed:", err);
+      setNotify({ open: true, message: 'Permanent delete failed. User may have active dependencies.', severity: 'error' });
     } finally {
       setLoading(false);
     }
@@ -401,10 +561,41 @@ const ManageAccount = () => {
     );
   };
 
+  const StatusControlDropdown = ({ user }) => {
+    const isActive = user.computed_is_active;
+    return (
+      <TextField
+        select
+        size="small"
+        value={isActive ? "active" : "deactive"}
+        onChange={(e) => handleStatusChange(user, e.target.value === "active")}
+        sx={{
+          minWidth: 135,
+          '& .MuiSelect-select': {
+            py: 0.75,
+            fontWeight: 700,
+            fontSize: '0.75rem',
+            color: isActive ? theme.palette.success.main : theme.palette.text.secondary
+          }
+        }}
+      >
+        <MenuItem value="active" sx={{ fontWeight: 700, color: 'success.main', fontSize: '0.85rem' }}>
+          Active
+        </MenuItem>
+        <MenuItem value="deactive" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.85rem' }}>
+          Deactive
+        </MenuItem>
+      </TextField>
+    );
+  };
+
   const filteredUsers = users.filter((u) => {
-    const matchesSearch = (u.full_name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) || 
-                          (u.email?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-                          (u.id_number?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase().trim();
+    const statusText = u.computed_is_active ? 'active' : 'deactive';
+    const matchesSearch = (u.full_name?.toLowerCase() || "").includes(term) || 
+                          (u.email?.toLowerCase() || "").includes(term) ||
+                          (u.id_number?.toLowerCase() || "").includes(term) ||
+                          (term.length > 0 && statusText.startsWith(term));
     const matchesRole = roleFilter === 'All Roles' || u.role?.toLowerCase() === roleFilter.toLowerCase();
     const userDate = u.created_at ? new Date(u.created_at) : null;
     const matchesMonth = !monthFilter || userDate?.getMonth() + 1 === Number(monthFilter);
@@ -477,17 +668,34 @@ const ManageAccount = () => {
         </Stack>
       </Box>
 
+      {/* Tabs without active indicator line */}
       <Tabs 
         value={activeTab} 
         onChange={(e, v) => setActiveTab(v)} 
+        TabIndicatorProps={{
+          sx: {
+            display: 'none'
+          }
+        }}
         sx={{ 
           mb: 3, 
-          '& .MuiTab-root': { fontWeight: 800, fontSize: '0.9rem', color: isDarkMode ? 'rgba(255,255,255,0.5)' : '#213C51' },
-          '& .Mui-selected': { color: '#3b82f6 !important' }
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          '& .MuiTab-root': { 
+            fontWeight: 800, 
+            fontSize: '0.95rem', 
+            color: isDarkMode ? 'rgba(255,255,255,0.5)' : '#213C51',
+            textTransform: 'none',
+            minHeight: 48,
+            px: 3
+          },
+          '& .Mui-selected': { 
+            color: '#3b82f6 !important' 
+          }
         }}
       >
         <Tab label={`User List (${users.length})`} />
         <Tab label={`Role Requests (${roleRequests.length})`} />
+        <Tab label={`Archived (${archivedUsers.length})`} />
       </Tabs>
 
       <Snackbar open={notify.open} autoHideDuration={4000} onClose={() => setNotify({ ...notify, open: false })} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
@@ -497,7 +705,7 @@ const ManageAccount = () => {
       {activeTab === 0 ? (
         <>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 4 }}>
-            <TextField placeholder="Search accounts or ID..." size="medium" fullWidth={isMobile} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
+            <TextField placeholder="Search accounts, ID, or status..." size="medium" fullWidth={isMobile} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
             <TextField select size="medium" label="Month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
               <MenuItem value="">All Months</MenuItem>
               {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
@@ -526,12 +734,17 @@ const ManageAccount = () => {
                   <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={user} size={40} /></Box>
                   <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
                   <Typography variant="body2" color="text.secondary">{user.email}</Typography>
+                  <Box sx={{ my: 1 }}><StatusControlDropdown user={user} /></Box>
                   <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 600 }}>ID: {user.id_number || 'N/A'} | {user.department || 'N/A'} | {user.year_level || 'N/A'}</Typography>
                   <Box sx={{ mb: 2 }}><RoleChip role={user.role} /></Box>
                   <Divider sx={{ mb: 2 }} />
-                  <Stack direction="row" spacing={2} justifyContent="center">
-                    <IconButton onClick={() => handleOpenEdit(user)} sx={{ color: theme.palette.primary.main }}><EditIcon /></IconButton>
-                    <DeleteButton onClick={() => handleDeleteTrigger(user)} />
+                  <Stack direction="row" spacing={3} justifyContent="center">
+                    <IconButton onClick={() => handleOpenEdit(user)} sx={{ color: theme.palette.primary.main }} title="Edit Account">
+                      <EditIcon fontSize="medium" />
+                    </IconButton>
+                    <IconButton onClick={() => handleDeleteTrigger(user)} color="error" title="Archive Account">
+                      <ArchiveIcon fontSize="medium" />
+                    </IconButton>
                   </Stack>
                 </Paper>
               ))}
@@ -543,6 +756,7 @@ const ManageAccount = () => {
                   <TableRow>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }}>USER DETAILS</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ID NUMBER</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">STATUS</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">DEPT / YEAR</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ROLE</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">JOINED DATE</TableCell>
@@ -562,6 +776,7 @@ const ManageAccount = () => {
                         </Stack>
                       </TableCell>
                       <TableCell align="center"><Typography variant="body2" fontWeight={600}>{user.id_number || '—'}</Typography></TableCell>
+                      <TableCell align="center"><StatusControlDropdown user={user} /></TableCell>
                       <TableCell align="center">
                         <Typography variant="body2" fontWeight={600}>{user.department || '—'}</Typography>
                         <Typography variant="caption" color="primary" sx={{ fontWeight: 700 }}>{user.year_level || ''}</Typography>
@@ -569,9 +784,13 @@ const ManageAccount = () => {
                       <TableCell align="center"><RoleChip role={user.role} /></TableCell>
                       <TableCell align="center">{new Date(user.created_at).toLocaleDateString()}</TableCell>
                       <TableCell align="right">
-                        <Stack direction="row" spacing={1} justifyContent="flex-end">
-                          <IconButton onClick={() => handleOpenEdit(user)} size="small" color="primary"><EditIcon fontSize="small" /></IconButton>
-                          <DeleteButton onClick={() => handleDeleteTrigger(user)} />
+                        <Stack direction="row" spacing={1.5} justifyContent="flex-end">
+                          <IconButton onClick={() => handleOpenEdit(user)} size="medium" color="primary" title="Edit Account">
+                            <EditIcon fontSize="medium" />
+                          </IconButton>
+                          <IconButton onClick={() => handleDeleteTrigger(user)} size="medium" color="error" title="Archive Account">
+                            <ArchiveIcon fontSize="medium" />
+                          </IconButton>
                         </Stack>
                       </TableCell>
                     </TableRow>
@@ -613,7 +832,7 @@ const ManageAccount = () => {
             </Stack>
           )}
         </>
-      ) : (
+      ) : activeTab === 1 ? (
         <>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
             <TextField placeholder="Search by name or email..." size="medium" fullWidth={isMobile} value={requestSearch} onChange={(e) => setRequestSearch(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
@@ -734,16 +953,158 @@ const ManageAccount = () => {
             </Stack>
           )}
         </>
+      ) : (
+        <>
+          {isMobile ? (
+            <Stack spacing={2} alignItems="center">
+              {archivedUsers.length === 0 ? (
+                <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600, py: 8 }}> No archived accounts found. </Typography>
+              ) : (
+                archivedUsers.map((user) => (
+                  <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={user} size={40} /></Box>
+                    <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{user.email}</Typography>
+                    <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 600 }}>ID: {user.id_number || 'N/A'}</Typography>
+                    <Box sx={{ mb: 2 }}><RoleChip role={user.role} /></Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                      Joined: {new Date(user.created_at).toLocaleDateString()}
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    <Stack direction="row" spacing={1.5} justifyContent="center" flexWrap="wrap" useFlexGap>
+                      <Button 
+                        variant="outlined" 
+                        size="small" 
+                        color="primary" 
+                        startIcon={<RestoreIcon />} 
+                        onClick={() => handleRestoreTrigger(user)}
+                        sx={{ borderRadius: '8px', fontWeight: 700 }}
+                      >
+                        Restore
+                      </Button>
+                      <Button 
+                        variant="contained" 
+                        size="small" 
+                        color="error" 
+                        startIcon={<DeleteForeverIcon />} 
+                        onClick={() => handlePermanentDeleteTrigger(user)}
+                        sx={{ borderRadius: '8px', fontWeight: 700, boxShadow: 'none' }}
+                      >
+                        Delete
+                      </Button>
+                    </Stack>
+                  </Paper>
+                ))
+              )}
+            </Stack>
+          ) : (
+          <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
+            <Table>
+              <TableHead sx={{ bgcolor: isDarkMode ? '#0f172a' : '#213C51' }}>
+                <TableRow>
+                  <TableCell sx={{ color: 'white', fontWeight: 750 }}>ARCHIVED USER DETAILS</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ID NUMBER</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ROLE</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">JOINED DATE</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 750 }} align="right">ARCHIVED ACTIONS</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {archivedUsers.length === 0 ? (
+                  <TableRow><TableCell colSpan={5} align="center" sx={{ py: 8 }}><Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}> No archived accounts found. </Typography></TableCell></TableRow>
+                ) : (
+                  archivedUsers.map((user) => (
+                    <TableRow key={user.id} hover>
+                      <TableCell>
+                        <Stack direction="row" spacing={2} alignItems="center">
+                          <StyledAvatar user={user} />
+                          <Box>
+                            <Typography fontWeight={700}>{user.full_name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{user.email}</Typography>
+                          </Box>
+                        </Stack>
+                      </TableCell>
+                      <TableCell align="center"><Typography variant="body2" fontWeight={600}>{user.id_number || '—'}</Typography></TableCell>
+                      <TableCell align="center"><RoleChip role={user.role} /></TableCell>
+                      <TableCell align="center">{new Date(user.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Button 
+                            variant="outlined" 
+                            size="small" 
+                            color="primary" 
+                            startIcon={<RestoreIcon />} 
+                            onClick={() => handleRestoreTrigger(user)}
+                            sx={{ borderRadius: '8px', fontWeight: 700 }}
+                          >
+                            Restore Account
+                          </Button>
+                          <Button 
+                            variant="contained" 
+                            size="small" 
+                            color="error" 
+                            startIcon={<DeleteForeverIcon />} 
+                            onClick={() => handlePermanentDeleteTrigger(user)}
+                            sx={{ borderRadius: '8px', fontWeight: 700, boxShadow: 'none' }}
+                          >
+                            Delete Permanently
+                          </Button>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          )}
+        </>
       )}
 
       {/* --- ALL MODALS --- */}
-      {/* Delete Confirmation Dialog */}
+      {/* Archive Confirmation Dialog (Red) */}
       <Dialog open={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 3, p: 1, width: '400px' } }}>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}> <WarningAmberIcon color="error" /> Confirm Deletion </DialogTitle>
-        <DialogContent> <DialogContentText sx={{ fontWeight: 500 }}> Delete <b>{selectedUser?.full_name}</b>? This cannot be undone. </DialogContentText> </DialogContent>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: theme.palette.error.main }}> 
+          <ArchiveIcon color="error" /> Confirm Archive 
+        </DialogTitle>
+        <DialogContent> 
+          <DialogContentText sx={{ fontWeight: 500 }}> 
+            Move <b>{selectedUser?.full_name}</b> to archived accounts? They will no longer appear in the active user list. 
+          </DialogContentText> 
+        </DialogContent>
         <DialogActions sx={{ pb: 2, px: 3 }}>
           <Button onClick={() => setIsConfirmOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button>
-          <Button onClick={handleDeleteAccount} variant="contained" color="error" sx={{ borderRadius: 2 }}> {loading ? "Deleting..." : "Confirm Delete"} </Button>
+          <Button onClick={handleArchiveAccount} variant="contained" color="error" sx={{ borderRadius: 2, boxShadow: 'none' }}> 
+            {loading ? "Archiving..." : "Confirm Archive"} 
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* --- RESTORE ACCOUNT CONFIRMATION DIALOG (BLUE THEME) --- */}
+      <Dialog open={isRestoreConfirmOpen} onClose={() => setIsRestoreConfirmOpen(false)} PaperProps={{ sx: { borderRadius: 3, p: 1, width: '400px' } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: theme.palette.primary.main }}> 
+          <RestoreIcon color="primary" /> Confirm Account Restoration
+        </DialogTitle>
+        <DialogContent> 
+          <DialogContentText sx={{ fontWeight: 500 }}> 
+            Are you sure you want to restore <b>{selectedUser?.full_name}</b>? This will move the account back to the active user list. 
+          </DialogContentText> 
+        </DialogContent>
+        <DialogActions sx={{ pb: 2, px: 3 }}>
+          <Button onClick={() => setIsRestoreConfirmOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button>
+          <Button onClick={handleRestoreAccount} variant="contained" color="primary" sx={{ borderRadius: 2, boxShadow: 'none' }}> 
+            {loading ? "Restoring..." : "Restore Account"} 
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Permanent Delete Confirmation Dialog */}
+      <Dialog open={isPermanentDeleteOpen} onClose={() => setIsPermanentDeleteOpen(false)} PaperProps={{ sx: { borderRadius: 3, p: 1, width: '400px' } }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}> <WarningAmberIcon color="error" /> Confirm Permanent Deletion </DialogTitle>
+        <DialogContent> <DialogContentText sx={{ fontWeight: 500 }}> Permanently delete <b>{selectedUser?.full_name}</b> from the database? This action is irreversible. </DialogContentText> </DialogContent>
+        <DialogActions sx={{ pb: 2, px: 3 }}>
+          <Button onClick={() => setIsPermanentDeleteOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button>
+          <Button onClick={handlePermanentDeleteAccount} variant="contained" color="error" sx={{ borderRadius: 2 }}> {loading ? "Deleting..." : "Permanently Delete"} </Button>
         </DialogActions>
       </Dialog>
 
@@ -778,11 +1139,11 @@ const ManageAccount = () => {
         onConfirm={handleCreateAccount} 
         confirmText={loading ? "Creating..." : "Create Account"}
         PaperProps={{
-    sx: {
-      bgcolor: '#1e293b', // Ensures a consistent dark container background
-      color: '#ffffff'
-    }
-  }}
+          sx: {
+            bgcolor: '#1e293b', 
+            color: '#ffffff'
+          }
+        }}
       >
         <Stack spacing={2} sx={{ mt: 2 }}>
           <FormInput 
@@ -794,9 +1155,9 @@ const ManageAccount = () => {
           
           <FormInput 
             label="ID Number" 
-            placeholder="e.g. 2024-0001" 
+            placeholder="23-02-000104" 
             value={formData.idNumber} 
-            onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })} 
+            onChange={(e) => setFormData({ ...formData, idNumber: formatIdNumber(e.target.value) })} 
             InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
           />
           
@@ -863,7 +1224,7 @@ const ManageAccount = () => {
           </FormInput>
 
           <Typography variant="caption" color="text.secondary">
-            Requirement: Must use <b>@goldenlink.ph</b> domain and at least 8 characters with uppercase, lowercase, and numbers.
+            Requirement: Must use <b>@goldenlink.ph</b> domain and at least 8 characters with uppercase, lowercase, a number, and a special character (e.g. !@#$%^&*). ID Number, if provided, must follow the <b>00-00-000000</b> format.
           </Typography>
         </Stack>
       </ActionModal>
@@ -886,8 +1247,9 @@ const ManageAccount = () => {
           
           <FormInput 
             label="ID Number" 
+            placeholder="23-02-000104" 
             value={editData.idNumber} 
-            onChange={(e) => setEditData({ ...editData, idNumber: e.target.value })} 
+            onChange={(e) => setEditData({ ...editData, idNumber: formatIdNumber(e.target.value) })} 
             InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
           />
           

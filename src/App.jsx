@@ -72,18 +72,32 @@ function App() {
 
   const fetchUserRole = async (userId) => {
     try {
-      const { data } = await supabase
+      // Fetch both role and is_active from your existing table structure
+      const { data, error } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, is_active')
         .eq('id', userId)
         .single();
       
+      if (error) throw error;
+
       if (data) {
+        // Enforce restriction: If account is deactivated, sign out immediately
+        if (data.is_active === false || data.is_active === 0) {
+          await supabase.auth.signOut();
+          setRole(null);
+          sessionStorage.removeItem('current_tab_role');
+          setLoading(false);
+          return;
+        }
+
         setRole(data.role);
         sessionStorage.setItem('current_tab_role', data.role);
       }
     } catch (err) {
-      console.error("Error fetching role:", err);
+      console.error("Error fetching role and status:", err);
+      setRole(null);
+      sessionStorage.removeItem('current_tab_role');
     } finally {
       setLoading(false);
     }
@@ -96,6 +110,9 @@ function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const activeRole = sessionStorage.getItem('current_tab_role');
       if (session && activeRole && !isResetting) {
+        fetchUserRole(session.user.id);
+      } else if (session && !activeRole && !isResetting && window.location.pathname === '/login') {
+        // If session exists but no tab role, check status anyway
         fetchUserRole(session.user.id);
       } else {
         setRole(null);
@@ -130,7 +147,6 @@ function App() {
         if (session && (storedRole || isLoginPage)) {
           fetchUserRole(session.user.id);
         } else {
-          // If another tab logged in, ignore the broadcast event for this unauthenticated tab
           setLoading(false);
         }
       }

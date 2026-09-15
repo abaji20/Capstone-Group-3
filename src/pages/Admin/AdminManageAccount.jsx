@@ -111,6 +111,24 @@ const AdminManageAccount = () => {
     checkUser();
   }, [navigate]);
 
+  // --- ACTIVE/DEACTIVE STATUS HELPER (adapted from ManageAccount.jsx's processInactivityAndStatus) ---
+  // Computes a computed_is_active flag per user so the status dropdown has a
+  // consistent value to control, mirroring the Super Admin Manage Account page.
+  const processInactivityAndStatus = (fetchedProfiles) => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    return (fetchedProfiles || []).map(user => {
+      const lastActivityDate = new Date(user.created_at);
+      const isInactiveOverAYear = lastActivityDate < oneYearAgo;
+
+      return {
+        ...user,
+        computed_is_active: isInactiveOverAYear ? false : (user.is_active ?? true)
+      };
+    });
+  };
+
   const fetchClients = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -120,7 +138,7 @@ const AdminManageAccount = () => {
       .order('created_at', { ascending: false });
     
     if (error) console.error("Error fetching users:", error);
-    else setUsers(data || []);
+    else setUsers(processInactivityAndStatus(data));
     setLoading(false);
   };
 
@@ -138,6 +156,35 @@ const AdminManageAccount = () => {
     }
   };
 
+  // --- ACTIVE/DEACTIVE STATUS CHANGE HANDLER (adapted from ManageAccount.jsx's handleStatusChange) ---
+  const handleStatusChange = async (targetUser, newActiveState) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_active: newActiveState })
+        .eq('id', targetUser.id);
+
+      if (error) throw error;
+
+      await createAuditLog(
+        'Status Change',
+        `${newActiveState ? 'Activated' : 'Deactivated'} account for ${targetUser.full_name}`
+      );
+      setNotify({
+        open: true,
+        message: `Account successfully ${newActiveState ? 'activated' : 'deactivated'}!`,
+        severity: 'success'
+      });
+      fetchClients();
+    } catch (err) {
+      console.error("Status change failed:", err);
+      setNotify({ open: true, message: 'Failed to update account status.', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const validatePassword = (password) => {
     const missing = [];
     if (password.length < 8) {
@@ -151,6 +198,10 @@ const AdminManageAccount = () => {
     }
     if (!/[0-9]/.test(password)) {
       missing.push('a number');
+    }
+    // --- SPECIAL CHARACTER REQUIREMENT (new) ---
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      missing.push('a special character (e.g. !@#$%^&*)');
     }
     return missing;
   };
@@ -317,13 +368,15 @@ const AdminManageAccount = () => {
   // --- COMPREHENSIVE FILTER LOGIC ---
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
-      const term = searchTerm.toLowerCase();
+      const term = searchTerm.toLowerCase().trim();
+      const statusText = u.computed_is_active ? 'active' : 'deactive';
       const matchesSearch = 
         (u.full_name || "").toLowerCase().includes(term) || 
         (u.email || "").toLowerCase().includes(term) ||
         (u.id_number || "").toLowerCase().includes(term) ||
         (u.department || "").toLowerCase().includes(term) ||
-        (u.year_level || "").toLowerCase().includes(term);
+        (u.year_level || "").toLowerCase().includes(term) ||
+        (term.length > 0 && statusText.startsWith(term));
 
       const createdDate = u.created_at ? new Date(u.created_at) : null;
       const matchesMonth = !monthFilter || (createdDate && createdDate.getMonth() + 1 === Number(monthFilter));
@@ -345,6 +398,35 @@ const AdminManageAccount = () => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
     }
+  };
+
+  // --- STATUS CONTROL DROPDOWN (adapted from ManageAccount.jsx's StatusControlDropdown) ---
+  const StatusControlDropdown = ({ user }) => {
+    const isActive = user.computed_is_active;
+    return (
+      <TextField
+        select
+        size="small"
+        value={isActive ? "active" : "deactive"}
+        onChange={(e) => handleStatusChange(user, e.target.value === "active")}
+        sx={{
+          minWidth: 135,
+          '& .MuiSelect-select': {
+            py: 0.75,
+            fontWeight: 700,
+            fontSize: '0.75rem',
+            color: isActive ? theme.palette.success.main : theme.palette.text.secondary
+          }
+        }}
+      >
+        <MenuItem value="active" sx={{ fontWeight: 700, color: 'success.main', fontSize: '0.85rem' }}>
+          Active
+        </MenuItem>
+        <MenuItem value="deactive" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.85rem' }}>
+          Deactive
+        </MenuItem>
+      </TextField>
+    );
   };
 
   return (
@@ -375,7 +457,7 @@ const AdminManageAccount = () => {
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
         <TextField 
           fullWidth 
-          placeholder="Search by name, email, ID, dept, or year..." 
+          placeholder="Search by name, email, ID, dept, year, or status..." 
           value={searchTerm} 
           onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
           sx={{ bgcolor: inputBg, borderRadius: 0.5, ...removeAutofillBg }} 
@@ -455,6 +537,7 @@ const AdminManageAccount = () => {
               <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}> <Avatar sx={{ width: 45, height: 45, bgcolor: '#fbc02d', color: '#000000', fontWeight: 700 }}>{user.full_name?.charAt(0)}</Avatar> </Box>
               <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
               <Typography variant="body2" color="text.secondary">{user.email}</Typography>
+              <Box sx={{ my: 1, display: 'flex', justifyContent: 'center' }}><StatusControlDropdown user={user} /></Box>
               <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 700 }}>ID: {user.id_number}</Typography>
               <Box sx={{ mb: 2 }}>
                 <Chip label={user.department?.toUpperCase() || "NO DEPT"} size="small" variant="outlined" sx={{ mb: 1, mr: 1 }} />
@@ -473,8 +556,9 @@ const AdminManageAccount = () => {
           <Table>
             <TableHead sx={{ bgcolor: headerColor }}>
               <TableRow>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }}>CLIENT DETAILS</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }}>USER DETAILS</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ID NUMBER</TableCell>
+                <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">STATUS</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">DEPT / YEAR</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">JOINED DATE</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 800 }} align="right">ACTIONS</TableCell>
@@ -490,6 +574,7 @@ const AdminManageAccount = () => {
                     </Stack>
                   </TableCell>
                   <TableCell align="center"> <Typography variant="body2" sx={{ fontWeight: 600 }}>{user.id_number || '---'}</Typography> </TableCell>
+                  <TableCell align="center"><StatusControlDropdown user={user} /></TableCell>
                   <TableCell align="center"> 
                     <Typography variant="body2" fontWeight={700}>{user.department || '---'}</Typography>
                     <Typography variant="caption" color="primary" fontWeight={800}>{user.year_level || '---'}</Typography>
@@ -640,7 +725,7 @@ const AdminManageAccount = () => {
             }} 
             sx={removeAutofillBg}
           />
-          <Typography variant="caption" color="text.secondary">Requirement: Must use <b>@goldenlink.ph</b> domain and at least 8 characters long with uppercase, lowercase, and numbers.</Typography>
+          <Typography variant="caption" color="text.secondary">Requirement: Must use <b>@goldenlink.ph</b> domain and at least 8 characters long with uppercase, lowercase, numbers, and a special character (e.g. !@#$%^&*).</Typography>
         </Stack>
       </ActionModal>
 
