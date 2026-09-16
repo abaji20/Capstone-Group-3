@@ -7,14 +7,13 @@ import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import ArchiveIcon from '@mui/icons-material/Archive';
-import PublishIcon from '@mui/icons-material/Publish'; 
+import PublishIcon from '@mui/icons-material/Publish';
 
 export const navLinks = {
   superadmin: [
     { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
     { name: 'Manage Accounts', path: '/manage-accounts', icon: <PeopleIcon /> },
-    // In-update natin ito para tumugma sa SuperAdminEditPDFs route
-    { name: 'Update PDFs', path: '/super-editpdfs', icon: <EditNoteIcon /> }, 
+    { name: 'Update PDFs', path: '/super-editpdfs', icon: <EditNoteIcon /> },
     { name: 'Upload PDFs', path: '/upload', icon: <UploadFileIcon /> },
     { name: 'Activity Logs', path: '/logs', icon: <HistoryIcon /> },
     { name: 'Delete Requests', path: '/delete-requests', icon: <DeleteSweepIcon /> },
@@ -27,11 +26,15 @@ export const navLinks = {
     { name: 'Manage Users', path: '/admin-manage-accounts', icon: <PeopleIcon /> },
     { name: 'Activity Logs', path: '/admin-logs', icon: <HistoryIcon /> },
     { name: 'User Requests', path: '/pending-upload', icon: <PendingActionsIcon /> },
-    { name: 'Pending Request', path: '/pending', icon: <PendingActionsIcon /> },  
+    { name: 'Pending Request', path: '/pending', icon: <PendingActionsIcon /> },
   ],
-  client: [ 
-    { name: 'Library', path: '/browse', icon: <LibraryBooksIcon /> },
-    { name: 'Request Upload', path: '/request-upload', icon: <PublishIcon /> },
-    { name: 'Downloads', path: '/my-downloads', icon: <HistoryIcon /> },
+  client: [
+    // MAIN group — primary work area
+    { name: 'Library', path: '/browse', icon: <LibraryBooksIcon />, group: 'main' },
+    { name: 'Request Upload', path: '/request-upload', icon: <PublishIcon />, group: 'main' },
+
+    // PROFILE group — Dashboard moved here per new grouping requirement
+    { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, group: 'profile' },
+    { name: 'Downloads', path: '/my-downloads', icon: <HistoryIcon />, group: 'profile' },
   ]
 };

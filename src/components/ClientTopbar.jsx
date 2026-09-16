@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { 
-  AppBar, Toolbar, Box, Avatar, Typography, ButtonBase, Menu, MenuItem, 
-  ListItemIcon, Divider, IconButton, useTheme, Drawer, List, ListItem, 
+import {
+  AppBar, Toolbar, Box, Avatar, Typography, ButtonBase, Menu, MenuItem,
+  ListItemIcon, Divider, IconButton, useTheme, Drawer, List, ListItem,
   ListItemText, useMediaQuery, Switch, ListItemButton, Stack, Snackbar, Alert,
   FormControl, InputLabel, Select, TextField, Button
 } from '@mui/material';
-import { 
-  LockReset, Brightness4 as Brightness4Icon, 
+import {
+  LockReset, Brightness4 as Brightness4Icon,
   Brightness7 as Brightness7Icon, Menu as MenuIcon,
   AccountCircle as AccountCircleIcon,
   Person as PersonIcon, Download as DownloadIcon,
   AssignmentInd as AssignmentIndIcon, ChatBubbleOutline as ChatIcon,
-  Cancel as CancelIcon
+  Cancel as CancelIcon,
+  Dashboard as DashboardIcon
 } from '@mui/icons-material';
 import { supabase } from '../supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
@@ -38,17 +39,16 @@ const customAnimations = `
 const ClientTopbar = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  
-  // Lists for Dropdowns
+
   const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 
-  const [userData, setUserData] = useState({ 
-    id: '', 
-    full_name: '', 
-    department: '', 
-    id_number: '', 
+  const [userData, setUserData] = useState({
+    id: '',
+    full_name: '',
+    department: '',
+    id_number: '',
     role: '',
-    year_level: '' 
+    year_level: ''
   });
   const [initialUserData, setInitialUserData] = useState({ full_name: '', year_level: '' });
   const [requestData, setRequestData] = useState({ role: '', reason: '' });
@@ -63,6 +63,10 @@ const ClientTopbar = () => {
   const theme = useTheme();
   const colorMode = useContext(ColorModeContext);
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  // NavConfig-driven groups — single source of truth, used by both desktop and mobile
+  const mainNavItems = navLinks.client.filter((item) => item.group === 'main');
+  const profileNavItems = navLinks.client.filter((item) => item.group === 'profile');
 
   const fetchUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -79,7 +83,7 @@ const ClientTopbar = () => {
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
-        
+
         if (lastRequest) {
           setLatestRequest(lastRequest);
         } else {
@@ -95,8 +99,7 @@ const ClientTopbar = () => {
 
   const handleUpdateProfile = async () => {
     setLoading(true);
-    
-    // Track exact field modifications
+
     let changes = [];
     if (userData.full_name !== initialUserData.full_name) {
       changes.push(`name from "${initialUserData.full_name || 'N/A'}" to "${userData.full_name}"`);
@@ -105,15 +108,14 @@ const ClientTopbar = () => {
       changes.push(`year level from "${initialUserData.year_level || 'N/A'}" to "${userData.year_level}"`);
     }
 
-    const changeDescription = changes.length > 0 
-      ? `Updated ${changes.join(' & ')}` 
+    const changeDescription = changes.length > 0
+      ? `Updated ${changes.join(' & ')}`
       : 'Updated profile info';
 
-    // 1. UPDATE PROFILE
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ 
-        full_name: userData.full_name, 
+      .update({
+        full_name: userData.full_name,
         year_level: userData.year_level
       })
       .eq('id', userData.id);
@@ -124,7 +126,6 @@ const ClientTopbar = () => {
       return;
     }
 
-    // 2. INSERT DETAILED AUDIT LOG
     const { error: logError } = await supabase
       .from('audit_logs')
       .insert([{
@@ -136,13 +137,12 @@ const ClientTopbar = () => {
 
     if (logError) console.error("Audit Log Error:", logError);
 
-    // 3. ROLE REQUEST LOGIC
     if (requestData.role) {
       const { error: roleError } = await supabase
         .from('role_requests')
         .insert([{
           requested_by: userData.id,
-          "current_role": userData.role, 
+          "current_role": userData.role,
           requested_role: requestData.role,
           reason: requestData.reason,
           status: 'pending'
@@ -152,7 +152,7 @@ const ClientTopbar = () => {
         setNotify({ open: true, message: 'Role request failed!', severity: 'error' });
       } else {
         setNotify({ open: true, message: 'Profile updated and role request sent!', severity: 'success' });
-        fetchUser(); 
+        fetchUser();
       }
     } else {
       setNotify({ open: true, message: 'Profile updated successfully!', severity: 'success' });
@@ -160,11 +160,10 @@ const ClientTopbar = () => {
 
     setInitialUserData({ full_name: userData.full_name, year_level: userData.year_level });
     setIsProfileModalOpen(false);
-    setRequestData({ role: '', reason: '' }); 
+    setRequestData({ role: '', reason: '' });
     setLoading(false);
   };
 
-  // FUNCTION PARA I-CANCEL ANG ROLE REQUEST
   const handleCancelRequest = async () => {
     if (!latestRequest) return;
     setLoading(true);
@@ -192,11 +191,38 @@ const ClientTopbar = () => {
     setLoading(false);
   };
 
+  const renderNavListItem = (item) => {
+    const isActive = location.pathname === item.path;
+    return (
+      <ListItem key={item.name} disablePadding>
+        <ListItemButton
+          component={Link} to={item.path} onClick={handleDrawerToggle}
+          sx={{
+            borderRadius: '8px', py: 1.2, mb: 0.5,
+            backgroundColor: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+            borderLeft: isActive ? '4px solid #3b82f6' : '3px solid transparent',
+          }}
+        >
+          <ListItemIcon sx={{ color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)', minWidth: 40 }}>
+            {React.cloneElement(item.icon, { sx: { fontSize: 22 } })}
+          </ListItemIcon>
+          <ListItemText primary={item.name} primaryTypographyProps={{ fontSize: '0.85rem', fontWeight: isActive ? 600 : 400, color: isActive ? 'white' : 'rgba(255,255,255,0.7)' }} />
+        </ListItemButton>
+      </ListItem>
+    );
+  };
+
+  const sectionLabelSx = {
+    px: 2, pt: 2, pb: 0.5,
+    fontSize: '0.7rem', fontWeight: 800, letterSpacing: 1,
+    textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)'
+  };
+
   const drawerContent = (
-    <Box 
-      sx={{ 
-        height: '100%', display: 'flex', flexDirection: 'column', 
-        backgroundColor: theme.palette.mode === 'dark' ? '#111827' : '#213C51', 
+    <Box
+      sx={{
+        height: '100%', display: 'flex', flexDirection: 'column',
+        backgroundColor: theme.palette.mode === 'dark' ? '#111827' : '#213C51',
         color: 'white', width: expandedWidth, borderRight: '1px solid rgba(255,255,255,0.05)',
       }}
     >
@@ -209,28 +235,48 @@ const ClientTopbar = () => {
         </Box>
       </Box>
 
-      <List sx={{ px: 1.5, flexGrow: 1 }}>
-        {navLinks.client.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <ListItem key={item.name} disablePadding>
-              <ListItemButton 
-                component={Link} to={item.path} onClick={handleDrawerToggle}
-                sx={{ 
-                  borderRadius: '8px', py: 1.2, mb: 0.5,
-                  backgroundColor: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                  borderLeft: isActive ? '4px solid #3b82f6' : '3px solid transparent',
-                }}
-              >
-                <ListItemIcon sx={{ color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)', minWidth: 40 }}>
-                  {React.cloneElement(item.icon, { sx: { fontSize: 22 } })}
+      <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+        {/* MAIN group */}
+        <Typography sx={sectionLabelSx}>Main</Typography>
+        <List sx={{ px: 1.5 }}>
+          {mainNavItems.map(renderNavListItem)}
+        </List>
+
+        <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: 2, mt: 1 }} />
+
+        {/* PROFILE group — Dashboard + My Downloads come from NavConfig, the rest are actions */}
+        <Typography sx={sectionLabelSx}>Profile</Typography>
+        <List sx={{ px: 1.5 }}>
+          {profileNavItems.map(renderNavListItem)}
+
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => { setIsProfileModalOpen(true); handleDrawerToggle(); }} sx={{ borderRadius: '8px', py: 1.2, mb: 0.5 }}>
+              <ListItemIcon sx={{ color: 'rgba(255,255,255,0.7)', minWidth: 40 }}><PersonIcon sx={{ fontSize: 22 }} /></ListItemIcon>
+              <ListItemText primary="Profile Settings" primaryTypographyProps={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }} />
+            </ListItemButton>
+          </ListItem>
+
+          <ListItem disablePadding>
+            <ListItemButton component={Link} to="/reset-password" onClick={handleDrawerToggle} sx={{ borderRadius: '8px', py: 1.2, mb: 0.5 }}>
+              <ListItemIcon sx={{ color: 'rgba(255,255,255,0.7)', minWidth: 40 }}><LockReset sx={{ fontSize: 22 }} /></ListItemIcon>
+              <ListItemText primary="Change Password" primaryTypographyProps={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }} />
+            </ListItemButton>
+          </ListItem>
+
+          <ListItem disablePadding>
+            <ListItemButton onClick={colorMode.toggleColorMode} sx={{ borderRadius: '8px', py: 1.2, mb: 0.5, display: 'flex', justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <ListItemIcon sx={{ color: 'rgba(255,255,255,0.7)', minWidth: 40 }}>
+                  {theme.palette.mode === 'dark' ? <Brightness7Icon sx={{ fontSize: 22 }} /> : <Brightness4Icon sx={{ fontSize: 22 }} />}
                 </ListItemIcon>
-                <ListItemText primary={item.name} primaryTypographyProps={{ fontSize: '0.85rem', fontWeight: isActive ? 600 : 400, color: isActive ? 'white' : 'rgba(255,255,255,0.7)' }} />
-              </ListItemButton>
-            </ListItem>
-          );
-        })}
-      </List>
+                <ListItemText primary="Theme" primaryTypographyProps={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }} />
+              </Box>
+              <Switch size="small" checked={theme.palette.mode === 'dark'} />
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Box>
+
       <Box sx={{ p: 2, mt: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <LogoutButton fullWidth sx={{ color: '#ff5252', borderColor: 'rgba(255,82,82,0.3)' }} />
       </Box>
@@ -244,10 +290,10 @@ const ClientTopbar = () => {
         <Alert severity={notify.severity} variant="filled">{notify.message}</Alert>
       </Snackbar>
 
-      <AppBar 
-        position="fixed" 
-        sx={{ 
-          backgroundColor: theme.palette.mode === 'dark' ? 'rgba(17, 24, 39, 0.95)' : '#213C51', 
+      <AppBar
+        position="fixed"
+        sx={{
+          backgroundColor: theme.palette.mode === 'dark' ? 'rgba(17, 24, 39, 0.95)' : '#213C51',
           backdropFilter: 'blur(8px)', height: { xs: 70, md: 80 }, justifyContent: 'center',
           zIndex: theme.zIndex.drawer + 1, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', borderBottom: '1px solid rgba(0, 58, 151, 0.34)'
         }}
@@ -277,17 +323,15 @@ const ClientTopbar = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { md: 2, lg: 4 } }}>
             {!isMobile && (
               <Box sx={{ display: 'flex', gap: 1 }}>
-                {navLinks.client
-                  .filter(item => item.name.toLowerCase() !== 'downloads')
-                  .map(item => {
-                    const isActive = location.pathname === item.path;
-                    return (
-                      <ButtonBase key={item.name} component={Link} to={item.path} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, px: 2, py: 1, borderRadius: '9px', color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)', transition: 'all 0.3s ease', position: 'relative', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.05)', '& .nav-icon': { animation: 'floatFaster 0.6s ease-in-out infinite', color: '#3b82f6' } } }}>
-                        <Box className="nav-icon" sx={{ display: 'flex', transition: 'all 0.3s ease' }}>{React.cloneElement(item.icon, { sx: { fontSize: '1.2rem' } })}</Box>
-                        <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>{item.name}</Typography>
-                        {isActive && <Box sx={{ position: 'absolute', bottom: -2, height: '3px', width: '60%', bgcolor: '#3b82f6', borderRadius: '10px', animation: 'lineGrow 0.3s forwards' }} />}
-                      </ButtonBase>
-                    );
+                {mainNavItems.map(item => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <ButtonBase key={item.name} component={Link} to={item.path} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, px: 2, py: 1, borderRadius: '9px', color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)', transition: 'all 0.3s ease', position: 'relative', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.05)', '& .nav-icon': { animation: 'floatFaster 0.6s ease-in-out infinite', color: '#3b82f6' } } }}>
+                      <Box className="nav-icon" sx={{ display: 'flex', transition: 'all 0.3s ease' }}>{React.cloneElement(item.icon, { sx: { fontSize: '1.2rem' } })}</Box>
+                      <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>{item.name}</Typography>
+                      {isActive && <Box sx={{ position: 'absolute', bottom: -2, height: '3px', width: '60%', bgcolor: '#3b82f6', borderRadius: '10px', animation: 'lineGrow 0.3s forwards' }} />}
+                    </ButtonBase>
+                  );
                 })}
               </Box>
             )}
@@ -312,10 +356,10 @@ const ClientTopbar = () => {
               </Typography>
             </Box>
             <Divider />
-            
-            <MenuItem onClick={() => { setAnchorEl(null); setIsProfileModalOpen(true); }} sx={{ py: 1 }}>
-              <ListItemIcon><PersonIcon fontSize="small" sx={{ color: 'text.primary' }} /></ListItemIcon>
-              <ListItemText primary="Profile Settings" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem', color: 'text.primary' }} />
+
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/dashboard'); }} sx={{ py: 1 }}>
+              <ListItemIcon><DashboardIcon fontSize="small" sx={{ color: 'text.primary' }} /></ListItemIcon>
+              <ListItemText primary="Dashboard" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem', color: 'text.primary' }} />
             </MenuItem>
 
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/my-downloads'); }} sx={{ py: 1 }}>
@@ -323,15 +367,20 @@ const ClientTopbar = () => {
               <ListItemText primary="My Downloads" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem', color: 'text.primary' }} />
             </MenuItem>
 
+            <MenuItem onClick={() => { setAnchorEl(null); setIsProfileModalOpen(true); }} sx={{ py: 1 }}>
+              <ListItemIcon><PersonIcon fontSize="small" sx={{ color: 'text.primary' }} /></ListItemIcon>
+              <ListItemText primary="Profile Settings" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem', color: 'text.primary' }} />
+            </MenuItem>
+
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/reset-password'); }} sx={{ py: 1 }}>
+              <ListItemIcon><LockReset fontSize="small" sx={{ color: 'text.primary' }} /></ListItemIcon>
+              <ListItemText primary="Change Password" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem', color: 'text.primary' }} />
+            </MenuItem>
+
             <MenuItem onClick={colorMode.toggleColorMode} sx={{ py: 1 }}>
               <ListItemIcon>{theme.palette.mode === 'dark' ? <Brightness7Icon fontSize="small" sx={{ color: 'text.primary' }} /> : <Brightness4Icon fontSize="small" sx={{ color: 'text.primary' }} />}</ListItemIcon>
               <ListItemText primary="Theme Mode" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem', color: 'text.primary' }} />
               <Switch size="small" checked={theme.palette.mode === 'dark'} />
-            </MenuItem>
-            
-            <MenuItem onClick={() => { setAnchorEl(null); navigate('/reset-password'); }} sx={{ py: 1 }}>
-              <ListItemIcon><LockReset fontSize="small" sx={{ color: 'text.primary' }} /></ListItemIcon> 
-              <ListItemText primary="Change Password" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem', color: 'text.primary' }} />
             </MenuItem>
 
             <Divider />
@@ -346,12 +395,11 @@ const ClientTopbar = () => {
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
 
-          {/* Year Level Dropdown */}
-          <FormInput 
-            select 
-            label="Year Level" 
-            value={userData.year_level || ''} 
-            onChange={(e) => setUserData({...userData, year_level: e.target.value})} 
+          <FormInput
+            select
+            label="Year Level"
+            value={userData.year_level || ''}
+            onChange={(e) => setUserData({...userData, year_level: e.target.value})}
             InputProps={{ startAdornment: <AssignmentIndIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
           >
             {yearLevels.map((year) => (
@@ -367,28 +415,28 @@ const ClientTopbar = () => {
           )}
 
           {latestRequest?.status === 'pending' && (
-            <Alert 
-              severity="info" 
-              variant="outlined" 
-              sx={{ 
-                borderRadius: '8px', 
+            <Alert
+              severity="info"
+              variant="outlined"
+              sx={{
+                borderRadius: '8px',
                 alignItems: 'center',
-                '& .MuiAlert-message': { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 } 
+                '& .MuiAlert-message': { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }
               }}
             >
               <Typography variant="body2" sx={{ fontWeight: 700 }}>
                 Request for <b>{latestRequest.requested_role}</b> is pending review.
               </Typography>
-              <Button 
+              <Button
                 size="small"
                 variant="contained"
                 color="error"
                 startIcon={<CancelIcon />}
                 onClick={handleCancelRequest}
                 disabled={loading}
-                sx={{ 
-                  borderRadius: '6px', 
-                  fontSize: '0.75rem', 
+                sx={{
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
                   fontWeight: 700,
                   textTransform: 'none'
                 }}
@@ -401,7 +449,7 @@ const ClientTopbar = () => {
           {!latestRequest || latestRequest?.status !== 'pending' ? (
             <>
               <Divider sx={{ my: 1 }}><Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', px: 1 }}>ROLE REQUEST</Typography></Divider>
-              
+
               <Stack spacing={2}>
                 <FormControl fullWidth variant="outlined" size="small">
                   <InputLabel sx={{ color: 'text.secondary', fontWeight: 600 }}>Request Access Level</InputLabel>

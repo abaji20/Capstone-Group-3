@@ -36,6 +36,7 @@ import PendingUpload from './pages/Admin/PendingUpload';
 import Browse from './pages/Client/Browse';
 import MyDownloads from './pages/Client/MyDownloads';
 import RequestUpload from './pages/Client/RequestUpload';
+import UserDashboard from './pages/Client/UserDashboard'; // ADDED — new User Dashboard page
 
 export const ColorModeContext = createContext({ toggleColorMode: () => {} });
 
@@ -211,6 +212,7 @@ function App() {
                 <Route path="/browse" element={<Browse />} />
                 <Route path="/my-downloads" element={<MyDownloads />} />
                 <Route path="/request-upload" element={<RequestUpload />} />
+                <Route path="/dashboard" element={<UserDashboard />} /> {/* ADDED — new User Dashboard route */}
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/" element={<Navigate to="/browse" />} />
               </Route>
