@@ -24,7 +24,7 @@ const SuperAdminLayout = () => {
           zIndex: theme.zIndex.appBar 
         }}
       >
-        <Toolbar>f
+        <Toolbar>
           <IconButton color="inherit" onClick={handleDrawerToggle} edge="start" sx={{ mr: 2 }}>
             <MenuIcon />
           </IconButton>
@@ -42,6 +42,7 @@ const SuperAdminLayout = () => {
         component="main" 
         sx={{ 
           flexGrow: 1, 
+          minWidth: 0,
           p: { xs: 0, md: 0 }, 
           ml: { md: `${collapsedWidth}px` },
           mt: { xs: 8, md: 0 },

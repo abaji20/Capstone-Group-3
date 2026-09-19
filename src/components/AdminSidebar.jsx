@@ -29,6 +29,18 @@ import glclogdesktop from '../assets/glclogdesktop.png';
 const expandedWidth = 280;
 const collapsedWidth = 85;
 
+// Single source of truth for sidebar state colors (all values were already used in the original file)
+const sidebarColors = {
+  hover: 'rgba(255,255,255,0.08)',
+  active: 'rgba(96,165,250,0.18)',
+  activeBorder: '#60a5fa',
+  activeContent: '#3b82f6',
+  content: '#ffffff',
+  logout: '#ff5252',
+  logoutHover: 'rgba(255,82,82,0.1)',
+};
+
+
 const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   const location = useLocation();
   const theme = useTheme();
@@ -248,6 +260,8 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       onMouseLeave={() => !isMobile && setIsHovered(false)}
       sx={{ 
         height: '100%', 
+        minHeight: 0,
+        boxSizing: 'border-box',
         display: 'flex', 
         flexDirection: 'column', 
         backgroundColor: theme.palette.mode === 'dark' ? '#0f172a' : '#213C51',
@@ -259,7 +273,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         width: isMini ? collapsedWidth : expandedWidth,
         borderRight: '1px solid rgba(255,255,255,0.05)',
         position: 'relative',
-        overflow: 'visible', 
+        overflow: 'hidden', 
       }}
     >
       {/* BRAND SECTION */}
@@ -271,7 +285,8 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         alignItems: 'center',
         justifyContent: 'center',
         borderBottom: '1px solid rgba(255,255,255,0.1)',
-        backgroundColor: 'rgba(15,23,42,0.16)'
+        backgroundColor: 'rgba(15,23,42,0.16)',
+        flexShrink: 0
       }}>
         <Box
           component="img"
@@ -288,7 +303,19 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       </Box>
 
       {/* NAVIGATION */}
-      <List sx={{ px: 1.5, py: 2, flexGrow: 1 }}>
+      <List sx={{ 
+        px: 1.5, 
+        py: 2,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        flex: '1 1 auto',
+        minHeight: 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'rgba(255,255,255,0.25) transparent'
+      }}>
         {navLinks.admin.map((item) => {
           const isActive = location.pathname === item.path;
           
@@ -300,25 +327,27 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
               onClick={() => isMobile && handleDrawerToggle()}
               sx={{ 
                 borderRadius: '10px',
-                py: { xs: 1.2, sm: 1.5, md: 1.8 }, 
+                py: 0,
+                height: '100%',
                 px: { xs: 1.5, sm: 1.8, md: 2 }, 
-                mb: { xs: 1, md: 1.5 },
                 justifyContent: isMini ? 'center' : 'flex-start',
-                background: isActive ? 'rgba(96,165,250,0.18)' : 'transparent',
-                '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.08)' },
+                backgroundColor: isActive ? sidebarColors.active : 'transparent',
+                '&:hover': { backgroundColor: isActive ? sidebarColors.active : sidebarColors.hover },
                 position: 'relative',
                 transition: 'all 0.2s ease',
-                borderLeft: isActive ? '4px solid #60a5fa' : '4px solid transparent',
+                borderLeft: `4px solid ${isActive ? sidebarColors.activeBorder : 'transparent'}`,
               }}
             >
               <ListItemIcon sx={{ 
-                color: isActive ? '#3b82f6' : '#ffffff',
+                color: isActive ? sidebarColors.activeContent : sidebarColors.content,
                 minWidth: isMini ? 0 : 45, 
                 display: 'flex',
                 justifyContent: 'center' 
               }}>
                 {React.isValidElement(item.icon) 
-                  ? React.cloneElement(item.icon, { sx: { fontSize: { xs: 24, sm: 26, md: 28 } } }) 
+                  ? React.cloneElement(item.icon, { sx: { 
+                      fontSize: { xs: 24, sm: 26, md: 28 },
+                    } }) 
                   : null}
               </ListItemIcon>
               {!isMini && (
@@ -327,7 +356,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
                   primaryTypographyProps={{ 
                     fontSize: { xs: '0.95rem', sm: '1rem', md: '1.1rem' }, 
                     fontWeight: isActive ? 500 : 500,
-                    color: isActive ? '#3b82f6' : '#ffffff',
+                    color: isActive ? sidebarColors.activeContent : sidebarColors.content,
                     whiteSpace: 'nowrap'
                   }} 
                 />
@@ -336,7 +365,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           );
 
           return (
-            <ListItem key={item.name} disablePadding>
+            <ListItem key={item.name} disablePadding sx={{ flex: '1 1 0', minHeight: 40, maxHeight: 57, my: 'auto', alignItems: 'stretch' }}>
               {isMini ? (
                 <Tooltip title={item.name} placement="right" arrow>
                   {buttonContent}
@@ -351,6 +380,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       <Box sx={{
         p: 1.5,
         mt: 'auto',
+        flexShrink: 0,
         borderTop: '1px solid rgba(255,255,255,0.12)',
         background: 'rgba(15,23,42,0.28)'
       }}>
@@ -366,12 +396,12 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
               mb: 1,
               borderRadius: '8px',
               cursor: 'pointer',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+              '&:hover': { bgcolor: sidebarColors.hover },
               transition: 'background 0.2s'
             }}
           >
             <ListItemIcon sx={{
-              color: '#ffffff',
+              color: sidebarColors.content,
               minWidth: 40,
               width: 40,
               justifyContent: 'center'
@@ -393,20 +423,26 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
         <ListItemButton 
           onClick={colorMode.toggleColorMode}
-          sx={{ borderRadius: '8px', justifyContent: isMini ? 'center' : 'flex-start', mb: 1 }}
+          sx={{ 
+            borderRadius: '8px', 
+            justifyContent: isMini ? 'center' : 'flex-start', 
+            mb: 1,
+            '&:hover': { backgroundColor: sidebarColors.hover }
+          }}
         >
           <ListItemIcon sx={{ color: isDarkMode ? '#ffea00' : 'rgba(255,255,255,0.7)', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
             {isDarkMode ? <Brightness7Icon fontSize="small" sx={{ color: '#ffea00' }} /> : <Brightness4Icon fontSize="small" />}
           </ListItemIcon>
-          {!isMini && <ListItemText primary="Appearance" primaryTypographyProps={{ fontSize: { xs: '0.8rem', md: '0.85rem' }, color: '#ffffff', whiteSpace: 'nowrap' }} />}
+          {!isMini && <ListItemText primary="Appearance" primaryTypographyProps={{ fontSize: { xs: '0.8rem', md: '0.85rem' }, color: sidebarColors.content, whiteSpace: 'nowrap' }} />}
         </ListItemButton>
 
         <ListItemButton 
           onClick={() => setIsLogoutModalOpen(true)}
           sx={{ 
             borderRadius: '8px', 
-            color: '#ff5252', 
-            justifyContent: isMini ? 'center' : 'flex-start'
+            color: sidebarColors.logout, 
+            justifyContent: isMini ? 'center' : 'flex-start',
+            '&:hover': { bgcolor: sidebarColors.logoutHover }
           }}
         >
           <ListItemIcon sx={{ color: 'inherit', minWidth: isMini ? 0 : 40, justifyContent: 'center' }}>
@@ -417,6 +453,14 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
       </Box>
     </Box>
   );
+
+  // Shared paper styling so the paper never shows its own background or scrollbar behind the gradient
+  const paperBase = {
+    border: 'none',
+    overflow: 'hidden',
+    backgroundColor: isDarkMode ? '#0f172a' : '#213C51',
+    backgroundImage: 'none',
+  };
 
   return (
     <Box component="nav">
@@ -432,7 +476,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         sx={{
           display: { xs: 'block', md: 'none' },
           zIndex: theme.zIndex.drawer + 2, 
-          '& .MuiDrawer-paper': { width: expandedWidth, border: 'none', bgcolor: theme.palette.mode === 'dark' ? '#111827' : '#213C51' },
+          '& .MuiDrawer-paper': { ...paperBase, width: expandedWidth },
         }}
       >
         {drawerContent}
@@ -443,9 +487,8 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         sx={{
           display: { xs: 'none', md: 'block' },
           '& .MuiDrawer-paper': { 
+            ...paperBase,
             width: isMini ? collapsedWidth : expandedWidth, 
-            border: 'none',
-            overflowX: 'hidden',
             transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             zIndex: theme.zIndex.drawer + 1,
           },

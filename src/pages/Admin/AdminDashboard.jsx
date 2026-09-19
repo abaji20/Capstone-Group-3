@@ -387,7 +387,7 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#f8fafc', minHeight: '100vh', pb: 6, width: '100%' }}>
+    <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#ffffff', minHeight: '100vh', pb: 6, width: '100%' }}>
       <Container maxWidth={false} sx={{ mt: { xs: 2, md: 4 }, px: { xs: 2, sm: 3, md: 5 } }}>
         
         {/* Top Header Title & Export Button */}

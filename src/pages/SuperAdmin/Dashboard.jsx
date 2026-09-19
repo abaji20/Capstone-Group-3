@@ -326,7 +326,7 @@ const Dashboard = () => {
 
   const commonPaperStyle = {
     borderRadius: '16px',
-    backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+    backgroundColor: isDarkMode ? '#6b778c' : '#ffffff',
     border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
     color: isDarkMode ? '#f8fafc' : '#1e293b',
     boxShadow: isDarkMode ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(0,0,0,0.03)',
@@ -346,7 +346,7 @@ const Dashboard = () => {
   ];
 
   return (
-    <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#f8fafc', minHeight: '100vh', pb: 6, width: '100%' }}>
+    <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#ffffff', minHeight: '100vh', pb: 6, width: '100%' }}>
       <Container maxWidth={false} sx={{ mt: { xs: 2, md: 4 }, px: { xs: 2, sm: 3, md: 5 } }}>
         
         {/* Top Header Title & Export Button */}

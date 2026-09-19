@@ -74,6 +74,7 @@ const AdminLayout = () => {
         component="main" 
         sx={{ 
           flexGrow: 1, 
+          minWidth: 0,
           p: { xs: 0, md: 0 }, 
           // Always leaves room for the collapsed bar; expanded bar overlaps
           ml: { md: `${collapsedWidth}px` },
