@@ -47,6 +47,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   // MODAL STATES
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
   
   const [initialData, setInitialData] = useState({});
   const [userData, setUserData] = useState({ 
@@ -232,7 +233,10 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   };
 
   const handleConfirmLogout = async () => {
+    setLogoutLoading(true);
     await supabase.auth.signOut();
+    setLogoutLoading(false);
+    setIsLogoutModalOpen(false);
     navigate('/login');
   };
 
@@ -450,22 +454,24 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         {drawerContent}
       </Drawer>
 
-      {/* MATCHED LOGOUT CONFIRMATION DIALOG DESIGN */}
+      {/* LOGOUT CONFIRMATION DIALOG — theme-aware (light: white card, dark: slate card) */}
       <Dialog
         open={isLogoutModalOpen}
-        onClose={() => setIsLogoutModalOpen(false)}
+        onClose={() => !logoutLoading && setIsLogoutModalOpen(false)}
         PaperProps={{
           elevation: 12,
           sx: {
-            backgroundColor: '#434e5e',
-            color: '#ffffff',
+            backgroundColor: isDarkMode ? '#434e5e' : '#ffffff',
+            color: isDarkMode ? '#ffffff' : '#111827',
             borderRadius: '24px',
             maxWidth: 480,
             width: '100%',
             px: 3.5,
             pt: 3.5,
             pb: 2.5,
-            boxShadow: '0px 10px 30px rgba(0, 0, 0, 0.35)',
+            boxShadow: isDarkMode
+              ? '0px 10px 30px rgba(0, 0, 0, 0.35)'
+              : '0px 10px 30px rgba(0, 0, 0, 0.15)',
           }
         }}
         BackdropProps={{
@@ -478,8 +484,8 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           <Typography 
             variant="h5" 
             sx={{ 
-              fontWeight: 500, 
-              color: '#ffffff', 
+              fontWeight: isDarkMode ? 500 : 800,
+              color: isDarkMode ? '#ffffff' : '#111827', 
               fontSize: '1.65rem',
               letterSpacing: '-0.3px',
               mb: 1
@@ -491,7 +497,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           <Typography 
             variant="body1" 
             sx={{ 
-              color: '#bdc5d1', 
+              color: isDarkMode ? '#bdc5d1' : '#6b7280', 
               fontSize: '1.05rem',
               fontWeight: 400,
               lineHeight: 1.4
@@ -511,17 +517,18 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         >
           <Button
             onClick={() => setIsLogoutModalOpen(false)}
+            disabled={logoutLoading}
             sx={{
               textTransform: 'none',
-              fontWeight: 600,
+              fontWeight: 700,
               fontSize: '1rem',
-              color: '#d1d5db',
+              color: isDarkMode ? '#d1d5db' : '#6b7280',
               px: 2,
               py: 1,
               borderRadius: '8px',
               '&:hover': {
-                backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                color: '#ffffff'
+                backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0,0,0,0.04)',
+                color: isDarkMode ? '#ffffff' : '#111827'
               }
             }}
           >
@@ -530,15 +537,18 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
           <Button
             onClick={handleConfirmLogout}
+            disabled={logoutLoading}
+            variant="contained"
+            disableElevation
             sx={{
               textTransform: 'none',
-              fontWeight: 600,
+              fontWeight: 700,
               fontSize: '1rem',
               backgroundColor: '#ff4d39',
               color: '#ffffff',
               px: 3,
               py: 1,
-              borderRadius: '16px',
+              borderRadius: isDarkMode ? '16px' : '8px',
               boxShadow: 'none',
               '&:hover': {
                 backgroundColor: '#e03e2b',
@@ -546,7 +556,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
               }
             }}
           >
-            Logout
+            {logoutLoading ? 'Logging out...' : 'Logout'}
           </Button>
         </DialogActions>
       </Dialog>

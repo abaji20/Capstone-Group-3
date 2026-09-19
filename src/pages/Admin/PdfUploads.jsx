@@ -458,7 +458,7 @@ const PdfUploads = () => {
                           <Avatar 
                             variant="rounded" 
                             src={item.image_url ? getImageUrl(item.image_url) : glclogo} 
-                            sx={{ width: 45, height: 50, bgcolor: cardBg }}
+                            sx={{ width: 50, height: 50, bgcolor: cardBg }}
                           >
                             {!item.image_url && <FontAwesomeIcon icon={faFileAlt} style={{ color: '#3b82f6' }} />}
                           </Avatar>

@@ -2,13 +2,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Container, Card, CardContent, Typography, Avatar, Chip,
-  CircularProgress, useTheme, useMediaQuery, Stack, Divider, Button, Tooltip, IconButton
+  CircularProgress, useTheme, useMediaQuery, Stack, Divider, Button, Tooltip, IconButton,
+  Select, MenuItem
 } from '@mui/material';
+import { LineChart } from '@mui/x-charts/LineChart';
 import DownloadIcon from '@mui/icons-material/Download';
 import PublishIcon from '@mui/icons-material/Publish';
-import PendingActionsIcon from '@mui/icons-material/PendingActions';
-import HistoryIcon from '@mui/icons-material/History';
-import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
@@ -45,6 +44,9 @@ const UserDashboard = () => {
   const isDarkMode = theme.palette.mode === 'dark';
   const isXs = useMediaQuery(theme.breakpoints.down('sm'));
 
+  const currentYear = new Date().getFullYear();
+  const firstDownloadYear = 2026;
+
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
   const [fullName, setFullName] = useState('');
@@ -53,6 +55,12 @@ const UserDashboard = () => {
     totalRequests: 0,
     recentPendingRequests: [],
   });
+
+  // ── Downloads Graph (user-specific) ─────────────────────────────────────
+  const [userDownloadRecords, setUserDownloadRecords] = useState([]);
+  const [downloadYear, setDownloadYear] = useState(currentYear);
+  const [downloadYears, setDownloadYears] = useState([currentYear]);
+  const [monthlyDownloads, setMonthlyDownloads] = useState(Array(12).fill(0));
 
   // ── Recent Downloads (paginated) ───────────────────────────────────────
   const [recentDownloads, setRecentDownloads] = useState([]);
@@ -148,6 +156,7 @@ const UserDashboard = () => {
           downloadsCountRes,
           requestsCountRes,
           recentPendingRes,
+          userDownloadRecordsRes,
         ] = await Promise.all([
           supabase
             .from('profiles')
@@ -173,6 +182,13 @@ const UserDashboard = () => {
             .eq('status', 'pending')
             .order('created_at', { ascending: false })
             .limit(5),
+
+          // Raw download timestamps for THIS user only, used to build the
+          // "My Downloads" chart below. Never pulls other accounts' data.
+          supabase
+            .from('downloads')
+            .select('downloaded_at')
+            .eq('user_id', user.id),
         ]);
 
         setFullName(profileRes.data?.full_name || '');
@@ -181,6 +197,7 @@ const UserDashboard = () => {
           totalRequests: requestsCountRes.count || 0,
           recentPendingRequests: recentPendingRes.data || [],
         });
+        setUserDownloadRecords(userDownloadRecordsRes.data || []);
 
         // Kick off page 0 of both paginated shelves in parallel.
         await Promise.all([
@@ -197,6 +214,30 @@ const UserDashboard = () => {
     fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Recompute the monthly chart data whenever the selected year changes, or
+  // once the user's raw download records arrive. Purely client-side — no
+  // refetch needed since we already have every download timestamp for this
+  // user.
+  useEffect(() => {
+    const yearsWithDownloads = userDownloadRecords
+      .filter((record) => record.downloaded_at)
+      .map((record) => new Date(record.downloaded_at).getFullYear())
+      .filter((year) => year >= firstDownloadYear);
+    setDownloadYears([...new Set([currentYear, ...yearsWithDownloads])].sort((a, b) => b - a));
+
+    const monthsCount = Array(12).fill(0);
+    userDownloadRecords.forEach((record) => {
+      if (record.downloaded_at) {
+        const date = new Date(record.downloaded_at);
+        if (date.getFullYear() === Number(downloadYear)) {
+          monthsCount[date.getMonth()] += 1;
+        }
+      }
+    });
+    setMonthlyDownloads(monthsCount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userDownloadRecords, downloadYear]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -239,8 +280,9 @@ const UserDashboard = () => {
     '& > div > .MuiCard-root': { width: '100%', minWidth: 0, maxWidth: 'none' },
   };
 
-  // Section header with an optional "View all" on the right.
-  const sectionHeader = (icon, title, onViewAll, count) => (
+  // Section header with an optional "View all" on the right. Icon-free —
+  // just the title, an optional count chip, and the view-all action.
+  const sectionHeader = (title, onViewAll, count) => (
     <>
       <Stack
         direction="row"
@@ -249,7 +291,6 @@ const UserDashboard = () => {
         sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}
       >
         <Stack direction="row" alignItems="center" spacing={1}>
-          {icon}
           <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>{title}</Typography>
           {count > 0 && (
             <Chip
@@ -382,7 +423,7 @@ const UserDashboard = () => {
         >
           <CardContent sx={{ py: { xs: 3, md: 4 } }}>
             <Typography variant="h5" sx={{ fontWeight: 900, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
-              Welcome back{fullName ? `, ${fullName}` : ''}!
+             WELCOME BACK{fullName ? `, ${fullName.toUpperCase()}` : ''}
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.85, mt: 0.5 }}>
               Here's a summary of your activity on the library.
@@ -418,61 +459,57 @@ const UserDashboard = () => {
           ))}
         </Box>
 
-        {/* ── Recent Downloads — same card shelf as New in the Library ─────── */}
-        <Card sx={{ borderRadius: 2, boxShadow: 2, width: '100%', mb: { xs: 2, md: 3 } }}>
-          <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-            {sectionHeader(
-              <HistoryIcon sx={{ color: '#3b82f6' }} />,
-              'Recent Downloads',
-              downloadsTotal > 0 ? () => navigate('/my-downloads') : null,
-            )}
-
-            {recentDownloads.length > 0 ? (
-              <>
-                <Box sx={{ ...cardGridSx, opacity: downloadsLoading ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
-                  {recentDownloads.map((item) => (
-                    <Box key={item.id} sx={{ display: 'flex', minWidth: 0, flexDirection: 'column' }}>
-                      <PdfCard pdf={item} variant="small" />
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ mt: 0.75, textAlign: 'center', fontWeight: 600 }}
-                      >
-                        Downloaded {timeAgo(item.downloaded_at)}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Box>
-                <Pager
-                  page={downloadsPage}
-                  total={downloadsTotal}
-                  loading={downloadsLoading}
-                  onPrev={() => fetchRecentDownloads(userId, downloadsPage - 1)}
-                  onNext={() => fetchRecentDownloads(userId, downloadsPage + 1)}
-                />
-              </>
-            ) : (
-              <Box sx={{ py: 5, textAlign: 'center' }}>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                  Nothing downloaded yet
-                </Typography>
-                <Button
-                  size="small"
-                  onClick={() => navigate('/browse')}
-                  sx={{ mt: 1, fontWeight: 700, textTransform: 'none' }}
-                >
-                  Browse the library
-                </Button>
-              </Box>
-            )}
-          </CardContent>
+        {/* ── My Downloads Graph — user-specific, styled after the SuperAdmin
+             dashboard's "Download Overview" chart, but scoped to this
+             account's own download activity only ────────────────────────── */}
+        <Card sx={{ borderRadius: 2, boxShadow: 2, width: '100%', mb: { xs: 2, md: 3 }, overflow: 'hidden' }}>
+          <Box sx={{
+            background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)',
+            px: 3,
+            py: 2.5,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 2,
+          }}>
+            <Typography variant="subtitle1" fontWeight="800" sx={{ color: '#ffffff', letterSpacing: 0.5 }}>
+              MY DOWNLOAD OVERVIEW
+            </Typography>
+            <Select
+              value={downloadYear}
+              onChange={(e) => setDownloadYear(e.target.value)}
+              size="small"
+              sx={{
+                color: '#ffffff',
+                bgcolor: 'rgba(255,255,255,0.1)',
+                '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.2)' },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#ffffff' },
+                '.MuiSvgIcon-root': { color: '#ffffff' },
+                fontWeight: 700,
+                borderRadius: '8px',
+                height: 38,
+              }}
+            >
+              {downloadYears.map((year) => (
+                <MenuItem key={year} value={year}>Year {year}</MenuItem>
+              ))}
+            </Select>
+          </Box>
+          <Box sx={{ width: '100%', height: 300, p: { xs: 1, sm: 2 } }}>
+            <LineChart
+              xAxis={[{ scaleType: 'point', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] }]}
+              series={[{ data: monthlyDownloads, color: '#3b82f6', area: true, showMark: true, label: 'My Downloads' }]}
+              height={280}
+              margin={{ top: 20, bottom: 25, left: 45, right: 25 }}
+            />
+          </Box>
         </Card>
 
         {/* ── Recent Pending Requests ──────────────────────────────────────── */}
         <Card sx={{ borderRadius: 2, boxShadow: 2, width: '100%', mb: { xs: 2, md: 3 } }}>
           <CardContent sx={{ p: { xs: 2, md: 3 } }}>
             {sectionHeader(
-              <PendingActionsIcon sx={{ color: '#f59e0b' }} />,
               'Recent Pending Requests',
               stats.recentPendingRequests.length > 0 ? () => navigate('/request-upload') : null,
               stats.recentPendingRequests.length,
@@ -644,11 +681,59 @@ const UserDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* ── Recent Downloads — same card shelf as New in the Library ─────── */}
+        <Card sx={{ borderRadius: 2, boxShadow: 2, width: '100%', mb: { xs: 2, md: 3 } }}>
+          <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+            {sectionHeader(
+              'Recent Downloads',
+              downloadsTotal > 0 ? () => navigate('/my-downloads') : null,
+            )}
+
+            {recentDownloads.length > 0 ? (
+              <>
+                <Box sx={{ ...cardGridSx, opacity: downloadsLoading ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+                  {recentDownloads.map((item) => (
+                    <Box key={item.id} sx={{ display: 'flex', minWidth: 0, flexDirection: 'column' }}>
+                      <PdfCard pdf={item} variant="small" />
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ mt: 0.75, textAlign: 'center', fontWeight: 600 }}
+                      >
+                        Downloaded {timeAgo(item.downloaded_at)}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+                <Pager
+                  page={downloadsPage}
+                  total={downloadsTotal}
+                  loading={downloadsLoading}
+                  onPrev={() => fetchRecentDownloads(userId, downloadsPage - 1)}
+                  onNext={() => fetchRecentDownloads(userId, downloadsPage + 1)}
+                />
+              </>
+            ) : (
+              <Box sx={{ py: 5, textAlign: 'center' }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                  Nothing downloaded yet
+                </Typography>
+                <Button
+                  size="small"
+                  onClick={() => navigate('/browse')}
+                  sx={{ mt: 1, fontWeight: 700, textTransform: 'none' }}
+                >
+                  Browse the library
+                </Button>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+
         {/* ── New in the Library ───────────────────────────────────────────── */}
         <Card sx={{ borderRadius: 2, boxShadow: 2 }}>
           <CardContent sx={{ p: { xs: 2, md: 3 } }}>
             {sectionHeader(
-              <AutoStoriesIcon sx={{ color: '#213C51' }} />,
               'New in the Library',
               () => navigate('/browse'),
             )}

@@ -21,6 +21,7 @@ export const navLinks = {
     { name: 'Archived', path: '/archived', icon: <ArchiveIcon /> },
   ],
   admin: [
+    { name: 'Dashboard', path: '/admin-dashboard', icon: <DashboardIcon /> },
     { name: 'Upload PDFs', path: '/upload', icon: <UploadFileIcon /> },
     { name: 'Update PDFs', path: '/edit', icon: <EditNoteIcon /> },
     { name: 'Manage Users', path: '/admin-manage-accounts', icon: <PeopleIcon /> },

@@ -34,30 +34,33 @@ const PendingActions = () => {
   }, []);
 
   const fetchPendingRequests = async () => {
-    setLoading(true);
-    
-    // Get current user to filter logs
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (user) {
-      const { data, error } = await supabase
-        .from('delete_requests')
-        .select(`id, reason, status, created_at, remarks, pdfs(title)`) // Added remarks
-        .eq('requested_by', user.id)
-        .order('created_at', { ascending: false });
+  setLoading(true);
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  console.log("Current user:", user); // ADD THIS
 
-      if (error) {
-        console.error("Error fetching:", error);
-      } else {
-        setRequests(data.map(req => ({
-          ...req,
-          status: req.status ? req.status.toUpperCase() : 'PENDING'
-        })));
-      }
+  if (user) {
+    const { data, error } = await supabase
+      .from('delete_requests')
+      .select(`id, reason, status, created_at, remarks, pdfs(title)`)
+      .eq('requested_by', user.id)
+      .order('created_at', { ascending: false });
+
+    console.log("Query result:", { data, error }); // ADD THIS
+
+    if (error) {
+      console.error("Error fetching:", error);
+    } else {
+      setRequests(data.map(req => ({
+        ...req,
+        status: req.status ? req.status.toUpperCase() : 'PENDING'
+      })));
     }
-    setLoading(false);
-  };
-
+  } else {
+    console.log("No user found — auth session missing?"); // ADD THIS
+  }
+  setLoading(false);
+};
   const handleCancelRequest = async (id) => {
     const { error } = await supabase
       .from('delete_requests')

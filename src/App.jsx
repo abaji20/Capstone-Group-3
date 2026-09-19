@@ -32,6 +32,7 @@ import PendingActions from './pages/Admin/PendingActions';
 import AdminManageAccount from './pages/Admin/AdminManageAccount';
 import AdminLogs from './pages/Admin/AdminLogs';
 import PendingUpload from './pages/Admin/PendingUpload';
+import AdminDashboard from './pages/Admin/AdminDashboard'; // ADDED — new Admin Dashboard page
 
 import Browse from './pages/Client/Browse';
 import MyDownloads from './pages/Client/MyDownloads';
@@ -197,13 +198,14 @@ function App() {
 
             {role === 'admin' && (
               <Route element={<AdminLayout />}>
+                <Route path="/admin-dashboard" element={<AdminDashboard />} /> 
                 <Route path="/upload" element={<PdfUploads />} />
                 <Route path="/edit" element={<EditPDFs />} />
                 <Route path="/admin-manage-accounts" element={<AdminManageAccount />} />
                 <Route path="/admin-logs" element={<AdminLogs />} />
                 <Route path="/pending-upload" element={<PendingUpload />} />
                 <Route path="/pending" element={<PendingActions />} />
-                <Route path="/" element={<Navigate to="/upload" />} />  
+                <Route path="/" element={<Navigate to="/admin-dashboard" />} />  
               </Route>
             )}
 

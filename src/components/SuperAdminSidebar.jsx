@@ -422,20 +422,22 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
         {drawerContent}
       </Drawer>
 
-      {/* MATCHED LOGOUT CONFIRMATION DIALOG */}
+      {/* LOGOUT CONFIRMATION DIALOG — theme-aware (light: white card, dark: slate card) */}
       <Dialog
         open={isLogoutModalOpen}
         onClose={() => !logoutLoading && setIsLogoutModalOpen(false)}
         PaperProps={{
           sx: {
             borderRadius: '18px',
-            bgcolor: '#424d5d',
-            color: '#ffffff',
+            bgcolor: isDarkMode ? '#424d5d' : '#ffffff',
+            color: isDarkMode ? '#ffffff' : '#111827',
             px: 2,
             py: 2,
             width: '100%',
             minWidth: 100,
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)'
+            boxShadow: isDarkMode
+              ? '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)'
+              : '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.08)'
           }
         }}
       >
@@ -443,10 +445,10 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           <Typography 
             variant="h3" 
             sx={{ 
-              fontWeight: 400, 
-              color: '#ffffff', 
+              fontWeight: isDarkMode ? 400 : 800,
+              color: isDarkMode ? '#ffffff' : '#111827', 
               letterSpacing: '-0.02em',
-              fontSize: '1.65rem'
+              fontSize: '1.5rem'
             }}
           >
             Confirm Logout
@@ -457,7 +459,7 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           <Typography 
             variant="body1" 
             sx={{ 
-              color: '#d1d5db', 
+              color: isDarkMode ? '#d1d5db' : '#6b7280', 
               fontWeight: 400,
               fontSize: '1.05rem',
               lineHeight: 1.4
@@ -473,14 +475,14 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
             disabled={logoutLoading}
             disableRipple
             sx={{
-              fontWeight: 600,
-              color: '#cbd5e1',
+              fontWeight: 700,
+              color: isDarkMode ? '#cbd5e1' : '#6b7280',
               textTransform: 'none',
               fontSize: '1rem',
               px: 1.5,
               '&:hover': {
                 bgcolor: 'transparent',
-                color: '#ffffff'
+                color: isDarkMode ? '#ffffff' : '#111827'
               }
             }}
           >
@@ -490,12 +492,13 @@ const SuperAdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
             variant="contained"
             onClick={handleConfirmLogout}
             disabled={logoutLoading}
+            disableElevation
             sx={{
               bgcolor: '#ff4d39',
               color: '#ffffff',
-              fontWeight: 500,
+              fontWeight: isDarkMode ? 500 : 700,
               textTransform: 'none',
-              borderRadius: '12px',
+              borderRadius: isDarkMode ? '12px' : '8px',
               fontSize: '1rem',
               px: 3,
               py: 1,
