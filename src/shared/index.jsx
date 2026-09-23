@@ -3,6 +3,7 @@ export { default as ActionModal } from './ActionModal';
 export { default as EmptyState } from './EmptyState';
 export { default as FormInput } from './FormInput';
 export { default as PdfCard } from './PdfCard';
+export { default as BookShelf } from './BookShelf';
 export { default as PrimaryButton } from './PrimaryButton';
 export { default as DeleteButton } from './DeleteButton';
 export { default as SearchBar } from './SearchBar';

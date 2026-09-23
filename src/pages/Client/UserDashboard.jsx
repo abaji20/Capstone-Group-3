@@ -2,23 +2,31 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Container, Card, CardContent, Typography, Avatar, Chip,
-  CircularProgress, useTheme, useMediaQuery, Stack, Divider, Button, Tooltip, IconButton,
+  CircularProgress, useTheme, Stack, Divider, Button, Tooltip,
   Select, MenuItem
 } from '@mui/material';
 import { LineChart } from '@mui/x-charts/LineChart';
+import { PieChart } from '@mui/x-charts/PieChart';
+import { BarChart } from '@mui/x-charts/BarChart';
 import DownloadIcon from '@mui/icons-material/Download';
 import PublishIcon from '@mui/icons-material/Publish';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import CategoryIcon from '@mui/icons-material/Category';
+import PersonIcon from '@mui/icons-material/Person';
 import { supabase } from '../../supabaseClient';
-import { PdfCard } from '../../shared';
+import { BookShelf } from '../../shared';
 import glclogo from '../../assets/glclogo.png';
+import clientbackground from '../../assets/clientbackground.png';
 
-// How many cards to show per page in the "Recent Downloads" and
+// How many books to load per page in the "Recent Download" and
 // "New in the Library" shelves.
 const PAGE_SIZE = 8;
+
+// Palette used to color the Favorite Genre donut slices. Reused cyclically
+// if the user has more distinct genres than colors.
+const GENRE_COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ec4899', '#06b6d4', '#ef4444', '#84cc16'];
 
 // ── Image resolution ────────────────────────────────────────────────────
 const getStorageImageUrl = (imageUrl) => {
@@ -42,7 +50,6 @@ const UserDashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const isDarkMode = theme.palette.mode === 'dark';
-  const isXs = useMediaQuery(theme.breakpoints.down('sm'));
 
   const currentYear = new Date().getFullYear();
   const firstDownloadYear = 2026;
@@ -62,7 +69,7 @@ const UserDashboard = () => {
   const [downloadYears, setDownloadYears] = useState([currentYear]);
   const [monthlyDownloads, setMonthlyDownloads] = useState(Array(12).fill(0));
 
-  // ── Recent Downloads (paginated) ───────────────────────────────────────
+  // ── Recent Download (paginated) ─────────────────────────────────────────
   const [recentDownloads, setRecentDownloads] = useState([]);
   const [downloadsPage, setDownloadsPage] = useState(0);
   const [downloadsTotal, setDownloadsTotal] = useState(0);
@@ -74,7 +81,13 @@ const UserDashboard = () => {
   const [libraryTotal, setLibraryTotal] = useState(0);
   const [libraryLoading, setLibraryLoading] = useState(false);
 
-  // Fetch one page of "Recent Downloads". Dedup (one card per material) is
+  // ── Favorite Genre / Favorite Author ────────────────────────────────────
+  // Derived from this user's own download history joined against pdfs.genre
+  // and pdfs.author (both columns already exist on the pdfs table).
+  const [genreStats, setGenreStats] = useState([]); // [{ genre, count }] desc
+  const [authorStats, setAuthorStats] = useState([]); // [{ author, count }] desc
+
+  // Fetch one page of "Recent Download". Dedup (one card per material) is
   // scoped to this page only, so paging keeps the query itself simple and
   // fast — a title could technically reappear on a later page if it was
   // downloaded again further back in time.
@@ -138,6 +151,45 @@ const UserDashboard = () => {
     }
   }, []);
 
+  // Pull every download this user has ever made, joined against the genre
+  // and author of the material they downloaded, and aggregate counts on the
+  // client. This is intentionally separate from the paginated "Recent
+  // Download" query above, since favorites must reflect the user's FULL
+  // history, not just the current page.
+  const fetchPreferenceStats = useCallback(async (uid) => {
+    try {
+      const { data, error } = await supabase
+        .from('downloads')
+        .select('pdfs ( genre, author )')
+        .eq('user_id', uid);
+
+      if (error) throw error;
+
+      const genreCounts = {};
+      const authorCounts = {};
+
+      (data || []).forEach((row) => {
+        const genre = row.pdfs?.genre;
+        const author = row.pdfs?.author;
+        if (genre) genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+        if (author) authorCounts[author] = (authorCounts[author] || 0) + 1;
+      });
+
+      setGenreStats(
+        Object.entries(genreCounts)
+          .map(([genre, count]) => ({ genre, count }))
+          .sort((a, b) => b.count - a.count)
+      );
+      setAuthorStats(
+        Object.entries(authorCounts)
+          .map(([author, count]) => ({ author, count }))
+          .sort((a, b) => b.count - a.count)
+      );
+    } catch (err) {
+      console.error('Error loading favorite genre/author stats:', err);
+    }
+  }, []);
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       setLoading(true);
@@ -174,17 +226,17 @@ const UserDashboard = () => {
             .select('*', { count: 'exact', head: true })
             .eq('client_id', user.id),
 
-          // Pending requests — now includes the reason and admin remarks
+          // Pending requests — includes the reason and admin remarks
           supabase
             .from('upload_requests')
             .select('id, title, author, category, status, created_at, upload_reason, remarks, cover_url')
             .eq('client_id', user.id)
             .eq('status', 'pending')
             .order('created_at', { ascending: false })
-            .limit(5),
+            .limit(6),
 
           // Raw download timestamps for THIS user only, used to build the
-          // "My Downloads" chart below. Never pulls other accounts' data.
+          // "Download Overview" chart below. Never pulls other accounts' data.
           supabase
             .from('downloads')
             .select('downloaded_at')
@@ -199,10 +251,12 @@ const UserDashboard = () => {
         });
         setUserDownloadRecords(userDownloadRecordsRes.data || []);
 
-        // Kick off page 0 of both paginated shelves in parallel.
+        // Kick off page 0 of both paginated shelves, plus the favorite
+        // genre/author aggregation, in parallel.
         await Promise.all([
           fetchRecentDownloads(user.id, 0),
           fetchNewInLibrary(0),
+          fetchPreferenceStats(user.id),
         ]);
       } catch (err) {
         console.error('Error loading dashboard data:', err);
@@ -254,31 +308,7 @@ const UserDashboard = () => {
     );
   }
 
-  const statCards = [
-    { label: 'Total Downloads', value: stats.totalDownloads, icon: <DownloadIcon />, color: '#3b82f6' },
-    { label: 'Total Material Requests', value: stats.totalRequests, icon: <PublishIcon />, color: '#f59e0b' },
-  ];
-
-  const equalCardSx = { borderRadius: 2, boxShadow: 2, height: '100%', minHeight: 120, display: 'flex' };
-  const equalCardContentSx = {
-    display: 'flex', alignItems: 'center', gap: 2, width: '100%',
-    p: { xs: 2, md: 2.5 }, '&:last-child': { pb: { xs: 2, md: 2.5 } },
-  };
-
-  // Shared card-grid used by both "Recent Downloads" and "New in the Library",
-  // so the two sections read as the same kind of shelf.
-  const cardGridSx = {
-    display: 'grid',
-    gap: { xs: 1.25, sm: 1.5, md: 2 },
-    gridTemplateColumns: {
-      xs: 'repeat(3, minmax(0, 1fr))',
-      sm: 'repeat(4, minmax(0, 1fr))',
-      md: 'repeat(6, minmax(0, 1fr))',
-      lg: 'repeat(8, minmax(0, 1fr))',
-    },
-    alignItems: 'stretch',
-    '& > div > .MuiCard-root': { width: '100%', minWidth: 0, maxWidth: 'none' },
-  };
+  const cardSx = { borderRadius: 2, boxShadow: 2 };
 
   // Section header with an optional "View all" on the right. Icon-free —
   // just the title, an optional count chip, and the view-all action.
@@ -318,49 +348,32 @@ const UserDashboard = () => {
     </>
   );
 
-  // Prev/Next pager shown under a paginated shelf. `total` is the exact row
-  // count from the query so the Next button disables itself correctly on
-  // the last page.
-  const Pager = ({ page, total, loading: pagerLoading, onPrev, onNext }) => {
-    const start = total === 0 ? 0 : page * PAGE_SIZE + 1;
-    const end = Math.min((page + 1) * PAGE_SIZE, total);
-    const hasPrev = page > 0;
-    const hasNext = end < total;
-
-    if (total <= PAGE_SIZE && !hasPrev) return null;
-
-    return (
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        sx={{ mt: 2, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}
-      >
-        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-          {total > 0 ? `${start}–${end} of ${total}` : ''}
-        </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
-          {pagerLoading && <CircularProgress size={16} thickness={5} />}
-          <IconButton
-            size="small"
-            onClick={onPrev}
-            disabled={!hasPrev || pagerLoading}
-            sx={{ border: '1px solid', borderColor: 'divider' }}
-          >
-            <ArrowBackIcon fontSize="small" />
-          </IconButton>
-          <IconButton
-            size="small"
-            onClick={onNext}
-            disabled={!hasNext || pagerLoading}
-            sx={{ border: '1px solid', borderColor: 'divider' }}
-          >
-            <ArrowForwardIcon fontSize="small" />
-          </IconButton>
-        </Stack>
-      </Stack>
-    );
-  };
+  // A single ring in the "Your Goals" card. The ring is a full, solid circle
+  // (there is no target to measure progress against) — it's a stat badge,
+  // not a percentage claim, so the value shown is always the real count.
+  const GoalRing = ({ value, label, color, icon }) => (
+    <Stack alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+        <CircularProgress
+          variant="determinate"
+          value={100}
+          size={92}
+          thickness={4}
+          sx={{ color, '& .MuiCircularProgress-circle': { strokeLinecap: 'round' } }}
+        />
+        <Box
+          sx={{
+            position: 'absolute', top: 0, left: 0, bottom: 0, right: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {icon}
+          <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.1 }}>{value}</Typography>
+        </Box>
+      </Box>
+      <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'center' }}>{label}</Typography>
+    </Stack>
+  );
 
   // ── Pending request row pieces ─────────────────────────────────────────
   const pendingColumns = {
@@ -410,6 +423,22 @@ const UserDashboard = () => {
     overflow: 'hidden',
   };
 
+  // Top 6 genres get a donut slice; the rest are still counted in
+  // genreStats but not charted, to keep the legend readable.
+  const topGenres = genreStats.slice(0, 6).map((g, i) => ({
+    id: g.genre,
+    value: g.count,
+    label: g.genre,
+    color: GENRE_COLORS[i % GENRE_COLORS.length],
+  }));
+
+  // Top 6 authors for the Favorite Author bar chart, with long names
+  // truncated so the y-axis labels don't overrun the card.
+  const topAuthors = authorStats.slice(0, 6).map((a) => ({
+    author: a.author.length > 18 ? `${a.author.slice(0, 18)}…` : a.author,
+    count: a.count,
+  }));
+
   return (
     <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#f8fafc', minHeight: '100vh', width: '100%', pb: 6 }}>
       <Container maxWidth={false} sx={{ mt: { xs: 2, md: 4 }, px: { xs: 2, sm: 3, md: 5 } }}>
@@ -418,348 +447,417 @@ const UserDashboard = () => {
         <Card
           sx={{
             borderRadius: 2, mb: 3, color: '#fff', boxShadow: 3,
-            background: 'linear-gradient(135deg, #213C51 0%, #3b5f80 100%)',
+            position: 'relative',
+            overflow: 'hidden',
+            backgroundImage: `url(${clientbackground})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
           }}
         >
-          <CardContent sx={{ py: { xs: 3, md: 4 } }}>
+          {/* Dark gradient overlay so text stays readable over the photo */}
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              background: 'linear-gradient(135deg, rgba(33,60,81,0.88) 0%, rgba(15,23,42,0.55) 100%)',
+            }}
+          />
+          <CardContent sx={{ py: { xs: 3, md: 4 }, position: 'relative', zIndex: 1 }}>
             <Typography variant="h5" sx={{ fontWeight: 900, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
-             WELCOME BACK{fullName ? `, ${fullName.toUpperCase()}` : ''}
+              Welcome back{fullName ? `, ${fullName}` : ''}
             </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.85, mt: 0.5 }}>
+            <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>
               Here's a summary of your activity on the library.
             </Typography>
           </CardContent>
         </Card>
 
-        {/* Stat cards */}
+        {/* ── Two-column dashboard body ──────────────────────────────────────
+             Desktop/laptop: Your Goals / Recent Pending / Download Overview
+             on the left, Recent Download / Favorite Genre / Favorite Author
+             on the right. Tablet/mobile: everything stacks into one column,
+             in the same top-to-bottom order. ────────────────────────────── */}
         <Box
           sx={{
             display: 'grid',
             gap: { xs: 2, md: 3 },
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
-            mb: 3,
+            gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+            alignItems: 'stretch',
           }}
         >
-          {statCards.map((card) => (
-            <Card key={card.label} sx={equalCardSx}>
-              <CardContent sx={equalCardContentSx}>
-                <Avatar sx={{ bgcolor: card.color, width: 56, height: 56, flexShrink: 0 }}>
-                  {card.icon}
-                </Avatar>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="h4" sx={{ fontWeight: 900, lineHeight: 1.1, fontSize: { xs: '1.5rem', md: '2rem' } }}>
-                    {card.value}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }} noWrap title={card.label}>
-                    {card.label}
-                  </Typography>
-                </Box>
+          {/* ── LEFT COLUMN ────────────────────────────────────────────── */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 3 }, minWidth: 0 }}>
+
+            {/* Your Goals */}
+            <Card sx={cardSx}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                {sectionHeader('Your Goals')}
+                <Stack direction="row" spacing={2} sx={{ py: 1 }}>
+                  <GoalRing
+                    value={stats.totalDownloads}
+                    label="Total Downloads"
+                    color="#3b82f6"
+                    icon={<DownloadIcon sx={{ fontSize: 18, color: '#3b82f6' }} />}
+                  />
+                  <GoalRing
+                    value={stats.totalRequests}
+                    label="Total Material Requests"
+                    color="#f59e0b"
+                    icon={<PublishIcon sx={{ fontSize: 18, color: '#f59e0b' }} />}
+                  />
+                </Stack>
               </CardContent>
             </Card>
-          ))}
-        </Box>
 
-        {/* ── My Downloads Graph — user-specific, styled after the SuperAdmin
-             dashboard's "Download Overview" chart, but scoped to this
-             account's own download activity only ────────────────────────── */}
-        <Card sx={{ borderRadius: 2, boxShadow: 2, width: '100%', mb: { xs: 2, md: 3 }, overflow: 'hidden' }}>
-          <Box sx={{
-            background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)',
-            px: 3,
-            py: 2.5,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 2,
-          }}>
-            <Typography variant="subtitle1" fontWeight="800" sx={{ color: '#ffffff', letterSpacing: 0.5 }}>
-              MY DOWNLOAD OVERVIEW
-            </Typography>
-            <Select
-              value={downloadYear}
-              onChange={(e) => setDownloadYear(e.target.value)}
-              size="small"
-              sx={{
-                color: '#ffffff',
-                bgcolor: 'rgba(255,255,255,0.1)',
-                '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.2)' },
-                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#ffffff' },
-                '.MuiSvgIcon-root': { color: '#ffffff' },
-                fontWeight: 700,
-                borderRadius: '8px',
-                height: 38,
-              }}
-            >
-              {downloadYears.map((year) => (
-                <MenuItem key={year} value={year}>Year {year}</MenuItem>
-              ))}
-            </Select>
-          </Box>
-          <Box sx={{ width: '100%', height: 300, p: { xs: 1, sm: 2 } }}>
-            <LineChart
-              xAxis={[{ scaleType: 'point', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] }]}
-              series={[{ data: monthlyDownloads, color: '#3b82f6', area: true, showMark: true, label: 'My Downloads' }]}
-              height={280}
-              margin={{ top: 20, bottom: 25, left: 45, right: 25 }}
-            />
-          </Box>
-        </Card>
+            {/* Recent Pending Request */}
+            <Card sx={cardSx}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                {sectionHeader(
+                  'Recent Pending Request',
+                  stats.recentPendingRequests.length > 0 ? () => navigate('/request-upload') : null,
+                  stats.recentPendingRequests.length,
+                )}
 
-        {/* ── Recent Pending Requests ──────────────────────────────────────── */}
-        <Card sx={{ borderRadius: 2, boxShadow: 2, width: '100%', mb: { xs: 2, md: 3 } }}>
-          <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-            {sectionHeader(
-              'Recent Pending Requests',
-              stats.recentPendingRequests.length > 0 ? () => navigate('/request-upload') : null,
-              stats.recentPendingRequests.length,
-            )}
-
-            {stats.recentPendingRequests.length > 0 ? (
-              <Box>
-                {/* Header row — desktop only */}
-                <Box
-                  sx={{
-                    display: { xs: 'none', md: 'grid' },
-                    gridTemplateColumns: pendingColumns.md,
-                    gap: 1.5, px: 1.5, py: 1, borderRadius: 2,
-                    bgcolor: isDarkMode ? 'rgba(148,163,184,0.08)' : 'rgba(15,23,42,0.04)',
-                  }}
-                >
-                  <Box />
-                  <Typography sx={headerLabelSx}>Target</Typography>
-                  <Typography sx={headerLabelSx}>Reason</Typography>
-                  <Typography sx={headerLabelSx}>Remarks</Typography>
-                  <Typography sx={headerLabelSx}>Status</Typography>
-                  <Typography sx={{ ...headerLabelSx, textAlign: 'right' }}>Submitted</Typography>
-                </Box>
-
-                <Stack sx={{ mt: 0.5 }}>
-                  {stats.recentPendingRequests.map((req) => (
+                {stats.recentPendingRequests.length > 0 ? (
+                  <Box>
+                    {/* Header row — desktop only */}
                     <Box
-                      key={req.id}
                       sx={{
-                        display: 'grid',
-                        gridTemplateColumns: pendingColumns,
-                        gap: { xs: 1, md: 1.5 },
-                        alignItems: 'center',
-                        px: 1.5,
-                        py: { xs: 1.75, md: 1.5 },
-                        borderRadius: 2,
-                        // amber edge marks the row as still waiting
-                        borderLeft: '3px solid',
-                        borderColor: isDarkMode ? 'rgba(245,158,11,0.55)' : '#fbbf24',
-                        borderBottom: { xs: '1px solid', md: 'none' },
-                        borderBottomColor: 'divider',
-                        transition: 'background-color 0.15s ease',
-                        '&:hover': {
-                          bgcolor: isDarkMode ? 'rgba(148,163,184,0.08)' : 'rgba(15,23,42,0.035)',
-                        },
+                        display: { xs: 'none', md: 'grid' },
+                        gridTemplateColumns: pendingColumns.md,
+                        gap: 1.5, px: 1.5, py: 1, borderRadius: 2,
+                        bgcolor: isDarkMode ? 'rgba(148,163,184,0.08)' : 'rgba(15,23,42,0.04)',
                       }}
                     >
-                      {/* Cover thumbnail */}
-                      <Avatar
-                        variant="rounded"
-                        src={getStorageImageUrl(req.cover_url) || glclogo}
-                        sx={{
-                          width: 44, height: 56, borderRadius: 2,
-                          bgcolor: 'action.hover', flexShrink: 0,
-                          display: { xs: 'none', md: 'flex' },
-                        }}
-                      />
+                      <Box />
+                      <Typography sx={headerLabelSx}>Target</Typography>
+                      <Typography sx={headerLabelSx}>Reason</Typography>
+                      <Typography sx={headerLabelSx}>Remarks</Typography>
+                      <Typography sx={headerLabelSx}>Status</Typography>
+                      <Typography sx={{ ...headerLabelSx, textAlign: 'right' }}>Submitted</Typography>
+                    </Box>
 
-                      {/* Target */}
-                      <Box sx={{ minWidth: 0 }}>
-                        <Tooltip title={req.title}>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
-                            {req.title}
-                          </Typography>
-                        </Tooltip>
-                        <Stack direction="row" spacing={0.8} alignItems="center" sx={{ minWidth: 0 }}>
-                          <Typography variant="caption" color="text.secondary" noWrap>
-                            {req.author}
-                          </Typography>
-                          {req.category && (
-                            <Chip
-                              label={req.category}
-                              size="small"
-                              sx={{ height: 17, fontSize: '0.62rem', fontWeight: 700, textTransform: 'capitalize' }}
-                            />
-                          )}
-                        </Stack>
-                        {/* Status folds under the title on mobile */}
-                        <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 1 }}>
-                          <StatusPill />
-                        </Box>
-                      </Box>
-
-                      {/* Reason */}
-                      <Box
-                        sx={{
-                          minWidth: 0,
-                          borderLeft: '3px solid',
-                          borderColor: isDarkMode ? '#3b82f6' : '#213C51',
-                          pl: 1.25,
-                          mt: { xs: 1, md: 0 },
-                        }}
-                      >
-                        <Stack direction="row" spacing={0.5} alignItems="flex-start">
-                          <FormatQuoteIcon
-                            sx={{ fontSize: 14, color: 'text.disabled', transform: 'scaleX(-1)', mt: '2px', flexShrink: 0 }}
-                          />
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontSize: '0.82rem',
-                              lineHeight: 1.45,
-                              color: req.upload_reason ? 'text.primary' : 'text.disabled',
-                              fontStyle: req.upload_reason ? 'normal' : 'italic',
-                              ...clamp2,
-                            }}
-                          >
-                            {req.upload_reason || 'No reason given'}
-                          </Typography>
-                        </Stack>
-                      </Box>
-
-                      {/* Remarks */}
-                      <Stack
-                        direction="row"
-                        spacing={0.6}
-                        alignItems="flex-start"
-                        sx={{ minWidth: 0, mt: { xs: 0.75, md: 0 } }}
-                      >
-                        <ChatBubbleOutlineIcon
-                          sx={{ fontSize: 14, color: 'text.disabled', mt: '3px', flexShrink: 0 }}
-                        />
-                        <Typography
-                          variant="body2"
+                    <Stack sx={{ mt: 0.5 }}>
+                      {stats.recentPendingRequests.map((req) => (
+                        <Box
+                          key={req.id}
                           sx={{
-                            fontSize: '0.82rem',
-                            lineHeight: 1.45,
-                            color: req.remarks ? 'text.primary' : 'text.disabled',
-                            fontStyle: req.remarks ? 'normal' : 'italic',
-                            ...clamp2,
+                            display: 'grid',
+                            gridTemplateColumns: pendingColumns,
+                            gap: { xs: 1, md: 1.5 },
+                            alignItems: 'center',
+                            px: 1.5,
+                            py: { xs: 1.75, md: 1.5 },
+                            borderRadius: 2,
+                            // amber edge marks the row as still waiting
+                            borderLeft: '3px solid',
+                            borderColor: isDarkMode ? 'rgba(245,158,11,0.55)' : '#fbbf24',
+                            borderBottom: { xs: '1px solid', md: 'none' },
+                            borderBottomColor: 'divider',
+                            transition: 'background-color 0.15s ease',
+                            '&:hover': {
+                              bgcolor: isDarkMode ? 'rgba(148,163,184,0.08)' : 'rgba(15,23,42,0.035)',
+                            },
                           }}
                         >
-                          {req.remarks || 'Not reviewed yet'}
-                        </Typography>
-                      </Stack>
+                          {/* Cover thumbnail */}
+                          <Avatar
+                            variant="rounded"
+                            src={getStorageImageUrl(req.cover_url) || glclogo}
+                            sx={{
+                              width: 44, height: 56, borderRadius: 2,
+                              bgcolor: 'action.hover', flexShrink: 0,
+                              display: { xs: 'none', md: 'flex' },
+                            }}
+                          />
 
-                      {/* Status — desktop column */}
-                      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                        <StatusPill />
-                      </Box>
+                          {/* Target */}
+                          <Box sx={{ minWidth: 0 }}>
+                            <Tooltip title={req.title}>
+                              <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                                {req.title}
+                              </Typography>
+                            </Tooltip>
+                            <Stack direction="row" spacing={0.8} alignItems="center" sx={{ minWidth: 0 }}>
+                              <Typography variant="caption" color="text.secondary" noWrap>
+                                {req.author}
+                              </Typography>
+                              {req.category && (
+                                <Chip
+                                  label={req.category}
+                                  size="small"
+                                  sx={{ height: 17, fontSize: '0.62rem', fontWeight: 700, textTransform: 'capitalize' }}
+                                />
+                              )}
+                            </Stack>
+                            {/* Status folds under the title on mobile */}
+                            <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 1 }}>
+                              <StatusPill />
+                            </Box>
+                          </Box>
 
-                      {/* Date */}
-                      <Box sx={{ textAlign: { xs: 'left', md: 'right' }, mt: { xs: 0.75, md: 0 } }}>
-                        <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>
-                          {formatDate(req.created_at)}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {timeAgo(req.created_at)}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  ))}
-                </Stack>
-              </Box>
-            ) : (
-              <Box sx={{ py: 5, textAlign: 'center' }}>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                  No requests waiting
+                          {/* Reason */}
+                          <Box
+                            sx={{
+                              minWidth: 0,
+                              borderLeft: '3px solid',
+                              borderColor: isDarkMode ? '#3b82f6' : '#213C51',
+                              pl: 1.25,
+                              mt: { xs: 1, md: 0 },
+                            }}
+                          >
+                            <Stack direction="row" spacing={0.5} alignItems="flex-start">
+                              <FormatQuoteIcon
+                                sx={{ fontSize: 14, color: 'text.disabled', transform: 'scaleX(-1)', mt: '2px', flexShrink: 0 }}
+                              />
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  fontSize: '0.82rem',
+                                  lineHeight: 1.45,
+                                  color: req.upload_reason ? 'text.primary' : 'text.disabled',
+                                  fontStyle: req.upload_reason ? 'normal' : 'italic',
+                                  ...clamp2,
+                                }}
+                              >
+                                {req.upload_reason || 'No reason given'}
+                              </Typography>
+                            </Stack>
+                          </Box>
+
+                          {/* Remarks */}
+                          <Stack
+                            direction="row"
+                            spacing={0.6}
+                            alignItems="flex-start"
+                            sx={{ minWidth: 0, mt: { xs: 0.75, md: 0 } }}
+                          >
+                            <ChatBubbleOutlineIcon
+                              sx={{ fontSize: 14, color: 'text.disabled', mt: '3px', flexShrink: 0 }}
+                            />
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontSize: '0.82rem',
+                                lineHeight: 1.45,
+                                color: req.remarks ? 'text.primary' : 'text.disabled',
+                                fontStyle: req.remarks ? 'normal' : 'italic',
+                                ...clamp2,
+                              }}
+                            >
+                              {req.remarks || 'Not reviewed yet'}
+                            </Typography>
+                          </Stack>
+
+                          {/* Status — desktop column */}
+                          <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+                            <StatusPill />
+                          </Box>
+
+                          {/* Date */}
+                          <Box sx={{ textAlign: { xs: 'left', md: 'right' }, mt: { xs: 0.75, md: 0 } }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>
+                              {formatDate(req.created_at)}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {timeAgo(req.created_at)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Box>
+                ) : (
+                  <Box sx={{ py: 5, textAlign: 'center' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                      No requests waiting
+                    </Typography>
+                    <Button
+                      size="small"
+                      onClick={() => navigate('/request-upload')}
+                      sx={{ mt: 1, fontWeight: 700, textTransform: 'none' }}
+                    >
+                      Request an upload
+                    </Button>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Download Overview */}
+            <Card sx={{ ...cardSx, width: '100%', overflow: 'hidden', flexGrow: 1 }}>
+              <Box sx={{
+                background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)',
+                px: 3, py: 2.5,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                flexWrap: 'wrap', gap: 2,
+              }}>
+                <Typography variant="subtitle1" fontWeight="800" sx={{ color: '#ffffff', letterSpacing: 0.5 }}>
+                  DOWNLOAD OVERVIEW
                 </Typography>
-                <Button
+                <Select
+                  value={downloadYear}
+                  onChange={(e) => setDownloadYear(e.target.value)}
                   size="small"
-                  onClick={() => navigate('/request-upload')}
-                  sx={{ mt: 1, fontWeight: 700, textTransform: 'none' }}
+                  sx={{
+                    color: '#ffffff',
+                    bgcolor: 'rgba(255,255,255,0.1)',
+                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.2)' },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#ffffff' },
+                    '.MuiSvgIcon-root': { color: '#ffffff' },
+                    fontWeight: 700, borderRadius: '8px', height: 38,
+                  }}
                 >
-                  Request an upload
-                </Button>
-              </Box>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Recent Downloads — same card shelf as New in the Library ─────── */}
-        <Card sx={{ borderRadius: 2, boxShadow: 2, width: '100%', mb: { xs: 2, md: 3 } }}>
-          <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-            {sectionHeader(
-              'Recent Downloads',
-              downloadsTotal > 0 ? () => navigate('/my-downloads') : null,
-            )}
-
-            {recentDownloads.length > 0 ? (
-              <>
-                <Box sx={{ ...cardGridSx, opacity: downloadsLoading ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
-                  {recentDownloads.map((item) => (
-                    <Box key={item.id} sx={{ display: 'flex', minWidth: 0, flexDirection: 'column' }}>
-                      <PdfCard pdf={item} variant="small" />
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ mt: 0.75, textAlign: 'center', fontWeight: 600 }}
-                      >
-                        Downloaded {timeAgo(item.downloaded_at)}
-                      </Typography>
-                    </Box>
+                  {downloadYears.map((year) => (
+                    <MenuItem key={year} value={year}>Year {year}</MenuItem>
                   ))}
-                </Box>
-                <Pager
+                </Select>
+              </Box>
+              <Box sx={{ width: '100%', height: 300, p: { xs: 1, sm: 2 } }}>
+                <LineChart
+                  xAxis={[{ scaleType: 'point', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] }]}
+                  series={[{ data: monthlyDownloads, color: '#3b82f6', area: true, showMark: true, label: 'My Downloads' }]}
+                  height={280}
+                  margin={{ top: 20, bottom: 25, left: 45, right: 25 }}
+                />
+              </Box>
+            </Card>
+          </Box>
+
+          {/* ── RIGHT COLUMN ───────────────────────────────────────────── */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 3 }, minWidth: 0 }}>
+
+            {/* Recent Download */}
+            <Card sx={cardSx}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                <BookShelf
+                  title="Recent Download"
+                  items={recentDownloads}
+                  loading={downloadsLoading}
                   page={downloadsPage}
                   total={downloadsTotal}
-                  loading={downloadsLoading}
+                  pageSize={PAGE_SIZE}
                   onPrev={() => fetchRecentDownloads(userId, downloadsPage - 1)}
                   onNext={() => fetchRecentDownloads(userId, downloadsPage + 1)}
-                />
-              </>
-            ) : (
-              <Box sx={{ py: 5, textAlign: 'center' }}>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                  Nothing downloaded yet
-                </Typography>
-                <Button
-                  size="small"
-                  onClick={() => navigate('/browse')}
-                  sx={{ mt: 1, fontWeight: 700, textTransform: 'none' }}
-                >
-                  Browse the library
-                </Button>
-              </Box>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── New in the Library ───────────────────────────────────────────── */}
-        <Card sx={{ borderRadius: 2, boxShadow: 2 }}>
-          <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-            {sectionHeader(
-              'New in the Library',
-              () => navigate('/browse'),
-            )}
-
-            {newInLibrary.length > 0 ? (
-              <>
-                <Box sx={{ ...cardGridSx, opacity: libraryLoading ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
-                  {newInLibrary.map((item) => (
-                    <Box key={item.id} sx={{ display: 'flex', minWidth: 0 }}>
-                      <PdfCard pdf={item} variant="small" />
+                  onSeeMore={downloadsTotal > 0 ? () => navigate('/my-downloads') : null}
+                  getImageUrl={getStorageImageUrl}
+                  fallbackImage={glclogo}
+                  caption={(item) => `Downloaded ${timeAgo(item.downloaded_at)}`}
+                  empty={
+                    <Box sx={{ py: 5, textAlign: 'center' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                        Nothing downloaded yet
+                      </Typography>
+                      <Button
+                        size="small"
+                        onClick={() => navigate('/browse')}
+                        sx={{ mt: 1, fontWeight: 700, textTransform: 'none' }}
+                      >
+                        Browse the library
+                      </Button>
                     </Box>
-                  ))}
-                </Box>
-                <Pager
-                  page={libraryPage}
-                  total={libraryTotal}
-                  loading={libraryLoading}
-                  onPrev={() => fetchNewInLibrary(libraryPage - 1)}
-                  onNext={() => fetchNewInLibrary(libraryPage + 1)}
+                  }
                 />
-              </>
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                No materials available yet.
-              </Typography>
-            )}
+              </CardContent>
+            </Card>
+
+            {/* Favorite Genre */}
+            <Card sx={cardSx}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                {sectionHeader('Favorite Genre')}
+                {topGenres.length > 0 ? (
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
+                    <PieChart
+                      series={[{
+                        data: topGenres,
+                        innerRadius: 38,
+                        outerRadius: 68,
+                        paddingAngle: 2,
+                        cornerRadius: 4,
+                      }]}
+                      width={168}
+                      height={168}
+                      slotProps={{ legend: { hidden: true } }}
+                    />
+                    <Stack spacing={1} sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+                      {topGenres.map((g) => (
+                        <Stack key={g.label} direction="row" alignItems="center" spacing={1}>
+                          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: g.color, flexShrink: 0 }} />
+                          <Typography variant="body2" noWrap sx={{ flex: 1 }}>{g.label}</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                            {g.value}
+                          </Typography>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </Stack>
+                ) : (
+                  <Box sx={{ py: 5, textAlign: 'center' }}>
+                    <CategoryIcon sx={{ fontSize: 28, color: 'text.disabled', mb: 0.5 }} />
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                      No genre data yet
+                    </Typography>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+
+          {/* Favorite Author */}
+              <Card sx={{ ...cardSx, flexGrow: 1, minHeight: 220 }}>
+                <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                  {sectionHeader('Favorite Authors')}
+                  {authorStats.length > 0 ? (
+                    <Stack direction="row" flexWrap="wrap" gap={1.5}>  {/* was gap={1} */}
+                      {authorStats.slice(0, 8).map((a) => (
+                        <Chip
+                                key={a.author}
+                                label={a.author}
+                                sx={{
+                                  mt: 1,
+                                  fontWeight: 600,
+                                  fontSize: '1rem',
+                                  height: 80,           // default is ~32px
+                                  px: 1,
+                                  bgcolor: isDarkMode ? 'rgba(148,163,184,0.16)' : 'rgba(15,23,42,0.06)',
+                                  color: isDarkMode ? '#e2e8f0' : 'text.primary',
+                                }}
+                              />
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Box sx={{ py: 5, textAlign: 'center' }}>
+                      <PersonIcon sx={{ fontSize: 28, color: 'text.disabled', mb: 0.5 }} />
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                        No author data yet
+                      </Typography>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+          </Box>
+        </Box>
+
+        {/* ── New in the Library — full width, below the two-column body ──── */}
+        <Card sx={{ ...cardSx, mt: { xs: 2, md: 3 } }}>
+          <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+            <BookShelf
+              title="New in the Library"
+              items={newInLibrary}
+              loading={libraryLoading}
+              page={libraryPage}
+              total={libraryTotal}
+              pageSize={PAGE_SIZE}
+              onPrev={() => fetchNewInLibrary(libraryPage - 1)}
+              onNext={() => fetchNewInLibrary(libraryPage + 1)}
+              onSeeMore={() => navigate('/browse')}
+              getImageUrl={getStorageImageUrl}
+              fallbackImage={glclogo}
+              empty={
+                <Typography variant="body2" color="text.secondary">
+                  No materials available yet.
+                </Typography>
+              }
+            />
           </CardContent>
         </Card>
 
