@@ -580,7 +580,7 @@ const UserDashboard = () => {
                             variant="rounded"
                             src={getStorageImageUrl(req.cover_url) || glclogo}
                             sx={{
-                              width: 44, height: 56, borderRadius: 2,
+                              width: 50, height: 50, borderRadius: 2,
                               bgcolor: 'action.hover', flexShrink: 0,
                               display: { xs: 'none', md: 'flex' },
                             }}

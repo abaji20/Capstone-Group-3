@@ -13,6 +13,8 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import glclogo from '../../assets/glclogo.png';
+// Shared date formatter (year / month / day -> "March 15, 2020")
+import { formatPublishedDate } from '../../utils/formatPublishedDate';
 
 // MUI Icons
 import GroupIcon from '@mui/icons-material/Group';
@@ -28,6 +30,18 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CloseIcon from '@mui/icons-material/Close';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
+// Icons for the metadata fields (mirrors pdfCard.jsx)
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import SchoolIcon from '@mui/icons-material/School';
+import BusinessIcon from '@mui/icons-material/Business';
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
+import LayersIcon from '@mui/icons-material/Layers';
+import LanguageIcon from '@mui/icons-material/Language';
+// NEW: icons for Genre and Type (Category), matching pdfCard.jsx's
+// InfoRow treatment so every field in the "See More" dialog has an icon.
+import CategoryIcon from '@mui/icons-material/Category';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
+import DateRangeIcon from '@mui/icons-material/DateRange';
 
 const getStorageImageUrl = (imageUrl) => {
   if (!imageUrl) return null;
@@ -35,6 +49,31 @@ const getStorageImageUrl = (imageUrl) => {
 
   return supabase.storage.from('pdfs').getPublicUrl(imageUrl).data.publicUrl;
 };
+
+// NEW: one label/value line for the Book Details dialog, copied from
+// pdfCard.jsx's InfoRow so both "document info" surfaces look and behave
+// the same way (icon + bold label + value, wraps instead of truncating).
+const InfoRow = ({ icon, label, value }) => (
+  <Typography
+    variant="body2"
+    component="div"
+    sx={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 1,
+      minWidth: 0,
+      '& > svg': { flexShrink: 0 },
+      '& > strong': { flexShrink: 0 },
+      '& > span': {
+        minWidth: 0,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+      },
+    }}
+  >
+    {icon} <strong>{label}:</strong> <span>{value || 'N/A'}</span>
+  </Typography>
+);
 
 const AdminDashboard = () => {
   const currentYear = new Date().getFullYear();
@@ -96,9 +135,13 @@ const AdminDashboard = () => {
       if (accountsData) setRecentAccounts(accountsData);
 
       // 2. Fetch Recent Books
+      // Explicit column list also includes the digital-library metadata
+      // fields (section, program_course, publisher, isbn, edition,
+      // language, published_month, published_day) so the "See More" dialog
+      // below can display them.
       const { data: booksData } = await supabase
         .from('pdfs')
-        .select('id, created_at, title, author, genre, published_date, description, image_url, file_url, category, is_archived')
+        .select('id, created_at, title, author, genre, published_date, description, image_url, file_url, category, is_archived, section, program_course, publisher, isbn, edition, language, published_month, published_day')
         .eq('category', 'book')
         .eq('is_archived', false)
         .order('created_at', { ascending: false })
@@ -845,7 +888,10 @@ const AdminDashboard = () => {
 
       </Container>
 
-      {/* "SEE MORE" BOOK DETAILS DIALOG */}
+      {/* "SEE MORE" BOOK DETAILS DIALOG — now mirrors pdfCard.jsx's Document
+          Info layout: an icon + label + value grid instead of a wall of
+          chips, so it reads consistently with the client-side "See More"
+          dialog. Every field (including Genre and Type) now has an icon. */}
       <Dialog 
         open={bookDialogOpen} 
         onClose={handleCloseBookDetail}
@@ -892,7 +938,7 @@ const AdminDashboard = () => {
                       display: 'flex', 
                       flexDirection: 'column', 
                       alignItems: 'center', 
-                      justify: 'center',
+                      justifyContent: 'center',
                       color: 'text.secondary'
                     }}>
                       <BookIcon sx={{ fontSize: 60, mb: 1, color: '#94a3b8' }} />
@@ -908,13 +954,48 @@ const AdminDashboard = () => {
                     Author: {selectedBook.author || 'Unknown'}
                   </Typography>
 
-                  <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
-                    <Chip label={`Genre: ${selectedBook.genre || 'General'}`} color="primary" variant="outlined" size="small" sx={{ fontWeight: 700 }} />
-                    <Chip label={`Category: ${selectedBook.category || 'Book'}`} color="secondary" variant="outlined" size="small" sx={{ fontWeight: 700 }} />
-                    {selectedBook.published_date && (
-                      <Chip label={`Published: ${selectedBook.published_date}`} variant="outlined" size="small" sx={{ fontWeight: 700 }} />
+                  {/* Metadata rows in a responsive 2-column grid, same
+                      pattern as pdfCard.jsx's InfoRow grid. Falls back to a
+                      single column on mobile. Each row only renders when the
+                      field actually has a value (except Type/Genre, which
+                      always show with a sensible default). */}
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto auto' },
+                      justifyContent: 'start',
+                      columnGap: 3,
+                      rowGap: 1,
+                      mb: 2.5,
+                    }}
+                  >
+                    <InfoRow icon={<LibraryBooksIcon fontSize="small" color="primary" />} label="Type" value={selectedBook.category || 'Book'} />
+                    <InfoRow icon={<CategoryIcon fontSize="small" color="primary" />} label="Genre" value={selectedBook.genre || 'General'} />
+
+                    {selectedBook.section && (
+                      <InfoRow icon={<BookmarkIcon fontSize="small" color="primary" />} label="Section" value={selectedBook.section} />
                     )}
-                  </Stack>
+                    {selectedBook.program_course && (
+                      <InfoRow icon={<SchoolIcon fontSize="small" color="primary" />} label="Program" value={selectedBook.program_course} />
+                    )}
+
+                    {selectedBook.published_date && (
+                      <InfoRow icon={<DateRangeIcon fontSize="small" color="primary" />} label="Published" value={formatPublishedDate(selectedBook)} />
+                    )}
+
+                    {selectedBook.publisher && (
+                      <InfoRow icon={<BusinessIcon fontSize="small" color="primary" />} label="Publisher" value={selectedBook.publisher} />
+                    )}
+                    {selectedBook.edition && (
+                      <InfoRow icon={<LayersIcon fontSize="small" color="primary" />} label="Edition" value={selectedBook.edition} />
+                    )}
+                    {selectedBook.isbn && (
+                      <InfoRow icon={<ConfirmationNumberIcon fontSize="small" color="primary" />} label="ISBN" value={selectedBook.isbn} />
+                    )}
+                    {selectedBook.language && (
+                      <InfoRow icon={<LanguageIcon fontSize="small" color="primary" />} label="Language" value={selectedBook.language} />
+                    )}
+                  </Box>
 
                   <Typography variant="subtitle2" fontWeight="800" sx={{ mb: 0.5, color: 'text.secondary' }}>
                     DESCRIPTION / ABSTRACT

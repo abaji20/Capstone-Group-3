@@ -324,16 +324,15 @@ const Dashboard = () => {
     setSelectedBook(null);
   };
 
-  const commonPaperStyle = {
-    borderRadius: '16px',
-    backgroundColor: isDarkMode ? '#6b778c' : '#ffffff',
-    border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
-    color: isDarkMode ? '#f8fafc' : '#1e293b',
-    boxShadow: isDarkMode ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(0,0,0,0.03)',
-    width: '100%',
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-  };
-
+ const commonPaperStyle = {
+  borderRadius: '16px',
+  backgroundColor: isDarkMode ? '#283446' : '#ffffff',   // was '#6b778c'
+  border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
+  color: isDarkMode ? '#f8fafc' : '#1e293b',
+  boxShadow: isDarkMode ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(0,0,0,0.03)',
+  width: '100%',
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+};
   const statCardsData = [
     { label: 'PDF', value: stats.totalPdf, color: '#60a5fa', bg: 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)', darkBg: 'linear-gradient(135deg, #172554 0%, #1e3a8a 100%)', icon: <DescriptionIcon sx={{ color: '#2563eb', fontSize: 28, opacity: 1 }} /> },
     { label: 'Accounts', value: stats.totalAccounts, color: '#c084fc', bg: 'linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%)', darkBg: 'linear-gradient(135deg, #3b0764 0%, #581c87 100%)', icon: <GroupIcon sx={{ color: '#9333ea', fontSize: 28, opacity: 1 }} /> },
@@ -533,8 +532,8 @@ const Dashboard = () => {
                               label={account.role === 'client' ? 'USER' : account.role ? account.role.toUpperCase() : 'USER'}
                               size="small" 
                               sx={{ 
-                                bgcolor: account.role === 'superadmin' ? '#faf5ff' : account.role === 'admin' ? '#eef2ff' : '#f0fdf4',
-                                color: account.role === 'superadmin' ? '#9333ea' : account.role === 'admin' ? '#6366f1' : '#16a34a',
+                                bgcolor: account.role === 'superadmin' ? '#faf5ff' : account.role === 'admin' ? '#eef2ff' : '#facc15',
+                                color: account.role === 'superadmin' ? '#9333ea' : account.role === 'admin' ? '#6366f1' : '#000803',
                                 fontWeight: 800, 
                                 fontSize: '0.65rem',
                                 border: '1px solid',

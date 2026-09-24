@@ -629,7 +629,7 @@ const RequestUpload = () => {
       <Container maxWidth="lg">
         <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={isMobile ? "flex-start" : "center"} sx={{ mb: 4 }} spacing={2}>
           <Box>
-            <Typography variant="h3" sx={{ fontWeight: 900, color: isDarkMode ? '#94a3b8' : '#1e3a5f', fontStyle: 'italic', fontSize: { xs: '1.8rem', md: '3rem' } }}>
+            <Typography variant="h3" sx={{ fontWeight: 900, color: isDarkMode ? '#ffffff' : '#1e3a5f', fontStyle: 'italic', fontSize: { xs: '1.8rem', md: '3rem' } }}>
               UPLOAD REQUEST
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>RECORDS OF YOUR SUBMISSIONS</Typography>

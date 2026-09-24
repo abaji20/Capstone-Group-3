@@ -19,10 +19,18 @@ import {
   Title as TitleIcon,
   Book as BookIcon,
   MenuBook as GenreIcon,
-  Description as DescriptionIcon
+  Description as DescriptionIcon,
+  Bookmark as BookmarkIcon,
+  School as SchoolIcon,
+  Business as BusinessIcon,
+  ConfirmationNumber as ConfirmationNumberIcon,
+  Layers as LayersIcon,
+  Language as LanguageIcon
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 import glclogo from '../../assets/glclogo.png';
+// NEW: shared date formatter (year / month / day -> "March 15, 2020")
+import { formatPublishedDate } from '../../utils/formatPublishedDate';
 
 const PendingUpload = () => {
   const theme = useTheme();
@@ -94,6 +102,10 @@ const PendingUpload = () => {
 
   const handleApprove = async (req, e) => {
     if (e) e.stopPropagation();
+    // NEW: carry over the newly-added digital-library metadata fields from
+    // the upload_requests row into the pdfs record on approval — these were
+    // previously dropped here even though they were already collected on
+    // the request.
     const { error: insertError } = await supabase.from('pdfs').insert([{
       title: req.title,
       author: req.author,
@@ -102,7 +114,15 @@ const PendingUpload = () => {
       category: req.category,
       published_date: req.published_date,
       file_url: req.pdf_url,
-      image_url: req.cover_url
+      image_url: req.cover_url,
+      section: req.section,
+      program_course: req.program_course,
+      publisher: req.publisher,
+      isbn: req.isbn,
+      edition: req.edition,
+      language: req.language,
+      published_month: req.published_month,
+      published_day: req.published_day
     }]);
 
     if (!insertError) {
@@ -416,10 +436,51 @@ const PendingUpload = () => {
                     <Typography variant="body2"><strong>Genre:</strong> {selectedDocDetails.genre || 'N/A'}</Typography>
                   </Stack>
 
+                  {/* NEW: digital-library metadata — only rendered when the
+                      request actually has a value, matching pdfCard.jsx's
+                      "hide if empty" behavior. */}
+                  {selectedDocDetails.section && (
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <BookmarkIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Section:</strong> {selectedDocDetails.section}</Typography>
+                    </Stack>
+                  )}
+                  {selectedDocDetails.program_course && (
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <SchoolIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Program:</strong> {selectedDocDetails.program_course}</Typography>
+                    </Stack>
+                  )}
+
                   <Stack direction="row" alignItems="center" spacing={1.5}>
                     <CalendarIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Published:</strong> {selectedDocDetails.published_date || 'N/A'}</Typography>
+                    <Typography variant="body2"><strong>Published:</strong> {formatPublishedDate(selectedDocDetails)}</Typography>
                   </Stack>
+
+                  {selectedDocDetails.publisher && (
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <BusinessIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Publisher:</strong> {selectedDocDetails.publisher}</Typography>
+                    </Stack>
+                  )}
+                  {selectedDocDetails.isbn && (
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <ConfirmationNumberIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>ISBN:</strong> {selectedDocDetails.isbn}</Typography>
+                    </Stack>
+                  )}
+                  {selectedDocDetails.edition && (
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <LayersIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Edition:</strong> {selectedDocDetails.edition}</Typography>
+                    </Stack>
+                  )}
+                  {selectedDocDetails.language && (
+                    <Stack direction="row" alignItems="center" spacing={1.5}>
+                      <LanguageIcon color="primary" fontSize="small" />
+                      <Typography variant="body2"><strong>Language:</strong> {selectedDocDetails.language}</Typography>
+                    </Stack>
+                  )}
 
                   <Stack direction="row" alignItems="center" spacing={1.5}>
                     <PersonIcon color="secondary" fontSize="small" />
