@@ -7,6 +7,8 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import CloseIcon from '@mui/icons-material/Close';
 import clientbackground from '../assets/clientbackground.png';
+// NEW: shows the year, or "March 2020" / "March 15, 2020" when month/day exist
+import { formatPublishedDate } from '../utils/formatPublishedDate';
 
 const COVER_W = 112; // px — width of each book on the shelf
 
@@ -310,11 +312,15 @@ const BookShelf = ({
                   </Typography>
                 )}
 
-                {(selected.genre || selected.category) && (
+                {/* NEW: Section chip alongside the existing genre/category chips */}
+                {(selected.genre || selected.category || selected.section) && (
                   <Stack direction="row" flexWrap="wrap" gap={0.75} sx={{ mt: 1.5 }}>
                     {selected.genre && <Chip size="small" label={selected.genre} />}
                     {selected.category && (
                       <Chip size="small" variant="outlined" label={selected.category} sx={{ textTransform: 'capitalize' }} />
+                    )}
+                    {selected.section && (
+                      <Chip size="small" variant="outlined" color="primary" label={selected.section} />
                     )}
                   </Stack>
                 )}
@@ -328,10 +334,23 @@ const BookShelf = ({
                   {selected.created_at && (
                     <Row label="Added to library" value={fmtDate(selected.created_at)} />
                   )}
+                  {/* NEW: program/course, publisher, ISBN, edition, language */}
+                  {selected.program_course && <Row label="Program" value={selected.program_course} />}
                   {selected.publisher && <Row label="Publisher" value={selected.publisher} />}
-                  {(selected.published_year || selected.year) && (
-                    <Row label="Year" value={selected.published_year || selected.year} />
+                  {/* UPDATED: shows the full publication date (year, month, day).
+                      Falls back to the old year fields if published_date is empty. */}
+                  {(selected.published_date || selected.published_year || selected.year) && (
+                    <Row
+                      label="Published"
+                      value={
+                        selected.published_date
+                          ? formatPublishedDate(selected)
+                          : (selected.published_year || selected.year)
+                      }
+                    />
                   )}
+                  {selected.edition && <Row label="Edition" value={selected.edition} />}
+                  {selected.isbn && <Row label="ISBN" value={selected.isbn} />}
                   {selected.language && <Row label="Language" value={selected.language} />}
                 </Stack>
 

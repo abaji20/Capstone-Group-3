@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import {
   AppBar, Toolbar, Box, Avatar, Typography, ButtonBase, Menu, MenuItem,
   ListItemIcon, Divider, IconButton, useTheme, Drawer, List, ListItem,
@@ -9,15 +9,15 @@ import {
   LockReset, Brightness4 as Brightness4Icon,
   Brightness7 as Brightness7Icon, Menu as MenuIcon,
   AccountCircle as AccountCircleIcon,
-  Person as PersonIcon, Download as DownloadIcon,
+  Person as PersonIcon,
   AssignmentInd as AssignmentIndIcon, ChatBubbleOutline as ChatIcon,
   Cancel as CancelIcon,
-  Dashboard as DashboardIcon
+  Search as SearchIcon
 } from '@mui/icons-material';
 import { supabase } from '../supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { navLinks } from '../navConfig';
-import { LogoutButton, ActionModal, FormInput } from '../shared';
+import { LogoutButton, ActionModal, FormInput, TopbarSearch } from '../shared';
 import glclogo from '../assets/glclogo.png';
 import glclogdesktop from '../assets/glclogdesktop.png';
 import { ColorModeContext } from '../App';
@@ -39,6 +39,11 @@ const customAnimations = `
 const ClientTopbar = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Topbar hides while scrolling down, comes back when scrolling up.
+  const [hidden, setHidden] = useState(false);
+  const lastScrollY = useRef(0);
 
   const yearLevels = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 
@@ -64,9 +69,13 @@ const ClientTopbar = () => {
   const colorMode = useContext(ColorModeContext);
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  // NavConfig-driven groups — single source of truth, used by both desktop and mobile
-  const mainNavItems = navLinks.client.filter((item) => item.group === 'main');
-  const profileNavItems = navLinks.client.filter((item) => item.group === 'profile');
+  // Hamburger drawer = page navigation only: Library, Request Upload,
+  // Dashboard, Downloads (all from NavConfig, in that order).
+  // Profile Settings / Change Password / Theme now live in the user dropdown.
+  const drawerNavItems = [
+    ...navLinks.client.filter((item) => item.group === 'main'),
+    ...navLinks.client.filter((item) => item.group === 'profile'),
+  ];
 
   const fetchUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -94,6 +103,28 @@ const ClientTopbar = () => {
   };
 
   useEffect(() => { fetchUser(); }, []);
+
+  // Scroll direction -> show/hide the topbar.
+  useEffect(() => {
+    lastScrollY.current = window.scrollY;
+
+    const onScroll = () => {
+      const y = window.scrollY;
+      const delta = y - lastScrollY.current;
+
+      if (y <= 10) {
+        setHidden(false); // always visible at the very top
+      } else if (delta > 3) {
+        setHidden(true); // scrolling down
+      } else if (delta < -3) {
+        setHidden(false); // scrolling up
+      }
+      lastScrollY.current = y;
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
@@ -236,44 +267,9 @@ const ClientTopbar = () => {
       </Box>
 
       <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-        {/* MAIN group */}
-        <Typography sx={sectionLabelSx}>Main</Typography>
+        {/* One "Main" section: Library, Request Upload, Dashboard, Downloads */}
         <List sx={{ px: 1.5 }}>
-          {mainNavItems.map(renderNavListItem)}
-        </List>
-
-        <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mx: 2, mt: 1 }} />
-
-        {/* PROFILE group — Dashboard + My Downloads come from NavConfig, the rest are actions */}
-        <Typography sx={sectionLabelSx}>Profile</Typography>
-        <List sx={{ px: 1.5 }}>
-          {profileNavItems.map(renderNavListItem)}
-
-          <ListItem disablePadding>
-            <ListItemButton onClick={() => { setIsProfileModalOpen(true); handleDrawerToggle(); }} sx={{ borderRadius: '8px', py: 1.2, mb: 0.5 }}>
-              <ListItemIcon sx={{ color: 'rgba(255,255,255,0.7)', minWidth: 40 }}><PersonIcon sx={{ fontSize: 22 }} /></ListItemIcon>
-              <ListItemText primary="Profile Settings" primaryTypographyProps={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }} />
-            </ListItemButton>
-          </ListItem>
-
-          <ListItem disablePadding>
-            <ListItemButton component={Link} to="/reset-password" onClick={handleDrawerToggle} sx={{ borderRadius: '8px', py: 1.2, mb: 0.5 }}>
-              <ListItemIcon sx={{ color: 'rgba(255,255,255,0.7)', minWidth: 40 }}><LockReset sx={{ fontSize: 22 }} /></ListItemIcon>
-              <ListItemText primary="Change Password" primaryTypographyProps={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }} />
-            </ListItemButton>
-          </ListItem>
-
-          <ListItem disablePadding>
-            <ListItemButton onClick={colorMode.toggleColorMode} sx={{ borderRadius: '8px', py: 1.2, mb: 0.5, display: 'flex', justifyContent: 'space-between' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <ListItemIcon sx={{ color: 'rgba(255,255,255,0.7)', minWidth: 40 }}>
-                  {theme.palette.mode === 'dark' ? <Brightness7Icon sx={{ fontSize: 22 }} /> : <Brightness4Icon sx={{ fontSize: 22 }} />}
-                </ListItemIcon>
-                <ListItemText primary="Theme" primaryTypographyProps={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)' }} />
-              </Box>
-              <Switch size="small" checked={theme.palette.mode === 'dark'} />
-            </ListItemButton>
-          </ListItem>
+          {drawerNavItems.map(renderNavListItem)}
         </List>
       </Box>
 
@@ -295,16 +291,19 @@ const ClientTopbar = () => {
         sx={{
           backgroundColor: theme.palette.mode === 'dark' ? 'rgba(17, 24, 39, 0.95)' : '#213C51',
           backdropFilter: 'blur(8px)', height: { xs: 70, md: 80 }, justifyContent: 'center',
-          zIndex: theme.zIndex.drawer + 1, boxShadow: '0 4px 20px rgba(0,0,0,0.15)', borderBottom: '1px solid rgba(0, 58, 151, 0.34)'
+          zIndex: theme.zIndex.drawer + 1,
+          boxShadow: hidden ? 'none' : '0 4px 20px rgba(0,0,0,0.15)',
+          borderBottom: '1px solid rgba(0, 58, 151, 0.34)',
+          // slide up out of view on scroll down, back in on scroll up
+          transform: hidden ? 'translateY(-110%)' : 'translateY(0)',
+          transition: 'transform 0.3s ease, box-shadow 0.3s ease',
         }}
       >
         <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', px: { xs: 1, md: 4 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, md: 1 } }}>
-            {isMobile && (
-              <IconButton color="inherit" onClick={handleDrawerToggle} sx={{ mr: 0.5 }}>
-                <MenuIcon fontSize="medium" />
-              </IconButton>
-            )}
+            <IconButton color="inherit" onClick={handleDrawerToggle} sx={{ mr: 0.5 }}>
+              <MenuIcon fontSize="medium" />
+            </IconButton>
             <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => navigate('/')}>
               <Box
                 component="img"
@@ -320,21 +319,21 @@ const ClientTopbar = () => {
             </Box>
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: { md: 2, lg: 4 } }}>
-            {!isMobile && (
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {mainNavItems.map(item => {
-                  const isActive = location.pathname === item.path;
-                  return (
-                    <ButtonBase key={item.name} component={Link} to={item.path} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, px: 2, py: 1, borderRadius: '9px', color: isActive ? '#3b82f6' : 'rgba(255,255,255,0.7)', transition: 'all 0.3s ease', position: 'relative', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.05)', '& .nav-icon': { animation: 'floatFaster 0.6s ease-in-out infinite', color: '#3b82f6' } } }}>
-                      <Box className="nav-icon" sx={{ display: 'flex', transition: 'all 0.3s ease' }}>{React.cloneElement(item.icon, { sx: { fontSize: '1.2rem' } })}</Box>
-                      <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>{item.name}</Typography>
-                      {isActive && <Box sx={{ position: 'absolute', bottom: -2, height: '3px', width: '60%', bgcolor: '#3b82f6', borderRadius: '10px', animation: 'lineGrow 0.3s forwards' }} />}
-                    </ButtonBase>
-                  );
-                })}
-              </Box>
-            )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2, lg: 4 } }}>
+            {/* Search — opens the quick-access TopbarSearch panel */}
+            <IconButton
+              onClick={() => setSearchOpen(true)}
+              sx={{
+                color: 'white',
+                bgcolor: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                width: { xs: 40, md: 44 },
+                height: { xs: 40, md: 44 },
+                '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' }
+              }}
+            >
+              <SearchIcon fontSize="small" />
+            </IconButton>
 
             <ButtonBase onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'white', p: 0.5, px: 1, borderRadius: '10px', bgcolor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', transition: 'all 0.3s ease', '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' } }}>
               {!isMobile && (
@@ -348,6 +347,8 @@ const ClientTopbar = () => {
             </ButtonBase>
           </Box>
 
+          {/* User dropdown = account stuff only: Profile Settings, Change
+              Password, Theme Mode, Logout. */}
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} PaperProps={{ sx: { mt: 2, borderRadius: 2, minWidth: 240, bgcolor: theme.palette.mode === 'dark' ? '#1f2937' : '#fff' } }}>
             <Box sx={{ px: 3, py: 2 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 900, color: 'text.primary' }}>USER</Typography>
@@ -356,16 +357,6 @@ const ClientTopbar = () => {
               </Typography>
             </Box>
             <Divider />
-
-            <MenuItem onClick={() => { setAnchorEl(null); navigate('/dashboard'); }} sx={{ py: 1 }}>
-              <ListItemIcon><DashboardIcon fontSize="small" sx={{ color: 'text.primary' }} /></ListItemIcon>
-              <ListItemText primary="Dashboard" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem', color: 'text.primary' }} />
-            </MenuItem>
-
-            <MenuItem onClick={() => { setAnchorEl(null); navigate('/my-downloads'); }} sx={{ py: 1 }}>
-              <ListItemIcon><DownloadIcon fontSize="small" sx={{ color: 'text.primary' }} /></ListItemIcon>
-              <ListItemText primary="My Downloads" primaryTypographyProps={{ fontWeight: 700, fontSize: '0.85rem', color: 'text.primary' }} />
-            </MenuItem>
 
             <MenuItem onClick={() => { setAnchorEl(null); setIsProfileModalOpen(true); }} sx={{ py: 1 }}>
               <ListItemIcon><PersonIcon fontSize="small" sx={{ color: 'text.primary' }} /></ListItemIcon>
@@ -478,9 +469,13 @@ const ClientTopbar = () => {
         </Stack>
       </ActionModal>
 
-      <Drawer variant="temporary" open={mobileOpen} onClose={handleDrawerToggle} sx={{ display: { xs: 'block', md: 'none' }, zIndex: theme.zIndex.drawer + 2, '& .MuiDrawer-paper': { width: expandedWidth, border: 'none', bgcolor: '#213C51' } }}>
+      {/* Hamburger drawer: Library, Request Upload, Dashboard, Downloads */}
+      <Drawer variant="temporary" open={mobileOpen} onClose={handleDrawerToggle} sx={{ zIndex: theme.zIndex.drawer + 2, '& .MuiDrawer-paper': { width: expandedWidth, border: 'none', bgcolor: '#213C51' } }}>
         {drawerContent}
       </Drawer>
+
+      <TopbarSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+
       <Box sx={{ height: { xs: 70, md: 80 } }} />
     </>
   );

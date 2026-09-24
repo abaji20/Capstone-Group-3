@@ -199,12 +199,6 @@ const ResetPassword = () => {
               fontWeight: 800,
               fontSize: '1rem',
               textTransform: 'none', 
-              boxShadow: '0 10px 15px -3px rgba(0,118,255,0.3)',
-              '&:hover': {
-                boxShadow: '0 20px 25px -5px rgba(0,118,255,0.2)',
-                transform: 'translateY(-1px)'
-              },
-              transition: 'all 0.2s ease'
             }}
           >
             {loading ? "Updating Securely..." : "Update Password"}

@@ -10,3 +10,4 @@ export { default as SearchBar } from './SearchBar';
 export { default as StatusChip } from './StatusChip';
 export { default as LogoutButton } from './LogoutButton';
 export { default as EditPdfModal } from './EditPdfModal';
+export { default as TopbarSearch } from './TopbarSearch';

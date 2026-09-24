@@ -21,11 +21,21 @@ export const uploadPdfWithFiles = async (pdfFile, imageFile, metadata, userId) =
     title: metadata.title,
     author: metadata.author,
     genre: metadata.genre,
-    published_date: metadata.published_date,
+    published_date: metadata.published_date, // the YEAR
+    // NEW: optional month (1-12) and day (1-31). NULL when not provided.
+    published_month: metadata.published_month || null,
+    published_day: metadata.published_day || null,
     category: metadata.category,
     description: metadata.description,
     image_url: imgPath,
-    file_url: pdfPath 
+    file_url: pdfPath,
+    // NEW: digital-library metadata fields
+    section: metadata.section || null,
+    program_course: metadata.program_course || null,
+    publisher: metadata.publisher || null,
+    isbn: metadata.isbn || null,
+    edition: metadata.edition || null,
+    language: metadata.language || 'English',
   }]).select('id').single();
 
   if (dbError) throw dbError;
@@ -43,22 +53,35 @@ export const uploadPdfWithFiles = async (pdfFile, imageFile, metadata, userId) =
   return { success: true };
 };
 
-// UPDATED: Now checks only Title and Author, and returns all data (*) for the UI
-export const checkDuplicate = async (title, author) => {
+// --- DUPLICATE CHECK -----------------------------------------------------
+// A document is a duplicate only when ALL of these match:
+//   title + author + edition + ISBN
+// Comparison ignores upper/lower case and extra spaces, and ISBNs are compared
+// without dashes/spaces ("978-3-16" equals "978316"). An empty edition/ISBN only
+// matches another empty one, so a "2nd Edition" is NOT a duplicate of a
+// blank-edition record.
+const norm = (v) => (v ?? '').toString().trim().toLowerCase();
+const normIsbn = (v) => (v ?? '').toString().replace(/[\s-]/g, '').toLowerCase();
+
+export const docKey = (d) =>
+  [norm(d?.title), norm(d?.author), norm(d?.edition), normIsbn(d?.isbn)].join('|');
+
+export const checkDuplicate = async (title, author, edition = '', isbn = '') => {
+  // Narrow down by title + author in the database, then compare edition and
+  // ISBN here so blanks/NULLs and dashes are handled properly.
   const { data, error } = await supabase
     .from('pdfs')
     .select('*') 
     .ilike('title', title.trim())   
-    .ilike('author', author.trim()) 
-    .limit(1); // FIX: Get the first match instead of expecting only one
+    .ilike('author', author.trim());
 
   if (error) {
     console.error("Duplicate check error:", error);
     throw error;
   }
 
-  // Since .limit(1) returns an array, we return the first item or null
-  return data.length > 0 ? data[0] : null;
+  const target = docKey({ title, author, edition, isbn });
+  return (data || []).find((row) => docKey(row) === target) || null;
 };
 export const deletePdf = async (id) => {
   const { data: record, error: fetchError } = await supabase

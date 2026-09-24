@@ -16,6 +16,13 @@ import BookIcon from '@mui/icons-material/Book';
 import PersonIcon from '@mui/icons-material/Person'; 
 import DownloadForOfflineIcon from '@mui/icons-material/DownloadForOffline';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+// NEW: icons for the added metadata fields
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import SchoolIcon from '@mui/icons-material/School';
+import BusinessIcon from '@mui/icons-material/Business';
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
+import LayersIcon from '@mui/icons-material/Layers';
+import LanguageIcon from '@mui/icons-material/Language';
 import { supabase } from '../supabaseClient';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCloudArrowDown, faFilePdf } from '@fortawesome/free-solid-svg-icons';
@@ -24,6 +31,37 @@ import { faCloudArrowDown, faFilePdf } from '@fortawesome/free-solid-svg-icons';
 import logo from '../assets/logo.png'; 
 import glclogo from '../assets/glclogo.png'; 
 import clientbackground from '../assets/clientbackground.png'; 
+// NEW: shows the year, or "March 2020" / "March 15, 2020" when month/day exist
+import { formatPublishedDate } from '../utils/formatPublishedDate';
+
+// One label/value line in the Document Info grid.
+// The value is never cut off with "...". It keeps its natural one-line width,
+// so the dialog grows wider to fit it (see the Dialog + grid below).
+// Only if the screen itself is too narrow does the value wrap as a last resort.
+//  - alignItems: 'flex-start' keeps the icon aligned with the first line
+//  - the label (<strong>) never shrinks, so "Author:" stays on one line
+//  - the value <span> can shrink (minWidth: 0) only when there is no room left
+const InfoRow = ({ icon, label, value }) => (
+  <Typography
+    variant="body2"
+    component="div"
+    sx={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 1,
+      minWidth: 0,
+      '& > svg': { flexShrink: 0 },
+      '& > strong': { flexShrink: 0 },
+      '& > span': {
+        minWidth: 0,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+      },
+    }}
+  >
+    {icon} <strong>{label}:</strong> <span>{value || 'N/A'}</span>
+  </Typography>
+);
 
 const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
   const theme = useTheme();
@@ -232,9 +270,19 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
       <Dialog 
         open={open} 
         onClose={() => setOpen(false)} 
-        fullWidth 
-        maxWidth="sm" 
-        PaperProps={{ sx: { borderRadius: 1.5, ...poppinsFont, bgcolor: isDarkMode ? '#0f172a' : '#fff' } }}
+        maxWidth={false}
+        PaperProps={{
+          sx: {
+            borderRadius: 1.5,
+            ...poppinsFont,
+            bgcolor: isDarkMode ? '#0f172a' : '#fff',
+            // Width follows the content: starts at the old 600px and grows
+            // when the author/title is long, up to the edge of the screen.
+            width: 'fit-content',
+            minWidth: { xs: 'calc(100% - 64px)', sm: 'min(600px, calc(100% - 64px))' },
+            maxWidth: 'calc(100% - 64px)',
+          },
+        }}
       >
         <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
           <InfoIcon sx={{ color: iconColor }} /> Document Info
@@ -276,27 +324,40 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
               )}
             </Box>
 
-            <Stack spacing={1.5} sx={{ flexGrow: 1, width: 'auto' }}>
-              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TitleIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Title:</strong> {pdf.title}
-              </Typography>
-              
-              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <PersonIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Author:</strong> {pdf.author || 'N/A'}
-              </Typography>
+            <Stack spacing={1.5} sx={{ flexGrow: 1, width: 'auto', minWidth: 0 }}>
+              {/* Metadata rows in a responsive 2-column grid.
+                  'auto auto' makes each column as wide as its longest value,
+                  so a long author name stays on ONE line and the dialog
+                  widens to fit it. On phones it stays 1 column. */}
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto auto' },
+                  justifyContent: 'start',
+                  columnGap: 3,
+                  rowGap: 1,
+                }}
+              >
+                <InfoRow icon={<TitleIcon fontSize="small" sx={{ color: iconColor }} />} label="Title" value={pdf.title} />
+                <InfoRow icon={<PersonIcon fontSize="small" sx={{ color: iconColor }} />} label="Author" value={pdf.author} />
+                <InfoRow icon={<LibraryBooksIcon fontSize="small" sx={{ color: iconColor }} />} label="Type" value={pdf.category} />
+                <InfoRow icon={<CategoryIcon fontSize="small" sx={{ color: iconColor }} />} label="Genre" value={pdf.genre} />
 
-              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <LibraryBooksIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Type:</strong> {pdf.category || 'N/A'}
-              </Typography>
-              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CategoryIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Genre:</strong> {pdf.genre}
-              </Typography>
-              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <DateRangeIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Published:</strong> {pdf.published_date || 'N/A'}
-              </Typography>
-              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <InsertDriveFileIcon fontSize="small" sx={{ color: iconColor }} /> <strong>Size:</strong> {fileSize}
-              </Typography>
+                {/* NEW: digital-library metadata — each only renders when
+                    the document actually has a value, so old records with
+                    blank new fields don't show a wall of "N/A" rows. */}
+                {pdf.section && <InfoRow icon={<BookmarkIcon fontSize="small" sx={{ color: iconColor }} />} label="Section" value={pdf.section} />}
+                {pdf.program_course && <InfoRow icon={<SchoolIcon fontSize="small" sx={{ color: iconColor }} />} label="Program" value={pdf.program_course} />}
+
+                <InfoRow icon={<DateRangeIcon fontSize="small" sx={{ color: iconColor }} />} label="Published" value={formatPublishedDate(pdf)} />
+
+                {pdf.publisher && <InfoRow icon={<BusinessIcon fontSize="small" sx={{ color: iconColor }} />} label="Publisher" value={pdf.publisher} />}
+                {pdf.isbn && <InfoRow icon={<ConfirmationNumberIcon fontSize="small" sx={{ color: iconColor }} />} label="ISBN" value={pdf.isbn} />}
+                {pdf.edition && <InfoRow icon={<LayersIcon fontSize="small" sx={{ color: iconColor }} />} label="Edition" value={pdf.edition} />}
+                {pdf.language && <InfoRow icon={<LanguageIcon fontSize="small" sx={{ color: iconColor }} />} label="Language" value={pdf.language} />}
+
+                <InfoRow icon={<InsertDriveFileIcon fontSize="small" sx={{ color: iconColor }} />} label="Size" value={fileSize} />
+              </Box>
               
               <Divider sx={{ bgcolor: isDarkMode ? '#334155' : 'rgba(0,0,0,0.12)' }} />
               
@@ -307,7 +368,12 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
                 sx={{ 
                   color: isDarkMode ? '#94a3b8' : 'text.secondary',
                   textAlign: 'justify',
-                  display: 'block'
+                  display: 'block',
+                  // width: 0 + minWidth: 100% = the description fills the column
+                  // but does NOT push the dialog wider. Only the info rows
+                  // (author, title...) decide the dialog width.
+                  width: 0,
+                  minWidth: '100%',
                 }}
               >
                 {pdf.description || "No description provided."}
@@ -369,6 +435,11 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
             <Typography variant="caption" sx={{ display: 'block' }}>
               <strong>Category / Genre:</strong> {pdf.category || 'N/A'} ({pdf.genre || 'N/A'})
             </Typography>
+            {pdf.edition && (
+              <Typography variant="caption" sx={{ display: 'block' }}>
+                <strong>Edition:</strong> {pdf.edition}
+              </Typography>
+            )}
             <Typography variant="body2" sx={{ fontWeight: 700, color: iconColor, mt: 0.5 }}>
               File Size: {fileSize}
             </Typography>

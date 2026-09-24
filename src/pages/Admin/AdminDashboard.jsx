@@ -577,8 +577,8 @@ const AdminDashboard = () => {
                               label={account.role === 'client' ? 'USER' : account.role ? account.role.toUpperCase() : 'USER'}
                               size="small" 
                               sx={{ 
-                                bgcolor: '#f0fdf4',
-                                color: '#16a34a',
+                                bgcolor: '#e2e05db6',
+                                color: '#020502',
                                 fontWeight: 800, 
                                 fontSize: '0.7rem',
                                 border: '1px solid',

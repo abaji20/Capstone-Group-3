@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  Grid, Box, Typography, TextField, MenuItem, Stack, IconButton, Button, Container 
+  Box, Typography, Stack, IconButton, Button, Container 
 } from '@mui/material';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
-import FilterListIcon from '@mui/icons-material/FilterList'; 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { PdfCard } from '../../shared';
 import { fetchPdfs, fetchFeaturedPdfs } from '../../services/pdfService'; 
@@ -132,9 +131,7 @@ const Browse = () => {
   const [documents, setDocuments] = useState([]);
   const [spotlightDocs, setSpotlightDocs] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGenre, setSelectedGenre] = useState('All');
-  
+
   const [activeView, setActiveView] = useState('browse'); 
   const [expandedTitle, setExpandedTitle] = useState('');
 
@@ -143,28 +140,25 @@ const Browse = () => {
     fetchFeaturedPdfs().then(data => setSpotlightDocs(data || []));
   }, []);
 
-  const genres = useMemo(() => {
-    const dbGenres = documents.flatMap(doc => 
-      doc.genre ? doc.genre.split(',').map(g => g.trim()) : []
-    );
-    return ['All', ...new Set(dbGenres.filter(Boolean))];
+  // Search and filtering now live in the topbar's Search panel (TopbarSearch),
+  // so Browse.jsx just renders the library grouped by category/section.
+
+  // One row per distinct `section` value actually present in the data, added
+  // alongside (not replacing) the existing Library/Books/Academic rows.
+  const dynamicSectionNames = useMemo(() => {
+    const values = documents.map((doc) => doc.section).filter(Boolean);
+    return Array.from(new Set(values)).sort();
   }, [documents]);
 
-  const filteredDocs = useMemo(() => {
-    return documents.filter(doc => {
-      const matchesSearch = doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            doc.author?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesGenre = selectedGenre === 'All' || 
-                           (doc.genre && doc.genre.split(',').map(g => g.trim()).includes(selectedGenre));
-      return matchesSearch && matchesGenre;
-    });
-  }, [documents, searchQuery, selectedGenre]);
-
-  const sections = [
-    { title: "Library", items: filteredDocs },
-    { title: "Books", items: filteredDocs.filter(d => d.category?.toLowerCase() === 'book') },
-    { title: "Academic", items: filteredDocs.filter(d => d.category?.toLowerCase() === 'academic paper') }
-  ];
+  const sections = useMemo(() => ([
+    { title: "Library", items: documents },
+    { title: "Books", items: documents.filter(d => d.category?.toLowerCase() === 'book') },
+    { title: "Academic", items: documents.filter(d => d.category?.toLowerCase() === 'academic paper') },
+    ...dynamicSectionNames.map((name) => ({
+      title: name,
+      items: documents.filter((d) => d.section === name),
+    })),
+  ]), [documents, dynamicSectionNames]);
 
   const handleSeeAll = (title) => {
     setExpandedTitle(title);
@@ -214,22 +208,6 @@ const Browse = () => {
                 />
               )}
             </Box>
-
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 6 } }>
-              <TextField 
-                fullWidth size="medium" placeholder="Search titles or authors..." value={searchQuery} 
-                onChange={(e) => setSearchQuery(e.target.value)} 
-                sx={{ bgcolor: 'background.paper', borderRadius: 1 }} 
-              />
-              <TextField
-                select size="medium" label="Genre" value={selectedGenre}
-                onChange={(e) => setSelectedGenre(e.target.value)}
-                sx={{ minWidth: { xs: '100%', sm: 200 }, bgcolor: 'background.paper', borderRadius: 1 }}
-                InputProps={{ startAdornment: <FilterListIcon sx={{ mr: 1, fontSize: 20, color: 'text.secondary' }} /> }}
-              >
-                {genres.map((option) => (<MenuItem key={option} value={option}>{option}</MenuItem>))}
-              </TextField>
-            </Stack>
 
             {sections.map(section => (
               <MultiRowSection 
@@ -283,9 +261,9 @@ const Browse = () => {
         </Box>
         )}
 
-        {filteredDocs.length === 0 && (
+        {documents.length === 0 && (
           <Box sx={{ textAlign: 'center', mt: 4 }}>
-            <Typography color="text.secondary">No documents found matching your filters.</Typography>
+            <Typography color="text.secondary">No documents found in the library yet.</Typography>
           </Box>
         )}
       </Container>

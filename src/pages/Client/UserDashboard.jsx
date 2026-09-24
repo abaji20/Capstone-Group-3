@@ -28,6 +28,21 @@ const PAGE_SIZE = 8;
 // if the user has more distinct genres than colors.
 const GENRE_COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ec4899', '#06b6d4', '#ef4444', '#84cc16'];
 
+// How many ranked authors to show in the Favorite Authors leaderboard.
+const TOP_AUTHORS_COUNT = 8;
+
+// Rank hierarchy for the Favorite Authors leaderboard (index 0 = #1).
+// A single accent (the same blue used everywhere else on this dashboard)
+// scaled down in weight per rank, rather than a new color per row. Weights
+// taper from 1 (rank 1) down to a floor of 0.4, spread evenly across
+// TOP_AUTHORS_COUNT so adding more ranks just adds finer color steps.
+const AUTHOR_RANK_WEIGHT_FLOOR = 0.4;
+const AUTHOR_RANK_WEIGHTS = Array.from({ length: TOP_AUTHORS_COUNT }, (_, i) => (
+  TOP_AUTHORS_COUNT <= 1
+    ? 1
+    : 1 - (i / (TOP_AUTHORS_COUNT - 1)) * (1 - AUTHOR_RANK_WEIGHT_FLOOR)
+));
+
 // ── Image resolution ────────────────────────────────────────────────────
 const getStorageImageUrl = (imageUrl) => {
   if (!imageUrl) return null;
@@ -308,7 +323,7 @@ const UserDashboard = () => {
     );
   }
 
-  const cardSx = { borderRadius: 2, boxShadow: 2 };
+  const cardSx = { borderRadius: 1, boxShadow: 2 };
 
   // Section header with an optional "View all" on the right. Icon-free —
   // just the title, an optional count chip, and the view-all action.
@@ -432,12 +447,12 @@ const UserDashboard = () => {
     color: GENRE_COLORS[i % GENRE_COLORS.length],
   }));
 
-  // Top 6 authors for the Favorite Author bar chart, with long names
-  // truncated so the y-axis labels don't overrun the card.
-  const topAuthors = authorStats.slice(0, 6).map((a) => ({
-    author: a.author.length > 18 ? `${a.author.slice(0, 18)}…` : a.author,
-    count: a.count,
-  }));
+  // Top 5 authors for the Favorite Authors leaderboard. Rank hierarchy
+  // (badge size, text weight, fill bar) is derived from AUTHOR_RANK_WEIGHTS
+  // below, all built off the app's existing blue accent (#3b82f6) so the
+  // section doesn't introduce a new color story.
+  const topAuthors = authorStats.slice(0, TOP_AUTHORS_COUNT);
+  const topAuthorMax = topAuthors[0]?.count || 1;
 
   return (
     <Box sx={{ bgcolor: isDarkMode ? '#0f172a' : '#f8fafc', minHeight: '100vh', width: '100%', pb: 6 }}>
@@ -802,38 +817,121 @@ const UserDashboard = () => {
               </CardContent>
             </Card>
 
-          {/* Favorite Author */}
-              <Card sx={{ ...cardSx, flexGrow: 1, minHeight: 220 }}>
-                <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                  {sectionHeader('Favorite Authors')}
-                  {authorStats.length > 0 ? (
-                    <Stack direction="row" flexWrap="wrap" gap={1.5}>  {/* was gap={1} */}
-                      {authorStats.slice(0, 8).map((a) => (
-                        <Chip
-                                key={a.author}
-                                label={a.author}
-                                sx={{
-                                  mt: 1,
-                                  fontWeight: 600,
-                                  fontSize: '1rem',
-                                  height: 80,           // default is ~32px
-                                  px: 1,
-                                  bgcolor: isDarkMode ? 'rgba(148,163,184,0.16)' : 'rgba(15,23,42,0.06)',
-                                  color: isDarkMode ? '#e2e8f0' : 'text.primary',
-                                }}
-                              />
-                      ))}
-                    </Stack>
-                  ) : (
-                    <Box sx={{ py: 5, textAlign: 'center' }}>
-                      <PersonIcon sx={{ fontSize: 28, color: 'text.disabled', mb: 0.5 }} />
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                        No author data yet
-                      </Typography>
-                    </Box>
-                  )}
-                </CardContent>
-              </Card>
+            {/* Favorite Authors — ranked leaderboard, top TOP_AUTHORS_COUNT.
+                A single accent (the dashboard's existing blue) scales in
+                weight and size by rank instead of introducing new colors.
+                Each row's fill width is proportional to that author's share
+                of the #1 author's count, so the hierarchy also reads as a
+                mini bar chart. Stacks full-width at any viewport, so it's
+                responsive by construction rather than relying on wrapping
+                chips. */}
+            <Card sx={{ ...cardSx, flexGrow: 1, minHeight: 220 }}>
+              <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                {sectionHeader('Favorite Authors')}
+                {topAuthors.length > 0 ? (
+                  <Stack spacing={1.1}>
+                    {topAuthors.map((a, i) => {
+                      // Hierarchy is carried entirely by color intensity and
+                      // the fill bar here — every row keeps the same
+                      // padding, badge size and font size.
+                      const weight = AUTHOR_RANK_WEIGHTS[i] ?? 0.4;
+                      const fillPct = Math.max(14, Math.round((a.count / topAuthorMax) * 100));
+                      const accentAlpha = (v) => `rgba(59,130,246,${v})`;
+
+                      return (
+                        <Box
+                          key={a.author}
+                          sx={{
+                            position: 'relative',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1.5,
+                            minWidth: 0,
+                            px: 2,
+                            py: 1.2,
+                            borderRadius: 2,
+                            border: '1px solid',
+                            borderColor: accentAlpha(0.15 + weight * 0.35),
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {/* Proportional fill representing this author's share */}
+                          <Box
+                            aria-hidden
+                            sx={{
+                              position: 'absolute',
+                              left: 0, top: 0, bottom: 0,
+                              width: `${fillPct}%`,
+                              bgcolor: accentAlpha(isDarkMode ? 0.14 : 0.08),
+                            }}
+                          />
+
+                          {/* Rank badge */}
+                          <Box
+                            sx={{
+                              position: 'relative',
+                              zIndex: 1,
+                              flexShrink: 0,
+                              width: 30,
+                              height: 30,
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              bgcolor: accentAlpha(0.25 + weight * 0.6),
+                              color: '#ffffff',
+                              fontWeight: 900,
+                              fontSize: '0.85rem',
+                            }}
+                          >
+                            {i + 1}
+                          </Box>
+
+                          {/* Author name */}
+                          <Tooltip title={a.author}>
+                            <Typography
+                              noWrap
+                              sx={{
+                                position: 'relative',
+                                zIndex: 1,
+                                flex: 1,
+                                minWidth: 0,
+                                fontWeight: 700,
+                                fontSize: '0.9rem',
+                                color: isDarkMode ? '#e2e8f0' : '#0f172a',
+                              }}
+                            >
+                              {a.author}
+                            </Typography>
+                          </Tooltip>
+
+                          {/* Count */}
+                          <Typography
+                            sx={{
+                              position: 'relative',
+                              zIndex: 1,
+                              flexShrink: 0,
+                              fontWeight: 800,
+                              fontSize: '0.85rem',
+                              color: isDarkMode ? '#93c5fd' : '#1d4ed8',
+                            }}
+                          >
+                            {a.count}
+                          </Typography>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                ) : (
+                  <Box sx={{ py: 5, textAlign: 'center' }}>
+                    <PersonIcon sx={{ fontSize: 28, color: 'text.disabled', mb: 0.5 }} />
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                      No author data yet
+                    </Typography>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
           </Box>
         </Box>
 

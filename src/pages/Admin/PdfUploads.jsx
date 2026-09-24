@@ -13,6 +13,13 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import EventIcon from '@mui/icons-material/Event';
 import StorageIcon from '@mui/icons-material/Storage';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+// NEW: icons for the added metadata fields
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import SchoolIcon from '@mui/icons-material/School';
+import BusinessIcon from '@mui/icons-material/Business';
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
+import LayersIcon from '@mui/icons-material/Layers';
+import LanguageIcon from '@mui/icons-material/Language';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faFilePdf, faImage, faCloudUploadAlt, faCheckCircle, 
@@ -27,6 +34,27 @@ import {
 } from '../../services/pdfService'; 
 import { supabase } from '../../supabaseClient';
 import glclogo from '../../assets/glclogo.png';
+// NEW: shared date formatter (year / month / day -> "March 15, 2020")
+import { 
+  formatPublishedDate, MONTH_NAMES, getDaysInMonth, isFutureDate, normalizePubDate 
+} from '../../utils/formatPublishedDate';
+// NEW: tidy sectioned layout + autofill colour fix
+import FormSection, { span, autofillFix } from '../../shared/FormLayout';
+
+// Preset options for the Section dropdown — same list used on the user-side
+// request form, kept free-text-friendly via "Other" since it isn't a DB enum.
+const SECTION_OPTIONS = [
+  'Fiction', 'Nonfiction', 'High School', 'Bibliography', 'Reference',
+  'Thesis', 'Capstone Project', 'Research Paper', 'Other'
+];
+
+const EMPTY_FORM = { 
+  title: '', author: '', genre: '', category: 'book', published_date: '', description: '',
+  // NEW: optional month / day (published_date stays the required YEAR)
+  published_month: '', published_day: '',
+  // NEW: digital-library metadata fields
+  section: '', program_course: '', publisher: '', isbn: '', edition: '', language: 'English'
+};
 
 const PdfUploads = () => {
   const theme = useTheme();
@@ -46,9 +74,13 @@ const PdfUploads = () => {
   const [formData, setFormData] = useState(() => {
     const saved = localStorage.getItem('pdf_upload_form');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+      try { 
+        // Merge with EMPTY_FORM so older saved drafts (from before the new
+        // fields existed) don't come back missing keys.
+        return { ...EMPTY_FORM, ...JSON.parse(saved) }; 
+      } catch (e) { /* ignore */ }
     }
-    return { title: '', author: '', genre: '', category: 'book', published_date: '', description: '' };
+    return EMPTY_FORM;
   });
 
   useEffect(() => {
@@ -133,6 +165,7 @@ const PdfUploads = () => {
       return;
     }
 
+    // YEAR (required)
     if (name === 'published_date') {
       const onlyNums = value.replace(/[^0-9]/g, '');
       const currentYear = new Date().getFullYear();
@@ -142,8 +175,25 @@ const PdfUploads = () => {
            showStatus('error', `Year cannot exceed ${currentYear}`);
            return;
         }
-        setFormData({ ...formData, [name]: onlyNums });
+        let next = normalizePubDate({ ...formData, [name]: onlyNums });
+        // e.g. month was "December", then the year was changed to this year
+        // and December hasn't happened yet -> clear the month/day.
+        if (isFutureDate(next)) {
+          next = { ...next, published_month: '', published_day: '' };
+        }
+        setFormData(next);
       }
+      return;
+    }
+
+    // MONTH / DAY (optional)
+    if (name === 'published_month' || name === 'published_day') {
+      const next = { ...formData, [name]: value };
+      if (isFutureDate(next)) {
+        showStatus('error', 'Publication date cannot be in the future');
+        return;
+      }
+      setFormData(normalizePubDate(next));
       return;
     }
 
@@ -155,10 +205,17 @@ const PdfUploads = () => {
   const resetForm = () => {
     setSelectedFile(null); 
     setSelectedImage(null);
-    const cleared = { title: '', author: '', genre: '', category: 'book', published_date: '', description: '' };
-    setFormData(cleared);
+    setFormData(EMPTY_FORM);
     localStorage.removeItem('pdf_upload_form');
   };
+
+  // The form keeps month/day as '' when empty. The database wants a number
+  // or NULL, so convert right before sending to the service.
+  const buildPayload = () => ({
+    ...formData,
+    published_month: formData.published_month ? Number(formData.published_month) : null,
+    published_day: formData.published_day ? Number(formData.published_day) : null,
+  });
 
   const getImageUrl = (path) => path ? `https://yktwxeyxmzfkxqhlesly.supabase.co/storage/v1/object/public/pdfs/${path}` : null;
 
@@ -207,8 +264,15 @@ const PdfUploads = () => {
       showStatus('error', "Cover image file size exceeds the 50MB limit.");
       return;
     }
+    // Only the original fields are required — section/program/publisher/isbn/
+    // edition/language and the month/day stay optional since not every
+    // material has them.
     if (!formData.title.trim() || !formData.author.trim() || !formData.genre.trim() || !formData.published_date.trim() || !formData.description.trim()) {
       showStatus('error', "All fields are required to fill up!");
+      return;
+    }
+    if (formData.published_date.length !== 4) {
+      showStatus('error', "Please enter a complete 4-digit publication year.");
       return;
     }
     setReviewOpen(true);
@@ -220,7 +284,13 @@ const PdfUploads = () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const existingRecord = await checkDuplicate(formData.title.trim(), formData.author.trim());
+      // Duplicate = same title + author + edition + ISBN
+      const existingRecord = await checkDuplicate(
+        formData.title.trim(), 
+        formData.author.trim(), 
+        formData.edition, 
+        formData.isbn
+      );
       
       if (existingRecord) {
         setConfirmData({ open: true, record: existingRecord });
@@ -228,7 +298,7 @@ const PdfUploads = () => {
         return; 
       }
 
-      await uploadPdfWithFiles(selectedFile, selectedImage, formData, user?.id);
+      await uploadPdfWithFiles(selectedFile, selectedImage, buildPayload(), user?.id);
       await fetchData(); 
       showStatus('success', "Added as a new record!");
       resetForm();
@@ -244,7 +314,7 @@ const PdfUploads = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       await deletePdf(recordId); 
-      await uploadNewPdf(selectedFile, selectedImage, formData, user?.id);
+      await uploadNewPdf(selectedFile, selectedImage, buildPayload(), user?.id);
       await fetchData();
       showStatus('success', "Existing resource replaced!");
       resetForm();
@@ -258,7 +328,7 @@ const PdfUploads = () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      await uploadPdfWithFiles(selectedFile, selectedImage, formData, user?.id);
+      await uploadPdfWithFiles(selectedFile, selectedImage, buildPayload(), user?.id);
       await fetchData();
       showStatus('success', "Added as a new record!");
       resetForm();
@@ -295,13 +365,13 @@ const PdfUploads = () => {
         {/* LEFT COLUMN: UPLOAD FORM */}
         <Grid size={{ xs: 12, lg: 8, xl: 7}}>
           <Paper elevation={0} sx={{ p: { xs: 3, sm: 4.5 }, borderRadius: 3, bgcolor: cardBg, border: `1px solid ${borderCol}`, height: '100%' }}>
-            <Stack spacing={3}>
-              
-              {/* FILE DROPZONES */}
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Stack spacing={3} sx={autofillFix(inputBg, theme.palette.text.primary)}>
+
+              {/* FILES */}
+              <FormSection title="Files" hint="100 MB max file size. Cover image is optional">
                 <Box 
                   sx={{ 
-                    flex: 1, 
+                    gridColumn: span(3),
                     p: 3.5, 
                     border: '2px dashed #3b82f6', 
                     borderRadius: 3, 
@@ -339,12 +409,12 @@ const PdfUploads = () => {
                     }} 
                   />
                   <FontAwesomeIcon icon={selectedFile ? faCheckCircle : faFilePdf} style={{ fontSize: '32px', color: selectedFile ? '#22c55e' : '#3b82f6' }} />
-                  <Typography variant="body2" sx={{ mt: 1.5, fontWeight: 800 }}>{selectedFile ? `${selectedFile.name} (${formatFileSize(selectedFile.size)})` : "CHOOSE PDF FILE (Max 100MB)"}</Typography>
+                  <Typography variant="body2" sx={{ mt: 1.5, fontWeight: 800, wordBreak: 'break-word' }}>{selectedFile ? `${selectedFile.name} (${formatFileSize(selectedFile.size)})` : "CHOOSE PDF FILE (Max 100MB)"}</Typography>
                 </Box>
 
                 <Box 
                   sx={{ 
-                    flex: 1, 
+                    gridColumn: span(3),
                     p: 3.5, 
                     border: '2px dashed #a855f7', 
                     borderRadius: 3, 
@@ -376,38 +446,92 @@ const PdfUploads = () => {
                     }} 
                   />
                   <FontAwesomeIcon icon={selectedImage ? faCheckCircle : faImage} style={{ fontSize: '32px', color: selectedImage ? '#22c55e' : '#a855f7' }} />
-                  <Typography variant="body2" sx={{ mt: 1.5, fontWeight: 800 }}>{selectedImage ? `${selectedImage.name} (${formatFileSize(selectedImage.size)})` : "CHOOSE COVER IMAGE "}</Typography>
+                  <Typography variant="body2" sx={{ mt: 1.5, fontWeight: 800, wordBreak: 'break-word' }}>{selectedImage ? `${selectedImage.name} (${formatFileSize(selectedImage.size)})` : "CHOOSE COVER IMAGE "}</Typography>
                 </Box>
-              </Stack>
+              </FormSection>
 
-              {/* INPUT FIELDS */}
-              <TextField required fullWidth label="Document Title" name="title" value={formData.title} onChange={handleInputChange} sx={inputStyle} />
-              <TextField required fullWidth label="Author / Publisher" name="author" value={formData.author} onChange={handleInputChange} sx={inputStyle} />
-              
-              <Grid container spacing={2} sx={{ width: '100%', m: 0 }}>
-                <Grid size={{ xs: 12, sm: 6 }} sx={{ pl: '0 !important', pr: { xs: 0, sm: 1 } }}>
-                  <TextField required fullWidth label="Genre / Field" name="genre" value={formData.genre} onChange={handleInputChange} sx={inputStyle} />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }} sx={{ pr: '0 !important', pl: { xs: 0, sm: 1 } }}>
-                  <TextField select required fullWidth label="Category" name="category" value={formData.category} onChange={handleInputChange} sx={inputStyle}>
-                    <MenuItem value="academic paper">Academic Paper / Research</MenuItem>
-                    <MenuItem value="book">Book</MenuItem>
-                  </TextField>
-                </Grid>
-              </Grid>
+              <Divider />
 
-              <TextField 
-                required
-                fullWidth 
-                label="Publication Year (YYYY)" 
-                name="published_date" 
-                value={formData.published_date} 
-                onChange={handleInputChange} 
-                sx={inputStyle}
-                inputProps={{ maxLength: 4 }}
-              />
-              <TextField required fullWidth multiline rows={3.5} label="Brief Description" name="description" value={formData.description} onChange={handleInputChange} sx={inputStyle} />
-              
+              {/* DOCUMENT DETAILS */}
+              <FormSection title="Document details" hint="Leave fields blank if information is unavailable..">
+                <TextField required fullWidth label="Document Title" name="title" value={formData.title} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(6) }} />
+                <TextField required fullWidth label="Author / Publisher" name="author" value={formData.author} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(6) }} />
+
+                <TextField required fullWidth label="Genre / Field" name="genre" value={formData.genre} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }} />
+                <TextField select required fullWidth label="Category" name="category" value={formData.category} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }}>
+                  <MenuItem value="academic paper">Academic Paper / Research</MenuItem>
+                  <MenuItem value="book">Book</MenuItem>
+                </TextField>
+
+                <TextField select fullWidth label="Section" name="section" value={formData.section} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }}>
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {SECTION_OPTIONS.map((opt) => (<MenuItem key={opt} value={opt}>{opt}</MenuItem>))}
+                </TextField>
+                <TextField fullWidth label="Program / Course" name="program_course" value={formData.program_course} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }} placeholder="e.g., BS Computer Science" />
+              </FormSection>
+
+              <Divider />
+
+              {/* PUBLICATION DETAILS: Year is required, Month and Day are optional.
+                  Day unlocks only after a Month is picked, and only shows the
+                  days that month really has. */}
+              <FormSection title="Publication details" hint="Year is required. Add the month and day if you know them.">
+                <TextField 
+                  required
+                  fullWidth 
+                  label="Publication Year (YYYY)" 
+                  name="published_date" 
+                  value={formData.published_date} 
+                  onChange={handleInputChange} 
+                  sx={{ ...inputStyle, gridColumn: span(2) }}
+                  inputProps={{ maxLength: 4 }}
+                />
+                <TextField 
+                  select 
+                  fullWidth 
+                  label="Month (optional)" 
+                  name="published_month" 
+                  value={formData.published_month} 
+                  onChange={handleInputChange} 
+                  disabled={formData.published_date.length !== 4}
+                  sx={{ ...inputStyle, gridColumn: span(2) }}
+                >
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {MONTH_NAMES.map((name, index) => (
+                    <MenuItem key={name} value={index + 1}>{name}</MenuItem>
+                  ))}
+                </TextField>
+                <TextField 
+                  select 
+                  fullWidth 
+                  label="Day (optional)" 
+                  name="published_day" 
+                  value={formData.published_day} 
+                  onChange={handleInputChange} 
+                  disabled={!formData.published_month}
+                  sx={{ ...inputStyle, gridColumn: span(2) }}
+                >
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {formData.published_month && Array.from(
+                    { length: getDaysInMonth(formData.published_date, formData.published_month) },
+                    (_, i) => (<MenuItem key={i + 1} value={i + 1}>{i + 1}</MenuItem>)
+                  )}
+                </TextField>
+
+                <TextField fullWidth label="Publisher" name="publisher" value={formData.publisher} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }} />
+                <TextField fullWidth label="Edition" name="edition" value={formData.edition} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }} placeholder="e.g., 2nd Edition" />
+
+                <TextField fullWidth label="ISBN" name="isbn" value={formData.isbn} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }} placeholder="e.g., 978-3-16-148410-0" />
+                <TextField fullWidth label="Language" name="language" value={formData.language} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }} />
+              </FormSection>
+
+              <Divider />
+
+              {/* DESCRIPTION */}
+              <FormSection title="Description">
+                <TextField required fullWidth multiline rows={3.5} label="Brief Description" name="description" value={formData.description} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(6) }} />
+              </FormSection>
+
               <Button 
                 fullWidth variant="contained" onClick={handlePreUploadCheck} disabled={loading}
                 sx={{ 
@@ -429,11 +553,17 @@ const PdfUploads = () => {
 
         {/* RIGHT COLUMN: RECENT ACTIVITIES & TOTALS DASHBOARD */}
         <Grid size={{ xs: 12, lg: 3, xl: 5 }}>
-          <Stack spacing={3} sx={{ height: '100%' }}>
+          {/* useFlexGap makes the Stack use real CSS `gap` instead of
+              margin-based spacing. Margin-based spacing is computed from
+              DOM order, but the two Papers below use `order` to flip their
+              visual order — so plain `spacing` put the gap in the wrong
+              place and the cards looked glued together. `gap` respects
+              visual order, so the space now shows up correctly. */}
+          <Stack spacing={2} useFlexGap sx={{ height: '100%' }}>
             
             {/* RECENT ACTIVITIES */}
             <Paper elevation={0} sx={{ p: 3, borderRadius: 3, bgcolor: cardBg, border: `1px solid ${borderCol}`, order: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>Recent Activities</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>Recent Uploaded</Typography>
 
               <Stack spacing={1.5}>
                 {recentUploads.length === 0 ? (
@@ -587,9 +717,61 @@ const PdfUploads = () => {
                   <Typography variant="body2" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>{formData.category}</Typography>
                 </Grid>
               </Grid>
+
+              {/* NEW: Section, Program, Publisher, ISBN, Edition, Language —
+                  each only renders when actually filled in. */}
+              {(formData.section || formData.program_course) && (
+                <Grid container spacing={2}>
+                  {formData.section && (
+                    <Grid size={{ xs: 6 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>SECTION</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{formData.section}</Typography>
+                    </Grid>
+                  )}
+                  {formData.program_course && (
+                    <Grid size={{ xs: 6 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>PROGRAM / COURSE</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{formData.program_course}</Typography>
+                    </Grid>
+                  )}
+                </Grid>
+              )}
+              {(formData.publisher || formData.edition) && (
+                <Grid container spacing={2}>
+                  {formData.publisher && (
+                    <Grid size={{ xs: 6 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>PUBLISHER</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{formData.publisher}</Typography>
+                    </Grid>
+                  )}
+                  {formData.edition && (
+                    <Grid size={{ xs: 6 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>EDITION</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{formData.edition}</Typography>
+                    </Grid>
+                  )}
+                </Grid>
+              )}
+              {(formData.isbn || formData.language) && (
+                <Grid container spacing={2}>
+                  {formData.isbn && (
+                    <Grid size={{ xs: 6 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>ISBN</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{formData.isbn}</Typography>
+                    </Grid>
+                  )}
+                  {formData.language && (
+                    <Grid size={{ xs: 6 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>LANGUAGE</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{formData.language}</Typography>
+                    </Grid>
+                  )}
+                </Grid>
+              )}
+
               <Box>
-                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>PUBLICATION YEAR</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{formData.published_date}</Typography>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>PUBLICATION DATE</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatPublishedDate(formData)}</Typography>
               </Box>
               <Box>
                 <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>DESCRIPTION</Typography>
@@ -652,10 +834,51 @@ const PdfUploads = () => {
                       <CategoryIcon color="primary" fontSize="small" />
                       <Typography variant="body2"><strong>Genre:</strong> {selectedItemInfo.genre || 'N/A'}</Typography>
                     </Stack>
+
+                    {/* NEW: digital-library metadata — only shown when present */}
+                    {selectedItemInfo.section && (
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <BookmarkIcon color="primary" fontSize="small" />
+                        <Typography variant="body2"><strong>Section:</strong> {selectedItemInfo.section}</Typography>
+                      </Stack>
+                    )}
+                    {selectedItemInfo.program_course && (
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <SchoolIcon color="primary" fontSize="small" />
+                        <Typography variant="body2"><strong>Program:</strong> {selectedItemInfo.program_course}</Typography>
+                      </Stack>
+                    )}
+
                     <Stack direction="row" alignItems="center" spacing={1.5}>
                       <EventIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Published:</strong> {selectedItemInfo.published_date || 'N/A'}</Typography>
+                      <Typography variant="body2"><strong>Published:</strong> {formatPublishedDate(selectedItemInfo)}</Typography>
                     </Stack>
+
+                    {selectedItemInfo.publisher && (
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <BusinessIcon color="primary" fontSize="small" />
+                        <Typography variant="body2"><strong>Publisher:</strong> {selectedItemInfo.publisher}</Typography>
+                      </Stack>
+                    )}
+                    {selectedItemInfo.isbn && (
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <ConfirmationNumberIcon color="primary" fontSize="small" />
+                        <Typography variant="body2"><strong>ISBN:</strong> {selectedItemInfo.isbn}</Typography>
+                      </Stack>
+                    )}
+                    {selectedItemInfo.edition && (
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <LayersIcon color="primary" fontSize="small" />
+                        <Typography variant="body2"><strong>Edition:</strong> {selectedItemInfo.edition}</Typography>
+                      </Stack>
+                    )}
+                    {selectedItemInfo.language && (
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <LanguageIcon color="primary" fontSize="small" />
+                        <Typography variant="body2"><strong>Language:</strong> {selectedItemInfo.language}</Typography>
+                      </Stack>
+                    )}
+
                     <Stack direction="row" alignItems="center" spacing={1.5}>
                       <StorageIcon color="primary" fontSize="small" />
                       <Typography variant="body2"><strong>Size:</strong> {selectedItemFileSize}</Typography>
@@ -704,7 +927,7 @@ const PdfUploads = () => {
         <DialogTitle sx={{ fontWeight: 900 }}>Duplicate Found</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            The following document is already registered in the system. Review its details below:
+            A document with the same title, author, edition and ISBN is already registered in the system. Review its details below:
           </Typography>
           {confirmData.record && (
             <Box sx={{ p: 2.5, bgcolor: inputBg, borderRadius: 2, border: `1px solid ${borderCol}` }}>
@@ -731,8 +954,45 @@ const PdfUploads = () => {
                 <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>GENRE / FIELD</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.genre || 'N/A'}</Typography>
 
-                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>PUBLICATION YEAR</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.published_date || 'N/A'}</Typography>
+                {confirmData.record.section && (
+                  <>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>SECTION</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.section}</Typography>
+                  </>
+                )}
+                {confirmData.record.program_course && (
+                  <>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>PROGRAM / COURSE</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.program_course}</Typography>
+                  </>
+                )}
+                {confirmData.record.publisher && (
+                  <>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>PUBLISHER</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.publisher}</Typography>
+                  </>
+                )}
+                {confirmData.record.isbn && (
+                  <>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>ISBN</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.isbn}</Typography>
+                  </>
+                )}
+                {confirmData.record.edition && (
+                  <>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>EDITION</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.edition}</Typography>
+                  </>
+                )}
+                {confirmData.record.language && (
+                  <>
+                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>LANGUAGE</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.language}</Typography>
+                  </>
+                )}
+
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>PUBLICATION DATE</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatPublishedDate(confirmData.record)}</Typography>
 
                 <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>DESCRIPTION</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.5, maxHeight: '80px', overflowY: 'auto' }}>

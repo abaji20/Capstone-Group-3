@@ -5,6 +5,26 @@ import {
 } from '@mui/material';
 import { PdfCard } from '../../shared';
 import { supabase } from '../../supabaseClient';
+// Month names for the Month filter (1 = January ... 12 = December)
+import { MONTH_NAMES } from '../../utils/formatPublishedDate';
+
+// Builds a unique, sorted list of values for a filter dropdown from a flat
+// (non comma-separated) text field on each document, e.g. section.
+const buildOptionList = (docs, field) => {
+  const values = docs.map(doc => doc[field]).filter(Boolean);
+  return ['All', ...Array.from(new Set(values)).sort()];
+};
+
+// Same idea for the numeric publication fields (year / month / day), sorted
+// numerically. Only values that actually exist in the user's downloads show up.
+const buildNumericOptionList = (docs, field, order = 'asc') => {
+  const values = docs
+    .map(doc => doc[field])
+    .filter(v => v !== null && v !== undefined && v !== '');
+  const unique = Array.from(new Set(values.map(Number)));
+  unique.sort((a, b) => (order === 'desc' ? b - a : a - b));
+  return ['All', ...unique];
+};
 
 const MyDownloads = () => {
   const theme = useTheme();
@@ -15,6 +35,12 @@ const MyDownloads = () => {
   const [activeTab, setActiveTab] = useState('LIBRARY');
   const [searchQuery, setSearchQuery] = useState('');
   const [genreFilter, setGenreFilter] = useState('All');
+  const [sectionFilter, setSectionFilter] = useState('All');
+
+  // Publication date filters
+  const [yearFilter, setYearFilter] = useState('All');
+  const [monthFilter, setMonthFilter] = useState('All');
+  const [dayFilter, setDayFilter] = useState('All');
 
   // Colors based on your provided typography and shading preferences
   const dynamicStyles = {
@@ -96,22 +122,49 @@ const MyDownloads = () => {
     return ['All', ...Array.from(allGenres).sort()];
   }, [downloads]);
 
+  // Month (Jan-Dec) and Day (1-31) always show the full range.
+  const MONTH_OPTIONS = ['All', ...MONTH_NAMES.map((_, i) => i + 1)];
+  const DAY_OPTIONS = ['All', ...Array.from({ length: 31 }, (_, i) => i + 1)];
+
+  // Section and Year lists come from this user's own download history only.
+  const availableSections = useMemo(() => buildOptionList(downloads, 'section'), [downloads]);
+  // published_date holds the publication YEAR; most recent year first.
+  const availableYears = useMemo(() => buildNumericOptionList(downloads, 'published_date', 'desc'), [downloads]);
+
   const filteredDocs = useMemo(() => {
     return downloads.filter((doc) => {
-      const matchSearch = doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (doc.author && doc.author.toLowerCase().includes(searchQuery.toLowerCase()));
+      const q = searchQuery.toLowerCase();
+      const matchSearch = doc.title?.toLowerCase().includes(q) ||
+                          (doc.author && doc.author.toLowerCase().includes(q)) ||
+                          (doc.isbn && doc.isbn.toLowerCase().includes(q)) ||
+                          (doc.edition && doc.edition.toLowerCase().includes(q));
       
       // Check if the selected genre exists within the comma-separated string
       const matchGenre = genreFilter === 'All' || 
                          (doc.genre && doc.genre.split(',').map(g => g.trim()).includes(genreFilter));
+
+      const matchSection = sectionFilter === 'All' || doc.section === sectionFilter;
+
+      const matchYear = yearFilter === 'All' || Number(doc.published_date) === Number(yearFilter);
+      const matchMonth = monthFilter === 'All' || Number(doc.published_month) === Number(monthFilter);
+      const matchDay = dayFilter === 'All' || Number(doc.published_day) === Number(dayFilter);
       
       const matchTab = activeTab === 'LIBRARY' || 
                        (activeTab === 'BOOKS' && doc.category?.toLowerCase() === 'book') ||
                        (activeTab === 'ACADEMIC PAPERS' && doc.category?.toLowerCase() === 'academic paper');
       
-      return matchSearch && matchGenre && matchTab;
+      return matchSearch && matchGenre && matchSection && matchYear && matchMonth && matchDay && matchTab;
     });
-  }, [downloads, searchQuery, genreFilter, activeTab]);
+  }, [downloads, searchQuery, genreFilter, sectionFilter, yearFilter, monthFilter, dayFilter, activeTab]);
+
+  // Shared look for every filter dropdown
+  const filterSx = { 
+    minWidth: { xs: '100%', sm: 180 }, 
+    flex: { sm: 1 }, 
+    bgcolor: dynamicStyles.inputBg, 
+    borderRadius: 1 
+  };
+  const filterInputProps = { sx: { '& fieldset': { border: 'none' } } };
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, pt: 12, bgcolor: 'background.default', minHeight: '100vh' }}>
@@ -137,21 +190,64 @@ const MyDownloads = () => {
           </Typography>
         </Box>
 
-        {/* FILTERS SECTION */}
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 6 }}>
-          <TextField 
-            fullWidth size="medium" placeholder="Search history..." value={searchQuery} 
-            onChange={(e) => setSearchQuery(e.target.value)} 
-            InputProps={{ sx: { bgcolor: dynamicStyles.inputBg, borderRadius: 1 } }}
-            sx={{ '& fieldset': { border: 'none' } }}
-          />
+        {/* SEARCH */}
+        <TextField 
+          fullWidth size="medium" placeholder="Search history..." value={searchQuery} 
+          onChange={(e) => setSearchQuery(e.target.value)} 
+          InputProps={{ sx: { bgcolor: dynamicStyles.inputBg, borderRadius: 1 } }}
+          sx={{ mb: 2, '& fieldset': { border: 'none' } }}
+        />
+
+        {/* FILTERS SECTION — wraps on smaller screens */}
+        <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mb: 6 }}>
           <TextField
             select size="medium" label="Genre" value={genreFilter}
             onChange={(e) => setGenreFilter(e.target.value)}
-            sx={{ minWidth: { xs: '100%', sm: 200 }, bgcolor: dynamicStyles.inputBg, borderRadius: 1 }}
-            InputProps={{ sx: { '& fieldset': { border: 'none' } } }}
+            sx={filterSx} InputProps={filterInputProps}
           >
             {availableGenres.map((option) => (
+              <MenuItem key={option} value={option}>{option}</MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            select size="medium" label="Section" value={sectionFilter}
+            onChange={(e) => setSectionFilter(e.target.value)}
+            sx={filterSx} InputProps={filterInputProps}
+          >
+            {availableSections.map((option) => (
+              <MenuItem key={option} value={option}>{option}</MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            select size="medium" label="Year" value={yearFilter}
+            onChange={(e) => setYearFilter(e.target.value)}
+            sx={filterSx} InputProps={filterInputProps}
+          >
+            {availableYears.map((option) => (
+              <MenuItem key={option} value={option}>{option}</MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            select size="medium" label="Month" value={monthFilter}
+            onChange={(e) => setMonthFilter(e.target.value)}
+            sx={filterSx} InputProps={filterInputProps}
+          >
+            {MONTH_OPTIONS.map((option) => (
+              <MenuItem key={option} value={option}>
+                {option === 'All' ? 'All' : MONTH_NAMES[option - 1]}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            select size="medium" label="Day" value={dayFilter}
+            onChange={(e) => setDayFilter(e.target.value)}
+            sx={filterSx} InputProps={filterInputProps}
+          >
+            {DAY_OPTIONS.map((option) => (
               <MenuItem key={option} value={option}>{option}</MenuItem>
             ))}
           </TextField>
@@ -190,7 +286,7 @@ const MyDownloads = () => {
               <Grid item xs={6} sm={4} md={3} lg={2.4} key={doc.id}>
                 <PdfCard 
                   pdf={doc} 
-                  downloadLabel="REDOWNLOAD" 
+                  downloadLabel="DOWNLOAD" 
                   onDownload={() => handleDownload(doc)} 
                 />
               </Grid>
