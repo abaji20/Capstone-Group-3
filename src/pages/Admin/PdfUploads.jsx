@@ -3,16 +3,17 @@ import {
   Box, Paper, Typography, Stack, CircularProgress, 
   MenuItem, TextField, useTheme, Button,
   Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert,
-  Avatar, Card, CardContent, Grid, Divider
+  Avatar, Card, CardContent, Grid, Divider,
+  Menu, LinearProgress, Chip, Table, TableHead, TableRow, TableCell, TableBody,
+  IconButton,
 } from '@mui/material';
-import InfoIcon from '@mui/icons-material/Info';
-import TitleIcon from '@mui/icons-material/Title';
-import PersonIcon from '@mui/icons-material/Person';
-import CategoryIcon from '@mui/icons-material/Category';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import CloseIcon from '@mui/icons-material/Close';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import EventIcon from '@mui/icons-material/Event';
 import StorageIcon from '@mui/icons-material/Storage';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import CategoryIcon from '@mui/icons-material/Category';
 // NEW: icons for the added metadata fields
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import SchoolIcon from '@mui/icons-material/School';
@@ -23,7 +24,9 @@ import LanguageIcon from '@mui/icons-material/Language';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faFilePdf, faImage, faCloudUploadAlt, faCheckCircle, 
-  faFileAlt, faDownload, faBook, faGraduationCap, faInfoCircle
+  faFileAlt, faDownload, faBook, faGraduationCap, faInfoCircle,
+  // NEW: icons for import/export
+  faFileExcel, faFileArchive,
 } from '@fortawesome/free-solid-svg-icons';
 import { 
   uploadPdfWithFiles, 
@@ -40,6 +43,12 @@ import {
 } from '../../utils/formatPublishedDate';
 // NEW: tidy sectioned layout + autofill colour fix
 import FormSection, { span, autofillFix } from '../../shared/FormLayout';
+// NEW: Excel/ZIP import-export feature
+import { downloadErrorReport } from '../../utils/pdfExcelUtils';
+import {
+  parseImportFile, validateImportRows, commitImport,
+  fetchMaterialsForExport, exportMaterialsToExcel, exportMaterialsToZip,
+} from '../../services/pdfImportExportService';
 
 // Preset options for the Section dropdown — same list used on the user-side
 // request form, kept free-text-friendly via "Other" since it isn't a DB enum.
@@ -55,6 +64,31 @@ const EMPTY_FORM = {
   // NEW: digital-library metadata fields
   section: '', program_course: '', publisher: '', isbn: '', edition: '', language: 'English'
 };
+
+// One label/value line in the Document Info grid. Same shape as
+// AdminDashboard's InfoRow and PdfCard's InfoRow, so every "Document
+// Info" / "Book Details" dialog in the app reads identically.
+const InfoRow = ({ icon, label, value }) => (
+  <Typography
+    variant="body2"
+    component="div"
+    sx={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 1,
+      minWidth: 0,
+      '& > svg': { flexShrink: 0 },
+      '& > strong': { flexShrink: 0 },
+      '& > span': {
+        minWidth: 0,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+      },
+    }}
+  >
+    {icon} <strong>{label}:</strong> <span>{value || 'N/A'}</span>
+  </Typography>
+);
 
 const PdfUploads = () => {
   const theme = useTheme();
@@ -104,6 +138,18 @@ const PdfUploads = () => {
   
   // Review/Pre-Upload Confirmation Modal State
   const [reviewOpen, setReviewOpen] = useState(false);
+
+  // --- NEW: IMPORT / EXPORT STATE ---
+  const [importOpen, setImportOpen] = useState(false);
+  const [importStep, setImportStep] = useState('select'); // select | preview | committing | summary
+  const [parsedRows, setParsedRows] = useState([]);
+  const [pdfFiles, setPdfFiles] = useState(new Map());
+  const [imageFiles, setImageFiles] = useState(new Map());
+  const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
+  const [importSummary, setImportSummary] = useState(null);
+  const [exportAnchor, setExportAnchor] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(null);
 
   // --- REAL-TIME SUBSCRIPTION & DATA FETCHING ---
   useEffect(() => {
@@ -337,6 +383,80 @@ const PdfUploads = () => {
     } finally { setLoading(false); }
   };
 
+  // --- NEW: IMPORT WIZARD HANDLERS ---
+  const closeImport = () => {
+    setImportOpen(false);
+    setImportStep('select');
+    setParsedRows([]);
+    setPdfFiles(new Map());
+    setImageFiles(new Map());
+    setImportSummary(null);
+    setImportProgress({ done: 0, total: 0 });
+  };
+
+  const handleImportFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = null;
+    if (!file) return;
+    try {
+      const { rows, isZipImport, pdfFiles: pf, imageFiles: imf } = await parseImportFile(file);
+      if (!rows.length) { showStatus('error', 'The file has no data rows.'); return; }
+      const validated = await validateImportRows(rows, { pdfFiles: pf, imageFiles: imf, isZipImport });
+      setParsedRows(validated);
+      setPdfFiles(pf);
+      setImageFiles(imf);
+      setImportStep('preview');
+    } catch (err) {
+      showStatus('error', err.message || 'Failed to read the file.');
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    setImportStep('committing');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const result = await commitImport(parsedRows, pdfFiles, imageFiles, user?.id, setImportProgress);
+      setImportSummary(result);
+      setImportStep('summary');
+      await fetchData(); // refresh Recent Uploaded + stats immediately
+    } catch (err) {
+      showStatus('error', `Import failed: ${err.message}`);
+      setImportStep('preview');
+    }
+  };
+
+  // --- NEW: EXPORT HANDLERS ---
+  const handleExportExcel = async () => {
+    setExportAnchor(null);
+    setExporting(true);
+    try {
+      const materials = await fetchMaterialsForExport({ includeArchived: false });
+      if (!materials.length) { showStatus('error', 'No materials to export.'); return; }
+      exportMaterialsToExcel(materials);
+      showStatus('success', `Exported ${materials.length} record(s).`);
+    } catch (err) {
+      showStatus('error', `Export failed: ${err.message}`);
+    } finally { setExporting(false); }
+  };
+
+  const handleExportZip = async () => {
+    setExportAnchor(null);
+    setExporting(true);
+    setExportProgress({ done: 0, total: 0 });
+    try {
+      const materials = await fetchMaterialsForExport({ includeArchived: false });
+      if (!materials.length) { showStatus('error', 'No materials to export.'); return; }
+      await exportMaterialsToZip(materials, setExportProgress);
+      showStatus('success', `Exported ${materials.length} record(s) with PDFs.`);
+    } catch (err) {
+      showStatus('error', `Export failed: ${err.message}`);
+    } finally { setExporting(false); setExportProgress(null); }
+  };
+
+  const importInvalidCount = parsedRows.filter(r => r.status === 'invalid').length;
+  const importUpdateCount = parsedRows.filter(r => r.status === 'update').length;
+  const importNewCount = parsedRows.filter(r => r.status === 'new').length;
+
   const inputStyle = { 
     '& .MuiOutlinedInput-root': { 
       borderRadius: '10px',
@@ -347,10 +467,10 @@ const PdfUploads = () => {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 4, md: 5 }, bgcolor: isDarkMode ? '#0f172a' : '#f1f5f9', minHeight: '100vh', width: '100%' }}>
+    <Box sx={{ p: { xs: 2, sm: 4, md: 5 }, bgcolor: isDarkMode ? '#0f172a' : '#f1f5f9', minHeight: 'auto', width: '100%' }}>
       
       {/* HEADER SECTION */}
-      <Box sx={{ mb: 4, px: { xs: 1, sm: 2, md: 3 }, width: '100%', maxWidth: '1400px', margin: '4px' }}>
+      <Box sx={{ mb: 3, px: { xs: 1, sm: 2, md: 3 }, width: '100%', maxWidth: '1400px', margin: '4px' }}>
         <Typography variant="h3" sx={{ fontFamily: "'Montserrat', sans-serif", fontStyle: 'italic', fontWeight: 900, color: isDarkMode ? '#ffffff' : '#213C51', fontSize: { xs: '1.8rem', sm: '2.4rem', md: '3rem' } }}>
           UPLOAD PDFs
         </Typography>
@@ -359,8 +479,62 @@ const PdfUploads = () => {
         </Typography>
       </Box>
 
+      {/* IMPORT / EXPORT TOOLBAR — no card/background/border, just the buttons kept in place */}
+      <Box
+        sx={{
+          width: '100%',
+          maxWidth: '1600px',
+          margin: '0 auto 16px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 1,
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<FontAwesomeIcon icon={faCloudUploadAlt} />}
+            onClick={() => setImportOpen(true)}
+            sx={{ borderRadius: '10px', fontWeight: 800, px: 3 }}
+          >
+            Import
+          </Button>
+          <Button
+            variant="outlined"
+            size="large"
+            startIcon={<FontAwesomeIcon icon={faFileExcel} />}
+            onClick={(e) => setExportAnchor(e.currentTarget)}
+            disabled={exporting}
+            sx={{ borderRadius: '10px', fontWeight: 800, px: 3 }}
+          >
+            {exporting ? 'Exporting…' : 'Export'}
+          </Button>
+          <Menu anchorEl={exportAnchor} open={Boolean(exportAnchor)} onClose={() => setExportAnchor(null)}>
+            <MenuItem onClick={handleExportExcel}>
+              <FontAwesomeIcon icon={faFileExcel} style={{ marginRight: 10 }} /> Excel only (metadata + links)
+            </MenuItem>
+            <MenuItem onClick={handleExportZip}>
+              <FontAwesomeIcon icon={faFileArchive} style={{ marginRight: 10 }} /> ZIP (Excel + PDFs)
+            </MenuItem>
+          </Menu>
+        </Stack>
+
+        {/* export progress (only shown during a ZIP export) */}
+        {exportProgress && exportProgress.total > 0 && (
+          <Box sx={{ width: '100%' }}>
+            <Typography variant="caption" color="text.secondary">
+              Bundling PDFs: {exportProgress.done} / {exportProgress.total}
+            </Typography>
+            <LinearProgress variant="determinate" value={(exportProgress.done / exportProgress.total) * 100} sx={{ mt: 0.5, borderRadius: 5 }} />
+          </Box>
+        )}
+      </Box>
+
       {/* MAIN CONTENT GRID */}
-      <Grid container spacing={4} justifyContent="flex-start" alignItems="stretch" sx={{ width: '100%', maxWidth: '1600px', margin: '0 auto', mt: 5, mb: 4 }}>
+      <Grid container spacing={4} justifyContent="flex-start" alignItems="stretch" sx={{ width: '100%', maxWidth: '1600px', margin: '0 auto', mt: 0, mb: 1 }}>
         
         {/* LEFT COLUMN: UPLOAD FORM */}
         <Grid size={{ xs: 12, lg: 8, xl: 7}}>
@@ -718,7 +892,7 @@ const PdfUploads = () => {
                 </Grid>
               </Grid>
 
-              {/* NEW: Section, Program, Publisher, ISBN, Edition, Language —
+              {/* Section, Program, Publisher, ISBN, Edition, Language —
                   each only renders when actually filled in. */}
               {(formData.section || formData.program_course) && (
                 <Grid container spacing={2}>
@@ -786,124 +960,124 @@ const PdfUploads = () => {
         </DialogActions>
       </Dialog>
 
-      {/* MODAL: SEE RECENT ITEM DETAILS */}
+      {/* MODAL: SEE RECENT ITEM DETAILS — same layout as AdminDashboard's
+          "Book Details" / PdfCard's "Document Info": cover on the left,
+          title + author, a 2-column icon+label+value grid, then a labeled
+          description section. */}
       <Dialog 
         open={Boolean(selectedItemInfo)} 
         onClose={() => setSelectedItemInfo(null)}
         maxWidth="md"
         fullWidth
-        PaperProps={{ sx: { bgcolor: cardBg, borderRadius: 3, p: 1 } }}
+        PaperProps={{ sx: { borderRadius: '20px', bgcolor: cardBg, p: 1 } }}
       >
         {selectedItemInfo && (
           <>
-            <DialogTitle sx={{ fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <InfoIcon color="primary" /> Document Info
+            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <PictureAsPdfIcon color="primary" />
+                <Typography variant="h6" fontWeight="800">
+                  Document Info
+                </Typography>
+              </Stack>
+              <IconButton onClick={() => setSelectedItemInfo(null)} size="small">
+                <CloseIcon />
+              </IconButton>
             </DialogTitle>
-            <DialogContent dividers sx={{ borderColor: borderCol }}>
-              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, alignItems: { xs: 'center', md: 'flex-start' } }}>
-                <Avatar
-                  variant="rounded"
-                  src={selectedItemInfo.image_url ? getImageUrl(selectedItemInfo.image_url) : glclogo}
-                  sx={{
-                    width: { xs: 160, md: 210 },
-                    height: { xs: 200, md: 200 },
-                    boxShadow: 3,
-                    border: `1px solid ${borderCol}`,
-                    bgcolor: 'transparent',
-                    objectFit: 'cover'
-                  }}
-                >
-                  {!selectedItemInfo.image_url && <FontAwesomeIcon icon={faFilePdf} style={{ fontSize: '60px', color: '#ef4444' }} />}
-                </Avatar>
+            <Divider />
+            <DialogContent sx={{ mt: 2 }}>
+              <Grid container spacing={3}>
+                {/* COVER IMAGE */}
+                <Grid size={{ xs: 12, md: 4 }}>
+                  {selectedItemInfo.image_url ? (
+                    <Box
+                      component="img"
+                      src={getImageUrl(selectedItemInfo.image_url)}
+                      alt={selectedItemInfo.title}
+                      sx={{ width: '100%', borderRadius: '12px', height: 260, objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+                    />
+                  ) : (
+                    <Box sx={{ 
+                      height: 260, 
+                      borderRadius: '12px', 
+                      bgcolor: inputBg, 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      color: 'text.secondary'
+                    }}>
+                      <FontAwesomeIcon icon={faFilePdf} style={{ fontSize: 48, marginBottom: 8, color: '#94a3b8' }} />
+                      <Typography variant="caption" fontWeight="700">No Cover Available</Typography>
+                    </Box>
+                  )}
+                </Grid>
 
-                <Box sx={{ flexGrow: 1, width: '100%' }}>
-                  <Stack spacing={1.5}>
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <TitleIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Title:</strong> {selectedItemInfo.title || 'N/A'}</Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <PersonIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Author:</strong> {selectedItemInfo.author || 'N/A'}</Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <MenuBookIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Type:</strong> {selectedItemInfo.category || 'book'}</Typography>
-                    </Stack>
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <CategoryIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Genre:</strong> {selectedItemInfo.genre || 'N/A'}</Typography>
-                    </Stack>
+                {/* DETAILS */}
+                <Grid size={{ xs: 12, md: 8 }}>
+                  <Typography variant="h5" fontWeight="900" sx={{ mb: 1 }}>
+                    {selectedItemInfo.title || 'Untitled Material'}
+                  </Typography>
+                  <Typography variant="subtitle1" fontWeight="700" color="text.secondary" sx={{ mb: 2 }}>
+                    Author: {selectedItemInfo.author || 'Unknown'}
+                  </Typography>
 
-                    {/* NEW: digital-library metadata — only shown when present */}
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto auto' },
+                      justifyContent: 'start',
+                      columnGap: 3,
+                      rowGap: 1,
+                      mb: 2.5,
+                    }}
+                  >
+                    <InfoRow icon={<MenuBookIcon fontSize="small" color="primary" />} label="Type" value={selectedItemInfo.category || 'book'} />
+                    <InfoRow icon={<CategoryIcon fontSize="small" color="primary" />} label="Genre" value={selectedItemInfo.genre || 'General'} />
+
                     {selectedItemInfo.section && (
-                      <Stack direction="row" alignItems="center" spacing={1.5}>
-                        <BookmarkIcon color="primary" fontSize="small" />
-                        <Typography variant="body2"><strong>Section:</strong> {selectedItemInfo.section}</Typography>
-                      </Stack>
+                      <InfoRow icon={<BookmarkIcon fontSize="small" color="primary" />} label="Section" value={selectedItemInfo.section} />
                     )}
                     {selectedItemInfo.program_course && (
-                      <Stack direction="row" alignItems="center" spacing={1.5}>
-                        <SchoolIcon color="primary" fontSize="small" />
-                        <Typography variant="body2"><strong>Program:</strong> {selectedItemInfo.program_course}</Typography>
-                      </Stack>
+                      <InfoRow icon={<SchoolIcon fontSize="small" color="primary" />} label="Program" value={selectedItemInfo.program_course} />
                     )}
 
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <EventIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Published:</strong> {formatPublishedDate(selectedItemInfo)}</Typography>
-                    </Stack>
+                    <InfoRow icon={<EventIcon fontSize="small" color="primary" />} label="Published" value={formatPublishedDate(selectedItemInfo)} />
 
                     {selectedItemInfo.publisher && (
-                      <Stack direction="row" alignItems="center" spacing={1.5}>
-                        <BusinessIcon color="primary" fontSize="small" />
-                        <Typography variant="body2"><strong>Publisher:</strong> {selectedItemInfo.publisher}</Typography>
-                      </Stack>
-                    )}
-                    {selectedItemInfo.isbn && (
-                      <Stack direction="row" alignItems="center" spacing={1.5}>
-                        <ConfirmationNumberIcon color="primary" fontSize="small" />
-                        <Typography variant="body2"><strong>ISBN:</strong> {selectedItemInfo.isbn}</Typography>
-                      </Stack>
+                      <InfoRow icon={<BusinessIcon fontSize="small" color="primary" />} label="Publisher" value={selectedItemInfo.publisher} />
                     )}
                     {selectedItemInfo.edition && (
-                      <Stack direction="row" alignItems="center" spacing={1.5}>
-                        <LayersIcon color="primary" fontSize="small" />
-                        <Typography variant="body2"><strong>Edition:</strong> {selectedItemInfo.edition}</Typography>
-                      </Stack>
+                      <InfoRow icon={<LayersIcon fontSize="small" color="primary" />} label="Edition" value={selectedItemInfo.edition} />
+                    )}
+                    {selectedItemInfo.isbn && (
+                      <InfoRow icon={<ConfirmationNumberIcon fontSize="small" color="primary" />} label="ISBN" value={selectedItemInfo.isbn} />
                     )}
                     {selectedItemInfo.language && (
-                      <Stack direction="row" alignItems="center" spacing={1.5}>
-                        <LanguageIcon color="primary" fontSize="small" />
-                        <Typography variant="body2"><strong>Language:</strong> {selectedItemInfo.language}</Typography>
-                      </Stack>
+                      <InfoRow icon={<LanguageIcon fontSize="small" color="primary" />} label="Language" value={selectedItemInfo.language} />
                     )}
+                    <InfoRow icon={<StorageIcon fontSize="small" color="primary" />} label="Size" value={selectedItemFileSize} />
+                  </Box>
 
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <StorageIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Size:</strong> {selectedItemFileSize}</Typography>
-                    </Stack>
-                  </Stack>
-
-                  <Divider sx={{ my: 2, opacity: 0.2 }} />
-
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Description</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6, maxHeight: '180px', overflowY: 'auto' }}>
-                    {selectedItemInfo.description || 'No description available for this document.'}
+                  <Typography variant="subtitle2" fontWeight="800" sx={{ mb: 0.5, color: 'text.secondary' }}>
+                    DESCRIPTION / ABSTRACT
                   </Typography>
-                </Box>
-              </Box>
+                  <Typography variant="body2" sx={{ lineHeight: 1.7, color: isDarkMode ? '#cbd5e1' : '#475569', mb: 1 }}>
+                    {selectedItemInfo.description || 'No detailed description available for this document.'}
+                  </Typography>
+                </Grid>
+              </Grid>
             </DialogContent>
-            <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
+            <DialogActions sx={{ p: 2, pt: 0, justifyContent: 'space-between' }}>
               <Button
                 variant="contained"
                 startIcon={<VisibilityIcon />}
                 onClick={() => handleViewPdf(selectedItemInfo)}
-                sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: '#1e1b4b', '&:hover': { bgcolor: '#312e81' }, textTransform: 'none', fontWeight: 700 }}
+                sx={{ color: '#ffffff', bgcolor: '#1e1b4b', '&:hover': { bgcolor: '#312e81' }, textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}
               >
                 Read PDF
               </Button>
-              <Button onClick={() => setSelectedItemInfo(null)} sx={{ fontWeight: 700, color: 'text.secondary' }}>
+              <Button onClick={() => setSelectedItemInfo(null)} variant="outlined" sx={{ fontWeight: 700, borderRadius: '8px' }}>
                 Close
               </Button>
             </DialogActions>
@@ -1006,6 +1180,123 @@ const PdfUploads = () => {
           <Button fullWidth onClick={handleReplace} variant="contained" color="warning" sx={{ borderRadius: 2, fontWeight: 800 }}>Replace Existing</Button>
           <Button fullWidth onClick={handleAddAnyway} variant="outlined" sx={{ borderRadius: 2, fontWeight: 800 }}>Keep Both</Button>
           <Button fullWidth onClick={() => setConfirmData({ open: false, record: null })} color="inherit">Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* IMPORT WIZARD */}
+      <Dialog
+        open={importOpen}
+        onClose={importStep === 'committing' ? undefined : closeImport}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, bgcolor: cardBg } }}
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Import Academic Materials</DialogTitle>
+        <DialogContent dividers sx={{ borderColor: borderCol }}>
+
+          {importStep === 'select' && (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Upload a filled-in template (.xlsx), or a .zip containing the template plus a{' '}
+                <code>pdfs/</code> folder of the matching PDF files.
+              </Typography>
+              <Button component="label" variant="contained" startIcon={<FontAwesomeIcon icon={faCloudUploadAlt} />}>
+                Select File
+                <input type="file" hidden accept=".xlsx,.zip" onChange={handleImportFileSelected} />
+              </Button>
+            </Box>
+          )}
+
+          {importStep === 'preview' && (
+            <>
+              <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
+                <Chip label={`${importNewCount} new`} color="success" size="small" />
+                <Chip label={`${importUpdateCount} update`} color="info" size="small" />
+                <Chip label={`${importInvalidCount} invalid`} color="error" size="small" />
+              </Stack>
+              <Box sx={{ maxHeight: 400, overflow: 'auto', border: `1px solid ${borderCol}`, borderRadius: 2 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Row</TableCell>
+                      <TableCell>Title</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Notes</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {parsedRows.map((r) => (
+                      <TableRow key={r.rowNumber}>
+                        <TableCell>{r.rowNumber}</TableCell>
+                        <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.data.title || '—'}</TableCell>
+                        <TableCell>
+                          {r.status === 'invalid' && <Chip label="Invalid" color="error" size="small" />}
+                          {r.status === 'update' && <Chip label="Update" color="info" size="small" />}
+                          {r.status === 'new' && <Chip label="New" color="success" size="small" />}
+                        </TableCell>
+                        <TableCell sx={{ fontSize: '0.75rem' }}>
+                          {[...r.errors, ...r.warnings].join(' · ') || '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+              {importInvalidCount > 0 && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  {importInvalidCount} row(s) have errors and will be skipped. Fix them in your file and re-upload, or continue to import the valid rows only.
+                </Alert>
+              )}
+            </>
+          )}
+
+          {importStep === 'committing' && (
+            <Box sx={{ py: 4, textAlign: 'center' }}>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Importing {importProgress.done} / {importProgress.total}…
+              </Typography>
+              <LinearProgress variant="determinate" value={importProgress.total ? (importProgress.done / importProgress.total) * 100 : 0} sx={{ borderRadius: 5 }} />
+            </Box>
+          )}
+
+          {importStep === 'summary' && importSummary && (
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>Import Complete</Typography>
+              <Stack spacing={1}>
+                <Typography variant="body2">✅ Created: <strong>{importSummary.imported}</strong></Typography>
+                <Typography variant="body2">🔄 Updated: <strong>{importSummary.updated}</strong></Typography>
+                <Typography variant="body2">⏭️ Skipped (invalid): <strong>{importSummary.skipped}</strong></Typography>
+                <Typography variant="body2">❌ Failed: <strong>{importSummary.failed}</strong></Typography>
+              </Stack>
+              {importSummary.failedRows.length > 0 && (
+                <Button
+                  sx={{ mt: 2 }}
+                  variant="outlined"
+                  color="error"
+                  startIcon={<FontAwesomeIcon icon={faDownload} />}
+                  onClick={() => downloadErrorReport(importSummary.failedRows)}
+                >
+                  Download Error Report
+                </Button>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          {importStep === 'select' && <Button onClick={closeImport}>Cancel</Button>}
+          {importStep === 'preview' && (
+            <>
+              <Button onClick={closeImport} color="inherit">Cancel</Button>
+              <Button
+                variant="contained"
+                disabled={importNewCount + importUpdateCount === 0}
+                onClick={handleConfirmImport}
+              >
+                Confirm Import ({importNewCount + importUpdateCount} row{importNewCount + importUpdateCount === 1 ? '' : 's'})
+              </Button>
+            </>
+          )}
+          {importStep === 'summary' && <Button variant="contained" onClick={closeImport}>Done</Button>}
         </DialogActions>
       </Dialog>
 

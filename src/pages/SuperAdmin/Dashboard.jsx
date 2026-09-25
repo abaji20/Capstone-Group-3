@@ -13,6 +13,9 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import glclogo from '../../assets/glclogo.png';
+// Shared date formatter (year / month / day -> "March 15, 2020"), same one
+// used by the Admin Dashboard's report and "See More" dialog.
+import { formatPublishedDate } from '../../utils/formatPublishedDate';
 
 // MUI Icons
 import GroupIcon from '@mui/icons-material/Group';
@@ -35,6 +38,109 @@ const getStorageImageUrl = (imageUrl) => {
   if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
 
   return supabase.storage.from('pdfs').getPublicUrl(imageUrl).data.publicUrl;
+};
+
+// ---------------------------------------------------------------------
+// Shared PDF report design system. These exact constants and helpers are
+// duplicated in AdminDashboard.jsx so both dashboards' PDF reports share
+// one palette, one type scale and one set of card/table dimensions
+// instead of each drifting into its own look.
+// ---------------------------------------------------------------------
+const REPORT_NAVY = [33, 60, 81];
+const REPORT_BLUE = [37, 99, 235];
+const REPORT_PALETTE = [
+  [37, 99, 235],   // blue
+  [147, 51, 234],  // purple
+  [5, 150, 105],   // green
+  [79, 70, 229],   // indigo
+  [217, 119, 6],   // amber
+  [220, 38, 38],   // red
+  [13, 148, 136],  // teal
+  [219, 39, 119],  // pink
+];
+const REPORT_PAGE = { width: 297, height: 210, margin: 14 };
+
+// One colored KPI card for the summary section.
+const drawReportStatCard = (doc, x, y, w, h, label, value, color) => {
+  doc.setFillColor(color[0], color[1], color[2]);
+  doc.roundedRect(x, y, w, h, 2, 2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(7.5);
+  doc.text(String(label).toUpperCase(), x + 4, y + 7, { maxWidth: w - 8 });
+  doc.setFontSize(17);
+  doc.text(String(value), x + 4, y + h - 6);
+  doc.setFont(undefined, 'normal');
+};
+
+// Page header banner + accent stripe. Returns the Y position
+// content can safely start at.
+const drawReportHeader = (doc, title, generatedAt) => {
+  doc.setFillColor(REPORT_NAVY[0], REPORT_NAVY[1], REPORT_NAVY[2]);
+  doc.rect(0, 0, REPORT_PAGE.width, 26, 'F');
+  doc.setFillColor(REPORT_BLUE[0], REPORT_BLUE[1], REPORT_BLUE[2]);
+  doc.rect(0, 26, REPORT_PAGE.width, 2.5, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(15);
+  doc.text(title, REPORT_PAGE.margin, 15);
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(9);
+  doc.text(`Generated: ${generatedAt}`, REPORT_PAGE.margin, 21.5);
+  return 38;
+};
+
+// Colored section-title pill drawn above each category table.
+const drawReportSectionLabel = (doc, text, x, y, color) => {
+  const label = String(text).toUpperCase();
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'bold');
+  const pillW = doc.getTextWidth(label) + 10;
+  doc.setFillColor(color[0], color[1], color[2]);
+  doc.roundedRect(x, y - 5.5, pillW, 7.5, 1.2, 1.2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.text(label, x + 5, y);
+  doc.setFont(undefined, 'normal');
+};
+
+// "Page X of Y" + generated-date footer stamped on every page once the
+// report is fully built (so it covers pages autoTable added on its own).
+const drawReportFooters = (doc, generatedAt) => {
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(REPORT_PAGE.margin, REPORT_PAGE.height - 12, REPORT_PAGE.width - REPORT_PAGE.margin, REPORT_PAGE.height - 12);
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`Generated ${generatedAt}`, REPORT_PAGE.margin, REPORT_PAGE.height - 7);
+    doc.text(`Page ${i} of ${totalPages}`, REPORT_PAGE.width - REPORT_PAGE.margin, REPORT_PAGE.height - 7, { align: 'right' });
+  }
+};
+
+// ---------------------------------------------------------------------
+// Excel export helpers. Auto-sizes columns based on header + content
+// length so nothing gets cut off, overlaps, or looks crowded, and applies
+// a consistent header/frozen-row treatment across every sheet.
+// ---------------------------------------------------------------------
+const EXCEL_MIN_COL_WIDTH = 10;
+const EXCEL_MAX_COL_WIDTH = 45;
+
+// rows: array of plain objects (as passed to XLSX.utils.json_to_sheet)
+// headers: array of the exact key names/order used to build those rows
+const autoSizeColumns = (ws, rows, headers) => {
+  ws['!cols'] = headers.map((header) => {
+    const headerLen = String(header).length;
+    const maxLen = rows.reduce((max, row) => {
+      const val = row[header];
+      const len = val === null || val === undefined ? 0 : String(val).length;
+      return Math.max(max, len);
+    }, headerLen);
+    return { wch: Math.min(Math.max(maxLen + 2, EXCEL_MIN_COL_WIDTH), EXCEL_MAX_COL_WIDTH) };
+  });
+  // Freeze the header row so it stays visible and keep row heights
+  // consistent so wrapped/long values don't crowd neighboring rows.
+  ws['!views'] = [{ state: 'frozen', ySplit: 1 }];
 };
 
 const Dashboard = () => {
@@ -67,7 +173,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      // 1. Fetch Recent Accounts
+      // 1. Fetch Recent Accounts — SuperAdmin sees ALL roles (client, admin,
+      // superadmin). No role filter here, unlike the Admin Dashboard.
       const { data: accountsData } = await supabase
         .from('profiles')
         .select('id, email, role, created_at, full_name, department, id_number, year_level')
@@ -196,9 +303,11 @@ const Dashboard = () => {
   const executeExcelExport = async () => {
     const now = new Date();
     const dateString = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    // NOTE: no .eq('role', ...) filter — SuperAdmin's report must include
+    // Regular Users, Admin accounts and SuperAdmin accounts alike.
     const [{ data: accounts }, { data: materials }, { data: requests }, { data: downloads }, { data: logs }] = await Promise.all([
-      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at').order('created_at', { ascending: false }),
-      supabase.from('pdfs').select('id, title, author, category, genre, published_date, created_at, is_archived').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_archived').order('created_at', { ascending: false }),
+      supabase.from('pdfs').select('id, title, author, category, genre, published_date, published_month, published_day, section, program_course, publisher, isbn, edition, language, created_at, is_archived').order('created_at', { ascending: false }),
       supabase.from('upload_requests').select('id, status, created_at, user_id').order('created_at', { ascending: false }),
       supabase.from('downloads').select('id, user_id, pdf_id, downloaded_at').order('downloaded_at', { ascending: false }),
       supabase.from('audit_logs').select('id, action_type, description, created_at, user_id').order('created_at', { ascending: false })
@@ -210,50 +319,90 @@ const Dashboard = () => {
       [],
       ["OVERVIEW STATS"],
       ["Metric", "Value"],
-      ["Total PDF", stats.totalPdf],
+      ["Total Registered User Accounts", stats.users],
+      ["Total PDFs", stats.totalPdf],
       ["Total Accounts", stats.totalAccounts],
-      ["Users", stats.users],
-      ["Super Admin", stats.superAdmin],
+      ["Total Users", stats.users],
       ["Total Admins", stats.totalAdmins],
-      ["Downloads", stats.downloads],
-      ["Delete Requests", stats.deleteRequest],
-      ["Users Requests", stats.usersRequest],
+      ["Total Super Admins", stats.superAdmin],
+      ["Total Downloads", stats.downloads],
+      ["Total Pending Requests", stats.deleteRequest],
+      ["Total User Requests", stats.usersRequest],
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dashboardSheetData), "Dashboard Summary");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((accounts || []).map(account => ({
+    const summarySheet = XLSX.utils.aoa_to_sheet(dashboardSheetData);
+    summarySheet['!cols'] = [{ wch: 34 }, { wch: 22 }];
+    summarySheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 1 } },
+    ];
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Dashboard Summary");
+
+    const accountRows = (accounts || []).map(account => ({
       Name: account.full_name || 'N/A', Email: account.email || 'N/A', Role: account.role || 'N/A',
       'ID Number': account.id_number || 'N/A', Department: account.department || 'N/A',
-      'Year Level': account.year_level || 'N/A', 'Date Joined': formatReportDate(account.created_at)
-    }))), 'Account Information');
+      'Year Level': account.year_level || 'N/A',
+      'Account Status': account.is_active === false ? 'Deactivated' : 'Active',
+      'Archived': account.is_archived ? 'Yes' : 'No',
+      'Date Joined': formatReportDate(account.created_at)
+    }));
+    const accountHeaders = ['Name', 'Email', 'Role', 'ID Number', 'Department', 'Year Level', 'Account Status', 'Archived', 'Date Joined'];
+    const accountSheet = XLSX.utils.json_to_sheet(accountRows, { header: accountHeaders });
+    autoSizeColumns(accountSheet, accountRows, accountHeaders);
+    XLSX.utils.book_append_sheet(wb, accountSheet, 'Account Information');
+
+    const materialHeaders = ['Title', 'Author', 'Type', 'Genre', 'Section', 'Program', 'Published', 'Publisher', 'Edition', 'Language', 'ISBN', 'Date Added', 'Archived'];
     const categories = [...new Set((materials || []).map(material => material.category || 'Uncategorized'))];
     categories.forEach(category => {
       const categoryRows = (materials || []).filter(material => (material.category || 'Uncategorized') === category);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(categoryRows.map(material => ({
-        Title: material.title || 'Untitled', Author: material.author || 'N/A', Genre: material.genre || 'General',
-        'Published Date': material.published_date || 'N/A', 'Date Added': formatReportDate(material.created_at),
-        Archived: material.is_archived ? 'Yes' : 'No'
-      }))), String(category).slice(0, 31) || 'Materials');
+      const materialRows = categoryRows.map(material => ({
+        Title: material.title || 'Untitled', Author: material.author || 'N/A', Type: material.category || 'N/A',
+        Genre: material.genre || 'General', Section: material.section || 'N/A', Program: material.program_course || 'N/A',
+        Published: formatPublishedDate(material) || 'N/A', Publisher: material.publisher || 'N/A',
+        Edition: material.edition || 'N/A', Language: material.language || 'N/A', ISBN: material.isbn || 'N/A',
+        'Date Added': formatReportDate(material.created_at), Archived: material.is_archived ? 'Yes' : 'No'
+      }));
+      const materialSheet = XLSX.utils.json_to_sheet(materialRows, { header: materialHeaders });
+      autoSizeColumns(materialSheet, materialRows, materialHeaders);
+      XLSX.utils.book_append_sheet(wb, materialSheet, String(category).slice(0, 31) || 'Materials');
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((requests || []).map(request => ({
+
+    const requestRows = (requests || []).map(request => ({
       'Request ID': request.id, Status: request.status || 'N/A', 'User ID': request.user_id || 'N/A',
       'Requested At': formatReportDate(request.created_at)
-    }))), 'Upload Requests');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((downloads || []).map(download => ({
+    }));
+    const requestHeaders = ['Request ID', 'Status', 'User ID', 'Requested At'];
+    const requestSheet = XLSX.utils.json_to_sheet(requestRows, { header: requestHeaders });
+    autoSizeColumns(requestSheet, requestRows, requestHeaders);
+    XLSX.utils.book_append_sheet(wb, requestSheet, 'Upload Requests');
+
+    const downloadRows = (downloads || []).map(download => ({
       'Download ID': download.id, 'User ID': download.user_id || 'N/A', 'PDF ID': download.pdf_id || 'N/A',
       'Downloaded At': formatReportDate(download.downloaded_at)
-    }))), 'Downloads');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((logs || []).map(log => ({
+    }));
+    const downloadHeaders = ['Download ID', 'User ID', 'PDF ID', 'Downloaded At'];
+    const downloadSheet = XLSX.utils.json_to_sheet(downloadRows, { header: downloadHeaders });
+    autoSizeColumns(downloadSheet, downloadRows, downloadHeaders);
+    XLSX.utils.book_append_sheet(wb, downloadSheet, 'Downloads');
+
+    const logRows = (logs || []).map(log => ({
       Action: log.action_type || 'N/A', Description: log.description || 'N/A', 'User ID': log.user_id || 'N/A',
       'Created At': formatReportDate(log.created_at)
-    }))), 'Audit Logs');
+    }));
+    const logHeaders = ['Action', 'Description', 'User ID', 'Created At'];
+    const logSheet = XLSX.utils.json_to_sheet(logRows, { header: logHeaders });
+    autoSizeColumns(logSheet, logRows, logHeaders);
+    XLSX.utils.book_append_sheet(wb, logSheet, 'Audit Logs');
+
     XLSX.writeFile(wb, `Library_Repository_Report_${dateString}.xlsx`);
   };
 
   const executePdfExport = async () => {
     const now = new Date();
     const generatedDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    // NOTE: no role filter on accounts — used only to compute totals here,
+    // and it already covered every role before this update too.
     const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
-      supabase.from('pdfs').select('id, title, author, category, genre, published_date, created_at, is_archived').order('category').order('created_at', { ascending: false }),
+      supabase.from('pdfs').select('id, title, author, category, genre, published_date, published_month, published_day, section, program_course, publisher, isbn, edition, language, created_at, is_archived').order('category').order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, role'),
       supabase.from('upload_requests').select('id').eq('status', 'pending'),
       supabase.from('downloads').select('id')
@@ -265,51 +414,75 @@ const Dashboard = () => {
       if (account.role === 'superadmin') totals.superAdmins += 1;
       return totals;
     }, { totalAccounts: 0, users: 0, admins: 0, superAdmins: 0 });
-    const doc = new jsPDF();
-    doc.setFillColor(33, 60, 81);
-    doc.rect(0, 0, 210, 30, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.text("LIBRARY MANAGEMENT SYSTEM REPORT", 14, 18);
-    doc.setTextColor(33, 60, 81);
-    doc.setFontSize(10);
-    doc.text(`Generated: ${now.toLocaleString()}`, 14, 40);
-    autoTable(doc, {
-      startY: 48,
-      head: [['Summary Metric', 'Total']],
-      body: [
-        ['Total Accounts', accountTotals.totalAccounts],
-        ['Total Users', accountTotals.users],
-        ['Total Admins', accountTotals.admins],
-        ['Total Super Admins', accountTotals.superAdmins],
-        ['Total PDFs / Materials', materials?.length || 0],
-        ['Pending PDF Requests', requests?.length || 0],
-        ['Total Downloads', downloads?.length || 0]
-      ],
-      theme: 'grid',
-      headStyles: { fillColor: [33, 60, 81] }
+    // Landscape, not portrait: the materials table below now carries the
+    // full metadata set (type, published date, publisher, edition,
+    // language...) and needs the extra width to stay readable.
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const generatedAt = now.toLocaleString();
+    let nextY = drawReportHeader(doc, 'LIBRARY MANAGEMENT SYSTEM REPORT', generatedAt);
+
+    // Summary as colored KPI cards (same palette/sizing as the Admin
+    // report) instead of a plain metric/value table.
+    const summaryStats = [
+      ['Registered User Accounts', accountTotals.users],
+      ['Total Accounts', accountTotals.totalAccounts],
+      ['Total Users', accountTotals.users],
+      ['Total Admins', accountTotals.admins],
+      ['Total Super Admins', accountTotals.superAdmins],
+      ['Total PDFs', materials?.length || 0],
+      ['Pending Requests', requests?.length || 0],
+      ['Total Downloads', downloads?.length || 0],
+      ['User Requests', requests?.length || 0]
+    ];
+    const cardCols = 3;
+    const cardGap = 6;
+    const cardW = (REPORT_PAGE.width - REPORT_PAGE.margin * 2 - cardGap * (cardCols - 1)) / cardCols;
+    const cardH = 22;
+    summaryStats.forEach(([label, value], i) => {
+      const col = i % cardCols;
+      const row = Math.floor(i / cardCols);
+      const x = REPORT_PAGE.margin + col * (cardW + cardGap);
+      const y = nextY + row * (cardH + cardGap);
+      drawReportStatCard(doc, x, y, cardW, cardH, label, value, REPORT_PALETTE[i % REPORT_PALETTE.length]);
     });
-    let nextY = doc.lastAutoTable.finalY + 14;
+    nextY += Math.ceil(summaryStats.length / cardCols) * (cardH + cardGap) + 6;
+
     const categories = [...new Set((materials || []).map(material => material.category || 'Uncategorized'))];
-    categories.forEach(category => {
-      if (nextY > 245) { doc.addPage(); nextY = 18; }
+    categories.forEach((category, catIdx) => {
+      if (nextY > 155) { doc.addPage(); nextY = 20; }
       const categoryRows = (materials || []).filter(material => (material.category || 'Uncategorized') === category);
-      doc.setFontSize(12);
-      doc.setTextColor(33, 60, 81);
-      doc.text(String(category).toUpperCase(), 14, nextY);
+      const sectionColor = REPORT_BLUE;
+      drawReportSectionLabel(doc, category, REPORT_PAGE.margin, nextY, sectionColor);
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Title', 'Author', 'Genre', 'Published', 'Date Added', 'Status']],
+        head: [['Title', 'Author', 'Type', 'Genre', 'Published', 'Publisher', 'Edition', 'Language', 'Date Added', 'Status']],
         body: categoryRows.map(material => [
-          material.title || 'Untitled', material.author || 'N/A', material.genre || 'General',
-          material.published_date || 'N/A', formatReportDate(material.created_at), material.is_archived ? 'Archived' : 'Active'
+          material.title || 'Untitled',
+          material.author || 'N/A',
+          material.category || 'N/A',
+          material.genre || 'General',
+          formatPublishedDate(material) || 'N/A',
+          material.publisher || 'N/A',
+          material.edition || 'N/A',
+          material.language || 'N/A',
+          formatReportDate(material.created_at),
+          material.is_archived ? 'Archived' : 'Active'
         ]),
-        styles: { fontSize: 7, cellPadding: 2 },
-        headStyles: { fillColor: [33, 60, 81] },
-        theme: 'grid'
+        styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+        columnStyles: {
+          0: { cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { cellWidth: 20 }, 3: { cellWidth: 22 },
+          4: { cellWidth: 20 }, 5: { cellWidth: 28 }, 6: { cellWidth: 16 }, 7: { cellWidth: 18 },
+          8: { cellWidth: 26 }, 9: { cellWidth: 18 }
+        },
+        headStyles: { fillColor: sectionColor, textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [244, 247, 250] },
+        theme: 'grid',
+        margin: { top: 20, left: REPORT_PAGE.margin, right: REPORT_PAGE.margin, bottom: 16 }
       });
       nextY = doc.lastAutoTable.finalY + 12;
     });
+
+    drawReportFooters(doc, generatedAt);
     doc.save(`Library_Official_Report_${generatedDate}.pdf`);
   };
 
@@ -686,16 +859,11 @@ const Dashboard = () => {
                               size="small" 
                               sx={{ bgcolor: '#e2e8f0', color: '#1e293b', fontWeight: 800, fontSize: '0.65rem', height: 20, borderRadius: '4px' }} 
                             />
-                            <Chip 
-                              label={activity.role || 'SYSTEM'} 
-                              size="small" 
-                              sx={{ bgcolor: '#f3e8ff', color: '#7c3aed', fontWeight: 800, fontSize: '0.65rem', height: 20, borderRadius: '4px' }} 
-                            />
                           </Stack>
                         }
                         secondary={
                           <Typography variant="body2" sx={{ color: isDarkMode ? '#cbd5e1' : '#334155', fontWeight: 600, mt: 0.5 }}>
-                            <strong>{activity.performed_by || 'Admin'}:</strong> {activity.description || 'Performed system activity action.'}
+                            {activity.description || 'Performed system activity action.'}
                           </Typography>
                         }
                       />

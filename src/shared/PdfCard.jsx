@@ -2,18 +2,16 @@ import React, { useState } from 'react';
 import { 
   Card, CardMedia, CardContent, Typography, Button, Box, 
   Dialog, DialogTitle, DialogContent, DialogActions, Stack, Divider, useTheme,
-  CircularProgress
+  CircularProgress, Grid, IconButton
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'; 
 import DateRangeIcon from '@mui/icons-material/DateRange';
 import CategoryIcon from '@mui/icons-material/Category';
-import InfoIcon from '@mui/icons-material/Info';
+import CloseIcon from '@mui/icons-material/Close';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import DownloadIcon from '@mui/icons-material/Download';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'; 
-import TitleIcon from '@mui/icons-material/Title';
 import BookIcon from '@mui/icons-material/Book'; 
-import PersonIcon from '@mui/icons-material/Person'; 
 import DownloadForOfflineIcon from '@mui/icons-material/DownloadForOffline';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 // NEW: icons for the added metadata fields
@@ -34,13 +32,12 @@ import clientbackground from '../assets/clientbackground.png';
 // NEW: shows the year, or "March 2020" / "March 15, 2020" when month/day exist
 import { formatPublishedDate } from '../utils/formatPublishedDate';
 
-// One label/value line in the Document Info grid.
-// The value is never cut off with "...". It keeps its natural one-line width,
-// so the dialog grows wider to fit it (see the Dialog + grid below).
-// Only if the screen itself is too narrow does the value wrap as a last resort.
+// One label/value line in the Document Info grid. Shared shape across
+// PdfCard, PdfUploads and AdminDashboard so every "Document Info" /
+// "Book Details" surface in the app reads identically.
 //  - alignItems: 'flex-start' keeps the icon aligned with the first line
 //  - the label (<strong>) never shrinks, so "Author:" stays on one line
-//  - the value <span> can shrink (minWidth: 0) only when there is no room left
+//  - the value <span> wraps instead of truncating with "..."
 const InfoRow = ({ icon, label, value }) => (
   <Typography
     variant="body2"
@@ -266,69 +263,75 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
         </Stack>
       </Card>
       
-      {/* SEE MORE / DOCUMENT INFO DIALOG */}
+      {/* SEE MORE / DOCUMENT INFO DIALOG — same layout as AdminDashboard's
+          "Book Details": cover on the left, title + author, a 2-column
+          icon+label+value grid, then a labeled description section. */}
       <Dialog 
         open={open} 
         onClose={() => setOpen(false)} 
-        maxWidth={false}
+        maxWidth="md"
+        fullWidth
         PaperProps={{
           sx: {
-            borderRadius: 1.5,
+            borderRadius: '20px',
             ...poppinsFont,
-            bgcolor: isDarkMode ? '#0f172a' : '#fff',
-            // Width follows the content: starts at the old 600px and grows
-            // when the author/title is long, up to the edge of the screen.
-            width: 'fit-content',
-            minWidth: { xs: 'calc(100% - 64px)', sm: 'min(600px, calc(100% - 64px))' },
-            maxWidth: 'calc(100% - 64px)',
+            bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
+            color: isDarkMode ? '#f8fafc' : '#1e293b',
+            p: 1,
           },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
-          <InfoIcon sx={{ color: iconColor }} /> Document Info
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <PictureAsPdfIcon sx={{ color: iconColor }} />
+            <Typography variant="h6" fontWeight="800">
+              Document Info
+            </Typography>
+          </Stack>
+          <IconButton onClick={() => setOpen(false)} size="small">
+            <CloseIcon />
+          </IconButton>
         </DialogTitle>
-        <DialogContent dividers sx={{ borderColor: isDarkMode ? '#334155' : 'rgba(0,0,0,0.12)' }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} alignItems={{ xs: 'center', sm: 'flex-start' }}>
-            
-            <Box sx={{ 
-              width: { xs: '50%', sm: 160 }, 
-              flexShrink: 0,
-              mb: { xs: 1, sm: 0 },
-              aspectRatio: '3/4',
-              borderRadius: 2,
-              overflow: 'hidden',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              backgroundImage: !coverUrl ? (isDarkMode 
-                ? `linear-gradient(rgba(51, 65, 85, 0.8), rgba(51, 65, 85, 0.8)), url(${clientbackground})`
-                : `linear-gradient(rgba(33, 60, 81, 0.8), rgba(33, 60, 81, 0.8)), url(${clientbackground})`) : 'none',
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              bgcolor: coverUrl ? 'transparent' : (isDarkMode ? '#334155' : '#213C51'),
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
+        <Divider />
+        <DialogContent sx={{ mt: 2 }}>
+          <Grid container spacing={3}>
+            {/* COVER IMAGE */}
+            <Grid size={{ xs: 12, md: 4 }}>
               {coverUrl ? (
-                <img 
-                  src={coverUrl} 
-                  alt={pdf.title} 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                <Box
+                  component="img"
+                  src={coverUrl}
+                  alt={pdf.title}
+                  sx={{ width: '100%', borderRadius: '12px', height: 260, objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
                 />
               ) : (
-                <Box 
-                  component="img"
-                  src={glclogo}
-                  alt="No Cover Fallback"
-                  sx={{ width: '70%', height: 'auto', opacity: 0.9 }}
-                />
+                <Box sx={{
+                  height: 260,
+                  borderRadius: '12px',
+                  backgroundImage: isDarkMode
+                    ? `linear-gradient(rgba(51, 65, 85, 0.85), rgba(51, 65, 85, 0.85)), url(${clientbackground})`
+                    : `linear-gradient(rgba(33, 60, 81, 0.85), rgba(33, 60, 81, 0.85)), url(${clientbackground})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  p: 3
+                }}>
+                  <Box component="img" src={glclogo} alt="No Cover Fallback" sx={{ width: '65%', height: 'auto', opacity: 0.9 }} />
+                </Box>
               )}
-            </Box>
+            </Grid>
 
-            <Stack spacing={1.5} sx={{ flexGrow: 1, width: 'auto', minWidth: 0 }}>
-              {/* Metadata rows in a responsive 2-column grid.
-                  'auto auto' makes each column as wide as its longest value,
-                  so a long author name stays on ONE line and the dialog
-                  widens to fit it. On phones it stays 1 column. */}
+            {/* DETAILS */}
+            <Grid size={{ xs: 12, md: 8 }}>
+              <Typography variant="h5" fontWeight="900" sx={{ mb: 1 }}>
+                {pdf.title || 'Untitled Material'}
+              </Typography>
+              <Typography variant="subtitle1" fontWeight="700" color="text.secondary" sx={{ mb: 2 }}>
+                Author: {pdf.author || 'Unknown'}
+              </Typography>
+
               <Box
                 sx={{
                   display: 'grid',
@@ -336,72 +339,55 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
                   justifyContent: 'start',
                   columnGap: 3,
                   rowGap: 1,
+                  mb: 2.5,
                 }}
               >
-                <InfoRow icon={<TitleIcon fontSize="small" sx={{ color: iconColor }} />} label="Title" value={pdf.title} />
-                <InfoRow icon={<PersonIcon fontSize="small" sx={{ color: iconColor }} />} label="Author" value={pdf.author} />
-                <InfoRow icon={<LibraryBooksIcon fontSize="small" sx={{ color: iconColor }} />} label="Type" value={pdf.category} />
-                <InfoRow icon={<CategoryIcon fontSize="small" sx={{ color: iconColor }} />} label="Genre" value={pdf.genre} />
+                <InfoRow icon={<LibraryBooksIcon fontSize="small" sx={{ color: iconColor }} />} label="Type" value={pdf.category || 'Book'} />
+                <InfoRow icon={<CategoryIcon fontSize="small" sx={{ color: iconColor }} />} label="Genre" value={pdf.genre || 'General'} />
 
-                {/* NEW: digital-library metadata — each only renders when
-                    the document actually has a value, so old records with
-                    blank new fields don't show a wall of "N/A" rows. */}
                 {pdf.section && <InfoRow icon={<BookmarkIcon fontSize="small" sx={{ color: iconColor }} />} label="Section" value={pdf.section} />}
                 {pdf.program_course && <InfoRow icon={<SchoolIcon fontSize="small" sx={{ color: iconColor }} />} label="Program" value={pdf.program_course} />}
 
                 <InfoRow icon={<DateRangeIcon fontSize="small" sx={{ color: iconColor }} />} label="Published" value={formatPublishedDate(pdf)} />
 
                 {pdf.publisher && <InfoRow icon={<BusinessIcon fontSize="small" sx={{ color: iconColor }} />} label="Publisher" value={pdf.publisher} />}
-                {pdf.isbn && <InfoRow icon={<ConfirmationNumberIcon fontSize="small" sx={{ color: iconColor }} />} label="ISBN" value={pdf.isbn} />}
                 {pdf.edition && <InfoRow icon={<LayersIcon fontSize="small" sx={{ color: iconColor }} />} label="Edition" value={pdf.edition} />}
+                {pdf.isbn && <InfoRow icon={<ConfirmationNumberIcon fontSize="small" sx={{ color: iconColor }} />} label="ISBN" value={pdf.isbn} />}
                 {pdf.language && <InfoRow icon={<LanguageIcon fontSize="small" sx={{ color: iconColor }} />} label="Language" value={pdf.language} />}
 
                 <InfoRow icon={<InsertDriveFileIcon fontSize="small" sx={{ color: iconColor }} />} label="Size" value={fileSize} />
               </Box>
-              
-              <Divider sx={{ bgcolor: isDarkMode ? '#334155' : 'rgba(0,0,0,0.12)' }} />
-              
-              <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>Description</Typography>
-              <Typography 
-                variant="caption" 
-                color="text.secondary" 
+
+              <Typography variant="subtitle2" fontWeight="800" sx={{ mb: 0.5, color: 'text.secondary' }}>
+                DESCRIPTION / ABSTRACT
+              </Typography>
+              <Typography variant="body2" sx={{ lineHeight: 1.7, color: isDarkMode ? '#cbd5e1' : '#475569', mb: 3, textAlign: 'justify' }}>
+                {pdf.description || 'No description provided.'}
+              </Typography>
+
+              <Button 
+                variant="contained" 
+                startIcon={<BookIcon />} 
+                onClick={handleRead}
                 sx={{ 
-                  color: isDarkMode ? '#94a3b8' : 'text.secondary',
-                  textAlign: 'justify',
-                  display: 'block',
-                  // width: 0 + minWidth: 100% = the description fills the column
-                  // but does NOT push the dialog wider. Only the info rows
-                  // (author, title...) decide the dialog width.
-                  width: 0,
-                  minWidth: '100%',
+                  textTransform: 'none',
+                  color: '#fff',  
+                  fontWeight: 700,
+                  borderRadius: '8px',
+                  px: 3,
+                  bgcolor: '#281C59', 
+                  '&:hover': { bgcolor: '#180c46' }
                 }}
               >
-                {pdf.description || "No description provided."}
-              </Typography>
-              
-              <Stack direction="row" spacing={2} sx={{ pt: 2 }}>
-                <Button 
-                  fullWidth 
-                  variant="contained" 
-                  startIcon={<BookIcon />} 
-                  onClick={handleRead}
-                  sx={{ 
-                    textTransform: 'none',
-                    fontSize: { xs: '0.75rem', sm: '0.875rem' }, 
-                    color: '#fff',  
-                    py: { xs: 0.8, sm: 1.2 },
-                    bgcolor: isDarkMode ? '#281C59' : '#281C59', 
-                    '&:hover': { bgcolor: isDarkMode ? '#180c46' : '#180c46' }
-                  }}
-                >
-                  Read
-                </Button>
-              </Stack>
-            </Stack>
-          </Stack>   
+                Read
+              </Button>
+            </Grid>
+          </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)} sx={{ color: isDarkMode ? '#94a3b8' : 'inherit' }}>Close</Button>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setOpen(false)} variant="outlined" sx={{ fontWeight: 700, borderRadius: '8px' }}>
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
 
