@@ -112,11 +112,16 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
 
   // Fixed box heights (px) the title/author must fit into — these do NOT
   // change when the font shrinks, which is what keeps every card equal.
-  const TITLE_BOX_HEIGHT = isSmall ? 36 : 42;   // ~2 lines
-  const AUTHOR_BOX_HEIGHT = 18;                  // 1 line
+  // Tall enough for ~3 wrapped lines so useFitText has room to actually
+  // shrink a long title down to something that fits, instead of the box
+  // clipping it before the font gets small enough.
+  const TITLE_BOX_HEIGHT = isSmall ? 46 : 52;   // ~3 lines
+  const AUTHOR_BOX_HEIGHT = 16;                  // 1 line
 
-  const titleRef = useFitText(pdf.title, { max: isSmall ? 14 : 16, min: 10, step: 0.5 });
-  const authorRef = useFitText(pdf.author, { max: 12, min: 9, step: 0.5 });
+  // Lower font floor (was 9/8) so long titles keep shrinking further before
+  // ever being clipped.
+  const titleRef = useFitText(pdf.title, { max: isSmall ? 12 : 14, min: 7, step: 0.25 });
+  const authorRef = useFitText(pdf.author, { max: 11, min: 7, step: 0.25 });
 
   // Utility Function para i-convert ang bytes papuntang readable format (KB, MB, GB)
   const formatBytes = (bytes) => {
@@ -217,8 +222,8 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
         ...poppinsFont,
         height: '100%', display: 'flex', flexDirection: 'column',
         borderRadius: 2, 
-        maxWidth: isSmall ? { xs: 160, sm: 180 } : 220, 
-        minWidth: isSmall ? { xs: 160, sm: 180 } : 220, 
+        maxWidth: isSmall ? { xs: 130, sm: 145 } : 175, 
+        minWidth: isSmall ? { xs: 130, sm: 145 } : 175, 
         flexShrink: 0,
         bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
         transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
@@ -227,14 +232,14 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
         {coverUrl ? (
           <CardMedia 
             component="img" 
-            height={isSmall ? "200" : "260"} 
+            height={isSmall ? "160" : "200"} 
             image={coverUrl} 
             alt={pdf.title} 
             sx={{ objectFit: 'cover' }} 
           />
         ) : ( 
           <Box sx={{ 
-            height: isSmall ? 200 : 260, 
+            height: isSmall ? 160 : 200, 
             backgroundImage: isDarkMode 
               ? `linear-gradient(rgba(30, 41, 59, 0.85), rgba(30, 41, 59, 0.85)), url(${clientbackground})`
               : `linear-gradient(rgba(33, 60, 81, 0.85), rgba(33, 60, 81, 0.85)), url(${clientbackground})`,
@@ -243,7 +248,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',
-            p: 3
+            p: 2
           }}>
             <Box 
               component="img"
@@ -259,7 +264,7 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
           </Box>
         )}
         
-        <CardContent sx={{ flexGrow: 1, p: isSmall ? 1.5 : 2 }}>
+        <CardContent sx={{ flexGrow: 1, p: isSmall ? 1 : 1.5 }}>
           {/* Title never truncates with "..." — instead its font-size
               shrinks (via useFitText) so the full text fits in this fixed
               height box, keeping every card the same size. */}
@@ -274,13 +279,15 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
               overflow: 'hidden',
               lineHeight: 1.25,
               height: `${TITLE_BOX_HEIGHT}px`,
-              // Box is always reserved at 2-line height (so cards stay equal
-              // size), but the text itself sits at the BOTTOM of that box.
-              // A short 1-line title then sits right above the author
-              // instead of leaving a visible empty gap above it.
+              // Box is reserved at a fixed height (so cards stay equal
+              // size). Text is anchored to the TOP: useFitText shrinks the
+              // font until the full title fits, so this only matters as a
+              // safety net — if it ever still overflows, the beginning of
+              // the title stays visible and just the tail gets clipped,
+              // instead of losing the start of a long title.
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'flex-end',
+              justifyContent: 'flex-start',
             }}
           >
             {pdf.title}
@@ -304,25 +311,26 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
           </Typography>
         </CardContent>
 
-        <Stack spacing={isSmall ? 1 : 1.5} sx={{ p: isSmall ? 1.5 : 2, pt: 0 }}>
+        <Stack spacing={isSmall ? 0.75 : 1} sx={{ p: isSmall ? 1 : 1.5, pt: 0 }}>
           <Button 
             fullWidth 
             variant="outlined" 
-            startIcon={<VisibilityIcon sx={{ fontSize: isSmall ? '1rem' : 'inherit' }} />} 
+            startIcon={<VisibilityIcon sx={{ fontSize: isSmall ? '0.9rem' : '1rem' }} />} 
             onClick={handleOpenInfo} 
-            sx={{ fontSize: isSmall ? '0.7rem' : '0.8rem', textTransform: 'none' }}
+            sx={{ fontSize: isSmall ? '0.65rem' : '0.75rem', textTransform: 'none', py: isSmall ? 0.4 : 0.6 }}
           >
             See More
           </Button>
           <Button 
             fullWidth 
             variant="contained" 
-            startIcon={<DownloadIcon sx={{ fontSize: isSmall ? '1rem' : 'inherit' }} />} 
+            startIcon={<DownloadIcon sx={{ fontSize: isSmall ? '0.9rem' : '1rem' }} />} 
             onClick={handleOpenDownloadConfirm} 
             sx={{ 
-              fontSize: isSmall ? '0.7rem' : '0.8rem', 
+              fontSize: isSmall ? '0.65rem' : '0.75rem', 
               textTransform: 'none',  
               color: '#fff', 
+              py: isSmall ? 0.4 : 0.6,
               bgcolor: isDarkMode ? '#281C59' : iconColor 
             }}
           >
