@@ -537,7 +537,7 @@ const PdfUploads = () => {
       <Grid container spacing={4} justifyContent="flex-start" alignItems="stretch" sx={{ width: '100%', maxWidth: '1600px', margin: '0 auto', mt: 0, mb: 1 }}>
         
         {/* LEFT COLUMN: UPLOAD FORM */}
-        <Grid size={{ xs: 12, lg: 8, xl: 7}}>
+        <Grid size={{ xs: 12, lg: 7, xl: 7}}>
           <Paper elevation={0} sx={{ p: { xs: 3, sm: 4.5 }, borderRadius: 3, bgcolor: cardBg, border: `1px solid ${borderCol}`, height: '100%' }}>
             <Stack spacing={3} sx={autofillFix(inputBg, theme.palette.text.primary)}>
 
@@ -726,7 +726,7 @@ const PdfUploads = () => {
         </Grid>
 
         {/* RIGHT COLUMN: RECENT ACTIVITIES & TOTALS DASHBOARD */}
-        <Grid size={{ xs: 12, lg: 3, xl: 5 }}>
+        <Grid size={{ xs: 12, lg: 5, xl: 5 }}>
           {/* useFlexGap makes the Stack use real CSS `gap` instead of
               margin-based spacing. Margin-based spacing is computed from
               DOM order, but the two Papers below use `order` to flip their
@@ -786,7 +786,7 @@ const PdfUploads = () => {
             </Paper>
 
             {/* SYSTEM OVERVIEW (TOTALS) */}
-            <Paper elevation={0} sx={{ p: 3, borderRadius: 3, bgcolor: cardBg, border: `1px solid ${borderCol}`, order: 1 }}>
+            <Paper elevation={0} sx={{ p: 2, borderRadius: 3, bgcolor: cardBg, border: `1px solid ${borderCol}`, order: 1 }}>
               <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>System Overview</Typography>
               
               <Grid container spacing={1}>
@@ -794,7 +794,7 @@ const PdfUploads = () => {
                   <Box sx={{ p: 2, bgcolor: inputBg, borderRadius: 2, border: `1px solid ${borderCol}` }}>
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, color: '#3b82f6' }}>
                       <FontAwesomeIcon icon={faFilePdf} />
-                      <Typography variant="caption" sx={{ fontWeight: 800 }}>PDF'S</Typography>
+                      <Typography variant="caption" sx={{ fontWeight: 800 }}>PDFs</Typography>
                     </Stack>
                     <Typography variant="h5" sx={{ fontWeight: 900 }}>{stats.totalPdfs}</Typography>
                   </Box>
