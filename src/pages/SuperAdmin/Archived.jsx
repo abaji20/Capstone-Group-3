@@ -8,6 +8,9 @@ import {
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 import glclogo from '../../assets/glclogo.png';
+// Shared date formatter (year / month / day -> "March 15, 2020"), same one
+// used by the Admin Dashboard's report and Document Info modal.
+import { formatPublishedDate } from '../../utils/formatPublishedDate';
 
 // Icons
 import SearchIcon from '@mui/icons-material/Search';
@@ -16,16 +19,47 @@ import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import PdfIcon from '@mui/icons-material/PictureAsPdf';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import InfoIcon from '@mui/icons-material/Info';
-import TitleIcon from '@mui/icons-material/Title';
-import PersonIcon from '@mui/icons-material/Person';
 import CategoryIcon from '@mui/icons-material/Category';
-import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import StorageIcon from '@mui/icons-material/Storage';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import EventIcon from '@mui/icons-material/Event';
+// NEW: icons for the additional schema fields, matching the icon set used
+// in AdminDashboard.jsx's Document Info reference (Section, Program,
+// Publisher, Edition, ISBN, Language).
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import SchoolIcon from '@mui/icons-material/School';
+import BusinessIcon from '@mui/icons-material/Business';
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
+import LayersIcon from '@mui/icons-material/Layers';
+import LanguageIcon from '@mui/icons-material/Language';
+
+// One label/value line for the Document Info modal, matching
+// AdminDashboard.jsx / pdfCard.jsx's InfoRow so every "document info"
+// surface in the app looks and behaves the same way (icon + bold label +
+// value, wraps instead of truncating or getting cut off).
+const InfoRow = ({ icon, label, value }) => (
+  <Typography
+    variant="body2"
+    component="div"
+    sx={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 1,
+      minWidth: 0,
+      '& > svg': { flexShrink: 0 },
+      '& > strong': { flexShrink: 0 },
+      '& > span': {
+        minWidth: 0,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+      },
+    }}
+  >
+    {icon} <strong>{label}:</strong> <span>{value || 'N/A'}</span>
+  </Typography>
+);
 
 const Archived = () => {
   const theme = useTheme();
@@ -41,6 +75,9 @@ const Archived = () => {
   const [categoryFilter, setCategoryFilter] = useState('All Categories');
   const [archivedFiles, setArchivedFiles] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // --- PAGINATION STATE ---
+  const [currentPage, setCurrentPage] = useState(1);
 
   // --- MODAL STATES ---
   const [infoModalOpen, setInfoModalOpen] = useState(false);
@@ -176,6 +213,24 @@ const Archived = () => {
     return matchesSearch && matchesDate && matchesGenre && matchesCategory;
   });
 
+  // --- PAGINATION (12 per page, same pattern as ManageAccount.jsx) ---
+  const filesPerPage = 12;
+  const totalPages = Math.ceil(filteredFiles.length / filesPerPage);
+  const paginatedFiles = filteredFiles.slice(
+    (currentPage - 1) * filesPerPage,
+    currentPage * filesPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, monthFilter, dayFilter, yearFilter, genreFilter, categoryFilter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const uniqueGenres = ['All Genres', ...new Set(archivedFiles.map(f => f.genre).filter(Boolean))];
   const categories = ['All Categories', ...new Set(archivedFiles.map(file => file.category).filter(Boolean))];
   const monthOptions = [
@@ -265,7 +320,7 @@ const Archived = () => {
           <Avatar 
             variant="rounded" 
             src={file.image_url ? getImageUrl(file.image_url) : glclogo} 
-            sx={{ width: 60, height: 80, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}
+            sx={{ width: 50, height: 50, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}
           >
             {!file.image_url && <PdfIcon sx={{ color: 'red', fontSize: '2rem' }} />}
           </Avatar>
@@ -437,7 +492,7 @@ const Archived = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredFiles.map((file) => (
+                  {paginatedFiles.map((file) => (
                     <TableRow 
                       key={file.id}
                       hover 
@@ -449,7 +504,7 @@ const Archived = () => {
                           <Avatar 
                             variant="rounded" 
                             src={file.image_url ? getImageUrl(file.image_url) : glclogo} 
-                            sx={{ width: 45, height: 50, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}
+                            sx={{ width: 50, height: 50, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}
                           >
                             {!file.image_url && <PdfIcon sx={{ color: 'red' }} />}
                           </Avatar>
@@ -491,12 +546,50 @@ const Archived = () => {
               </Table>
             </TableContainer>
           ) : (
-            <Box>{filteredFiles.map((file) => <ArchivedMobileCard key={file.id} file={file} />)}</Box>
+            <Box>{paginatedFiles.map((file) => <ArchivedMobileCard key={file.id} file={file} />)}</Box>
+          )}
+
+          {totalPages > 1 && (
+            <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page - 1)}
+                disabled={currentPage === 1}
+                sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <Button
+                  key={page}
+                  size="small"
+                  onClick={() => setCurrentPage(page)}
+                  variant={currentPage === page ? 'contained' : 'text'}
+                  sx={{ minWidth: 32, fontWeight: 700 }}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page + 1)}
+                disabled={currentPage === totalPages}
+                sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+              >
+                Next
+              </Button>
+            </Stack>
           )}
         </>
       )}
 
-      {/* --- DOCUMENT INFO MODAL --- */}
+      {/* --- DOCUMENT INFO MODAL ---
+          Rebuilt to mirror AdminDashboard.jsx's Document Info reference:
+          Title/Author as a heading block, then an icon + label InfoRow grid
+          (now including Section, Program, Publisher, Edition, ISBN,
+          Language), using formatPublishedDate for the Published value.
+          The file-size row is kept since it's unique, existing
+          functionality on this screen that the Admin reference doesn't have. */}
       <Dialog 
         open={infoModalOpen} 
         onClose={() => setInfoModalOpen(false)}
@@ -520,46 +613,62 @@ const Archived = () => {
                   boxShadow: 3,
                   border: `1px solid ${borderCol}`,
                   bgcolor: 'transparent',
-                  objectFit: 'cover'
+                  objectFit: 'cover',
+                  flexShrink: 0
                 }}
               >
                 {!selectedPdfInfo.image_url && <PdfIcon sx={{ fontSize: 60, color: '#ef4444' }} />}
               </Avatar>
 
               <Box sx={{ flexGrow: 1, width: '100%' }}>
-                <Stack spacing={1.5}>
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <TitleIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Title:</strong> {selectedPdfInfo.title || 'N/A'}</Typography>
-                  </Stack>
+                <Typography variant="h6" fontWeight="900" sx={{ mb: 0.5 }}>
+                  {selectedPdfInfo.title || 'Untitled Document'}
+                </Typography>
+                <Typography variant="body2" fontWeight="700" color="text.secondary" sx={{ mb: 2 }}>
+                  Author: {selectedPdfInfo.author || 'N/A'}
+                </Typography>
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <PersonIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Author:</strong> {selectedPdfInfo.author || 'N/A'}</Typography>
-                  </Stack>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto auto' },
+                    justifyContent: 'start',
+                    columnGap: 3,
+                    rowGap: 1,
+                    mb: 2,
+                  }}
+                >
+                  <InfoRow icon={<MenuBookIcon color="primary" fontSize="small" />} label="Type" value={selectedPdfInfo.category || selectedPdfInfo.type || 'book'} />
+                  <InfoRow icon={<CategoryIcon color="primary" fontSize="small" />} label="Genre" value={selectedPdfInfo.genre} />
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <MenuBookIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Type:</strong> {selectedPdfInfo.category || selectedPdfInfo.type || 'book'}</Typography>
-                  </Stack>
+                  {selectedPdfInfo.section && (
+                    <InfoRow icon={<BookmarkIcon color="primary" fontSize="small" />} label="Section" value={selectedPdfInfo.section} />
+                  )}
+                  {selectedPdfInfo.program_course && (
+                    <InfoRow icon={<SchoolIcon color="primary" fontSize="small" />} label="Program" value={selectedPdfInfo.program_course} />
+                  )}
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <CategoryIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Genre:</strong> {selectedPdfInfo.genre || 'N/A'}</Typography>
-                  </Stack>
+                  <InfoRow
+                    icon={<EventIcon color="primary" fontSize="small" />}
+                    label="Published"
+                    value={formatPublishedDate(selectedPdfInfo) || selectedPdfInfo.published_date || 'N/A'}
+                  />
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <EventIcon color="primary" fontSize="small" />
-                    <Typography variant="body2">
-                      <strong>Published:</strong> {selectedPdfInfo.published_date || selectedPdfInfo.published_year || selectedPdfInfo.year || 'N/A'}
-                    </Typography>
-                  </Stack>
+                  {selectedPdfInfo.publisher && (
+                    <InfoRow icon={<BusinessIcon color="primary" fontSize="small" />} label="Publisher" value={selectedPdfInfo.publisher} />
+                  )}
+                  {selectedPdfInfo.edition && (
+                    <InfoRow icon={<LayersIcon color="primary" fontSize="small" />} label="Edition" value={selectedPdfInfo.edition} />
+                  )}
+                  {selectedPdfInfo.isbn && (
+                    <InfoRow icon={<ConfirmationNumberIcon color="primary" fontSize="small" />} label="ISBN" value={selectedPdfInfo.isbn} />
+                  )}
+                  {selectedPdfInfo.language && (
+                    <InfoRow icon={<LanguageIcon color="primary" fontSize="small" />} label="Language" value={selectedPdfInfo.language} />
+                  )}
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <StorageIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Size:</strong> {selectedPdfFileSize}</Typography>
-                  </Stack>
-                </Stack>
+                  <InfoRow icon={<StorageIcon color="primary" fontSize="small" />} label="Size" value={selectedPdfFileSize} />
+                </Box>
 
                 <Divider sx={{ my: 2, opacity: 0.2 }} />
 

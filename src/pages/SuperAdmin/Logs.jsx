@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Typography, CircularProgress, Stack, MenuItem, TextField, 
   InputAdornment, useTheme, useMediaQuery, Container, Card, CardContent,
   Button, IconButton, Dialog, DialogActions, DialogContent, 
-  DialogContentText, DialogTitle
+  DialogContentText, DialogTitle, Tabs, Tab, Chip
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
@@ -15,6 +15,53 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import AssignmentLateIcon from '@mui/icons-material/AssignmentLate';
+
+// ---------------------------------------------------------------------
+// Category classification. Every audit_logs row is bucketed into one of
+// these sections purely from its action_type / whether it's tied to a
+// pdf row, so no schema change is needed — this is UI-side grouping only.
+// Order matters: account actions are checked first because some of them
+// (e.g. "Edit Account") would otherwise also match the generic "edit"
+// check used for documents.
+// ---------------------------------------------------------------------
+const LOG_CATEGORIES = [
+  { key: 'all', label: 'All' },
+  { key: 'accounts', label: 'Accounts' },
+  { key: 'documents', label: 'Documents' },
+  { key: 'requests', label: 'Requests' },
+  { key: 'downloads', label: 'Downloads' },
+  { key: 'other', label: 'Other' },
+];
+
+const getLogCategory = (log) => {
+  const action = (log.action_type || '').toLowerCase();
+  const hasPdf = Boolean(log.pdfs?.title);
+
+  if (action.includes('download')) return 'downloads';
+
+  if (
+    action.includes('account') ||
+    action.includes('role') ||
+    action.includes('status change')
+  ) return 'accounts';
+
+  // Delete-request approvals/rejections, and plain "approved"/"rejected"
+  // from upload-request review, both belong under Requests.
+  if (action.includes('delete request')) return 'requests';
+  if (action === 'approved' || action === 'rejected') return 'requests';
+
+  if (
+    hasPdf ||
+    action.includes('upload') ||
+    action.includes('edit') ||
+    action.includes('delete') ||
+    action.includes('restore') ||
+    action.includes('archive') ||
+    action.includes('permanently')
+  ) return 'documents';
+
+  return 'other';
+};
 
 const Logs = () => {
   const theme = useTheme();
@@ -30,6 +77,9 @@ const Logs = () => {
 
   const [logs, setLogs] = useState([]);
   const [filteredLogs, setFilteredLogs] = useState([]);
+  // Logs after search/role/date filters but BEFORE the category tab is
+  // applied — used only to compute the live count shown on each tab.
+  const [preCategoryLogs, setPreCategoryLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,12 +87,16 @@ const Logs = () => {
   const [monthFilter, setMonthFilter] = useState('');
   const [dayFilter, setDayFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
+  const [activeCategory, setActiveCategory] = useState('all');
+
+  // --- PAGINATION STATE ---
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteConfig, setDeleteConfig] = useState({ type: null, id: null });
 
   useEffect(() => { fetchLogs(); }, []);
-  useEffect(() => { applyFilters(); }, [logs, searchTerm, roleFilter, monthFilter, dayFilter, yearFilter]);
+  useEffect(() => { applyFilters(); }, [logs, searchTerm, roleFilter, monthFilter, dayFilter, yearFilter, activeCategory]);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -91,8 +145,46 @@ const Logs = () => {
           (!yearFilter || logDate?.getFullYear() === Number(yearFilter));
       });
     }
+
+    // Snapshot before the category tab narrows things further, so each
+    // tab's count reflects the current search/role/date filters.
+    setPreCategoryLogs(tempLogs);
+
+    if (activeCategory !== 'all') {
+      tempLogs = tempLogs.filter(log => getLogCategory(log) === activeCategory);
+    }
+
     setFilteredLogs(tempLogs);
   };
+
+  // Count of logs per category, computed from preCategoryLogs so the
+  // numbers on the tabs stay in sync with search/role/date filters.
+  const categoryCounts = useMemo(() => {
+    const counts = { all: preCategoryLogs.length, accounts: 0, documents: 0, requests: 0, downloads: 0, other: 0 };
+    preCategoryLogs.forEach(log => {
+      const cat = getLogCategory(log);
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [preCategoryLogs]);
+
+  // --- PAGINATION (20 per page, same pattern as ManageAccount.jsx) ---
+  const logsPerPage = 20;
+  const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+  const paginatedLogs = filteredLogs.slice(
+    (currentPage - 1) * logsPerPage,
+    currentPage * logsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, roleFilter, monthFilter, dayFilter, yearFilter, activeCategory]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const getTargetName = (log) => {
     if (log.pdfs?.title) return log.pdfs.title;
@@ -223,7 +315,7 @@ const Logs = () => {
           justifyContent="space-between" 
           alignItems={{ xs: 'flex-start', sm: 'center' }} 
           spacing={2}
-          mb={5}
+          mb={3}
         >
           <Stack direction="row" alignItems="center" spacing={2}>
             <Box>
@@ -255,6 +347,54 @@ const Logs = () => {
             Clear All Logs
           </Button>
         </Stack>
+
+        {/* CATEGORY TABS — groups the flat audit_logs stream into Accounts,
+            Documents, Requests and Downloads sections. Counts respect the
+            current search/role/date filters below. The selected-tab
+            underline indicator is hidden (display: none) per request. */}
+        <Tabs
+          value={activeCategory}
+          onChange={(e, v) => setActiveCategory(v)}
+          variant="scrollable"
+          scrollButtons="auto"
+          TabIndicatorProps={{ sx: { display: 'none' } }}
+          sx={{
+            mb: 3,
+            borderBottom: `1px solid ${borderCol}`,
+            '& .MuiTab-root': {
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              textTransform: 'none',
+              minHeight: 44,
+              color: isDarkMode ? 'rgba(255,255,255,0.55)' : '#64748b',
+            },
+            '& .Mui-selected': { color: '#3b82f6 !important' },
+          }}
+        >
+          {LOG_CATEGORIES.map((cat) => (
+            <Tab
+              key={cat.key}
+              value={cat.key}
+              label={
+                <Stack direction="row" spacing={0.75} alignItems="center">
+                  <span>{cat.label}</span>
+                  <Chip
+                    label={categoryCounts[cat.key] || 0}
+                    size="small"
+                    sx={{
+                      height: 18,
+                      fontSize: '0.65rem',
+                      fontWeight: 800,
+                      bgcolor: activeCategory === cat.key ? '#3b82f6' : (isDarkMode ? 'rgba(255,255,255,0.08)' : '#e2e8f0'),
+                      color: activeCategory === cat.key ? '#ffffff' : (isDarkMode ? 'rgba(255,255,255,0.7)' : '#475569'),
+                      '& .MuiChip-label': { px: 0.7 },
+                    }}
+                  />
+                </Stack>
+              }
+            />
+          ))}
+        </Tabs>
 
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
           <TextField 
@@ -329,7 +469,7 @@ const Logs = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredLogs.map((log) => (
+                    {paginatedLogs.map((log) => (
                       <TableRow key={log.id} hover>
                         <TableCell sx={{ width: '250px' }}>
                             <Stack spacing={0}>
@@ -374,7 +514,7 @@ const Logs = () => {
               </TableContainer>
             ) : (
               <Stack spacing={2}>
-                {filteredLogs.map((log) => (
+                {paginatedLogs.map((log) => (
                   <Card key={log.id} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                     <CardContent>
                       <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
@@ -403,6 +543,38 @@ const Logs = () => {
                     </CardContent>
                   </Card>
                 ))}
+              </Stack>
+            )}
+
+            {totalPages > 1 && (
+              <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+                <Button
+                  size="small"
+                  onClick={() => setCurrentPage((page) => page - 1)}
+                  disabled={currentPage === 1}
+                  sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+                >
+                  Previous
+                </Button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                  <Button
+                    key={page}
+                    size="small"
+                    onClick={() => setCurrentPage(page)}
+                    variant={currentPage === page ? 'contained' : 'text'}
+                    sx={{ minWidth: 32, fontWeight: 700 }}
+                  >
+                    {page}
+                  </Button>
+                ))}
+                <Button
+                  size="small"
+                  onClick={() => setCurrentPage((page) => page + 1)}
+                  disabled={currentPage === totalPages}
+                  sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+                >
+                  Next
+                </Button>
               </Stack>
             )}
           </>

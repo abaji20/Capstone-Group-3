@@ -7,6 +7,9 @@ import {
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 import glclogo from '../../assets/glclogo.png';
+// Shared date formatter (year / month / day -> "March 15, 2020"), same one
+// used by the Admin Dashboard's report and Document Info modal.
+import { formatPublishedDate } from '../../utils/formatPublishedDate';
 
 // Icons
 import CheckIcon from '@mui/icons-material/Check';
@@ -16,12 +19,45 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import SearchIcon from '@mui/icons-material/Search';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import InfoIcon from '@mui/icons-material/Info';
-import TitleIcon from '@mui/icons-material/Title';
-import PersonIcon from '@mui/icons-material/Person';
 import CategoryIcon from '@mui/icons-material/Category';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import EventIcon from '@mui/icons-material/Event';
 import StorageIcon from '@mui/icons-material/Storage';
+// NEW: icons for the additional schema fields, matching the icon set used
+// in AdminDashboard.jsx's Document Info reference (Section, Program,
+// Publisher, Edition, ISBN, Language).
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import SchoolIcon from '@mui/icons-material/School';
+import BusinessIcon from '@mui/icons-material/Business';
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
+import LayersIcon from '@mui/icons-material/Layers';
+import LanguageIcon from '@mui/icons-material/Language';
+
+// One label/value line for the Document Info modal, matching
+// AdminDashboard.jsx / pdfCard.jsx's InfoRow so every "document info"
+// surface in the app looks and behaves the same way (icon + bold label +
+// value, wraps instead of truncating or getting cut off).
+const InfoRow = ({ icon, label, value }) => (
+  <Typography
+    variant="body2"
+    component="div"
+    sx={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 1,
+      minWidth: 0,
+      '& > svg': { flexShrink: 0 },
+      '& > strong': { flexShrink: 0 },
+      '& > span': {
+        minWidth: 0,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+      },
+    }}
+  >
+    {icon} <strong>{label}:</strong> <span>{value || 'N/A'}</span>
+  </Typography>
+);
 
 const DeleteRequests = () => {
   const theme = useTheme();
@@ -44,6 +80,9 @@ const DeleteRequests = () => {
   const [monthFilter, setMonthFilter] = useState('');
   const [dayFilter, setDayFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
+
+  // --- PAGINATION STATE ---
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [remarkModal, setRemarkModal] = useState({ open: false, requestId: null });
   const [remarks, setRemarks] = useState('');
@@ -224,6 +263,24 @@ const DeleteRequests = () => {
     return matchesSearch && matchesGenre && matchesCategory && matchesDate;
   });
 
+  // --- PAGINATION (12 per page, same pattern as ManageAccount.jsx) ---
+  const requestsPerPage = 12;
+  const totalPages = Math.ceil(filteredRequests.length / requestsPerPage);
+  const paginatedRequests = filteredRequests.slice(
+    (currentPage - 1) * requestsPerPage,
+    currentPage * requestsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, genreFilter, categoryFilter, monthFilter, dayFilter, yearFilter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   return (
     <Box sx={{ p: { xs: 2, md: 5 }, background: pageBg, minHeight: '100vh', transition: 'all 0.3s ease' }}>
       
@@ -305,137 +362,211 @@ const DeleteRequests = () => {
         </Box>
       ) : isMobile ? (
         // --- MOBILE VIEW ---
-        <Stack spacing={2}>
-          {filteredRequests.map((req) => (
-            <Card 
-              key={req.id} 
-              onClick={() => handleOpenInfo(req.pdfs)}
-              sx={{ bgcolor: cardBg, border: `1px solid ${borderCol}`, borderRadius: 2, cursor: 'pointer' }}
-            >
-              <CardContent>
-                <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-                  <Avatar 
-                    variant="rounded" 
-                    src={req.pdfs?.image_url ? getImageUrl(req.pdfs.image_url) : glclogo} 
-                    sx={{ width: 60, height: 60, border: `1px solid ${borderCol}`, bgcolor: cardBg }}
-                  >
-                    {!req.pdfs?.image_url && <PictureAsPdfIcon fontSize="large" sx={{ color: '#ef4444' }} />}
-                  </Avatar>
-                  <Box>
-                    <Typography sx={{ fontWeight: 700, fontSize: '1.1rem' }}>{req.pdfs?.title || 'Unknown File'}</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>{req.pdfs?.author}</Typography>
-                    <Typography variant="caption" sx={{ display: 'block', mt: 1, fontWeight: 700, color: 'primary.main' }}>
-                      BY: {req.profiles?.full_name}
-                    </Typography>
-                  </Box>
-                </Stack>
-                
-                <Divider sx={{ my: 1.5, opacity: 0.1 }} />
-                
-                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>REASON:</Typography>
-                <Typography variant="body2" sx={{ mb: 2 }}>{req.reason}</Typography>
-                <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', mb: 2 }}>{new Date(req.created_at).toLocaleDateString()}</Typography>
-
-                <Stack direction="column" spacing={1} onClick={(e) => e.stopPropagation()}>
-                  <Button 
-                    variant="outlined" 
-                    startIcon={<VisibilityIcon />} 
-                    onClick={() => handleViewPdf(req.pdfs)}
-                    sx={{ color: '#0ea5e9', borderColor: '#0ea5e9', textTransform: 'none', fontWeight: 700 }}
-                  >
-                    View PDF
-                  </Button>
-                  <Stack direction="row" spacing={1}>
-                    <Button 
-                      fullWidth
-                      variant="contained" 
-                      startIcon={<CheckIcon />} 
-                      onClick={(e) => handleApprove(req.id, req.pdfs?.id, e)}
-                      sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, textTransform: 'none', fontWeight: 700 }}
+        <>
+          <Stack spacing={2}>
+            {paginatedRequests.map((req) => (
+              <Card 
+                key={req.id} 
+                onClick={() => handleOpenInfo(req.pdfs)}
+                sx={{ bgcolor: cardBg, border: `1px solid ${borderCol}`, borderRadius: 2, cursor: 'pointer' }}
+              >
+                <CardContent>
+                  <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+                    <Avatar 
+                      variant="rounded" 
+                      src={req.pdfs?.image_url ? getImageUrl(req.pdfs.image_url) : glclogo} 
+                      sx={{ width: 60, height: 60, border: `1px solid ${borderCol}`, bgcolor: cardBg }}
                     >
-                      Accept
-                    </Button>
-                    <Button 
-                      fullWidth
-                      variant="contained" 
-                      startIcon={<CloseIcon />} 
-                      onClick={(e) => { e.stopPropagation(); setRemarkModal({ open: true, requestId: req.id }); }}
-                      sx={{ bgcolor: '#dc2626', '&:hover': { bgcolor: '#b91c1c' }, textTransform: 'none', fontWeight: 700 }}
-                    >
-                      Reject
-                    </Button>
+                      {!req.pdfs?.image_url && <PictureAsPdfIcon fontSize="large" sx={{ color: '#ef4444' }} />}
+                    </Avatar>
+                    <Box>
+                      <Typography sx={{ fontWeight: 700, fontSize: '1.1rem' }}>{req.pdfs?.title || 'Unknown File'}</Typography>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>{req.pdfs?.author}</Typography>
+                      <Typography variant="caption" sx={{ display: 'block', mt: 1, fontWeight: 700, color: 'primary.main' }}>
+                        BY: {req.profiles?.full_name}
+                      </Typography>
+                    </Box>
                   </Stack>
-                </Stack>
-              </CardContent>
-            </Card>
-          ))}
-        </Stack>
+                  
+                  <Divider sx={{ my: 1.5, opacity: 0.1 }} />
+                  
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>REASON:</Typography>
+                  <Typography variant="body2" sx={{ mb: 2 }}>{req.reason}</Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', mb: 2 }}>{new Date(req.created_at).toLocaleDateString()}</Typography>
+
+                  <Stack direction="column" spacing={1} onClick={(e) => e.stopPropagation()}>
+                    <Button 
+                      variant="outlined" 
+                      startIcon={<VisibilityIcon />} 
+                      onClick={() => handleViewPdf(req.pdfs)}
+                      sx={{ color: '#0ea5e9', borderColor: '#0ea5e9', textTransform: 'none', fontWeight: 700 }}
+                    >
+                      View PDF
+                    </Button>
+                    <Stack direction="row" spacing={1}>
+                      <Button 
+                        fullWidth
+                        variant="contained" 
+                        startIcon={<CheckIcon />} 
+                        onClick={(e) => handleApprove(req.id, req.pdfs?.id, e)}
+                        sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, textTransform: 'none', fontWeight: 700 }}
+                      >
+                        Accept
+                      </Button>
+                      <Button 
+                        fullWidth
+                        variant="contained" 
+                        startIcon={<CloseIcon />} 
+                        onClick={(e) => { e.stopPropagation(); setRemarkModal({ open: true, requestId: req.id }); }}
+                        sx={{ bgcolor: '#dc2626', '&:hover': { bgcolor: '#b91c1c' }, textTransform: 'none', fontWeight: 700 }}
+                      >
+                        Reject
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </Card>
+            ))}
+          </Stack>
+
+          {totalPages > 1 && (
+            <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page - 1)}
+                disabled={currentPage === 1}
+                sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <Button
+                  key={page}
+                  size="small"
+                  onClick={() => setCurrentPage(page)}
+                  variant={currentPage === page ? 'contained' : 'text'}
+                  sx={{ minWidth: 32, fontWeight: 700 }}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page + 1)}
+                disabled={currentPage === totalPages}
+                sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+              >
+                Next
+              </Button>
+            </Stack>
+          )}
+        </>
       ) : (
         // --- DESKTOP VIEW ---
-        <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
-          <Table sx={{ minWidth: 650 }}>
-            <TableHead sx={{ bgcolor: headerColor }}>
-              <TableRow>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }}>REQUESTED BY</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTION</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredRequests.map((req) => (
-                <TableRow 
-                  key={req.id} 
-                  hover 
-                  onClick={() => handleOpenInfo(req.pdfs)}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  <TableCell>
-                    <Stack direction="row" alignItems="center" spacing={2}>
-                      <Avatar 
-                        variant="rounded" 
-                        src={req.pdfs?.image_url ? getImageUrl(req.pdfs.image_url) : glclogo} 
-                        sx={{ width: 45, height: 50, border: `1px solid ${borderCol}`, bgcolor: cardBg }}
-                      >
-                        {!req.pdfs?.image_url && <PictureAsPdfIcon fontSize="small" sx={{ color: '#ef4444' }} />}
-                      </Avatar>
-                      <Box>
-                        <Typography sx={{ fontWeight: 700 }}>{req.pdfs?.title || 'Unknown File'}</Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>{req.pdfs?.author}</Typography>
-                      </Box>
-                    </Stack>
-                  </TableCell>
-                  <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{req.profiles?.full_name}</Typography></TableCell>
-                  <TableCell sx={{ maxWidth: '250px' }}><Typography variant="body2" noWrap>{req.reason}</Typography></TableCell>
-                  <TableCell><Typography variant="body2">{new Date(req.created_at).toLocaleDateString()}</Typography></TableCell>
-                  <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                    <Stack direction="row" justifyContent="center" spacing={1}>
-                      <Tooltip title="View PDF">
-                        <IconButton onClick={() => handleViewPdf(req.pdfs)} sx={{ color: '#0ea5e9' }}>
-                          <VisibilityIcon sx={{ fontSize: 24 }} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Approve">
-                        <IconButton onClick={(e) => handleApprove(req.id, req.pdfs?.id, e)} sx={{ color: '#16a34a' }}>
-                          <CheckIcon sx={{ fontSize: 24 }} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Reject">
-                        <IconButton onClick={() => setRemarkModal({ open: true, requestId: req.id })} sx={{ color: '#dc2626' }}>
-                          <CloseIcon sx={{ fontSize: 24 }} />
-                        </IconButton>
-                      </Tooltip>
-                    </Stack>
-                  </TableCell>
+        <>
+          <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
+            <Table sx={{ minWidth: 650 }}>
+              <TableHead sx={{ bgcolor: headerColor }}>
+                <TableRow>
+                  <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 800 }}>REQUESTED BY</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTION</TableCell>
                 </TableRow>
+              </TableHead>
+              <TableBody>
+                {paginatedRequests.map((req) => (
+                  <TableRow 
+                    key={req.id} 
+                    hover 
+                    onClick={() => handleOpenInfo(req.pdfs)}
+                    sx={{ cursor: 'pointer' }}
+                  >
+                    <TableCell>
+                      <Stack direction="row" alignItems="center" spacing={2}>
+                        <Avatar 
+                          variant="rounded" 
+                          src={req.pdfs?.image_url ? getImageUrl(req.pdfs.image_url) : glclogo} 
+                          sx={{ width: 45, height: 50, border: `1px solid ${borderCol}`, bgcolor: cardBg }}
+                        >
+                          {!req.pdfs?.image_url && <PictureAsPdfIcon fontSize="small" sx={{ color: '#ef4444' }} />}
+                        </Avatar>
+                        <Box>
+                          <Typography sx={{ fontWeight: 700 }}>{req.pdfs?.title || 'Unknown File'}</Typography>
+                          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>{req.pdfs?.author}</Typography>
+                        </Box>
+                      </Stack>
+                    </TableCell>
+                    <TableCell><Typography variant="body2" sx={{ fontWeight: 600 }}>{req.profiles?.full_name}</Typography></TableCell>
+                    <TableCell sx={{ maxWidth: '250px' }}><Typography variant="body2" noWrap>{req.reason}</Typography></TableCell>
+                    <TableCell><Typography variant="body2">{new Date(req.created_at).toLocaleDateString()}</Typography></TableCell>
+                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                      <Stack direction="row" justifyContent="center" spacing={1}>
+                        <Tooltip title="View PDF">
+                          <IconButton onClick={() => handleViewPdf(req.pdfs)} sx={{ color: '#0ea5e9' }}>
+                            <VisibilityIcon sx={{ fontSize: 24 }} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Approve">
+                          <IconButton onClick={(e) => handleApprove(req.id, req.pdfs?.id, e)} sx={{ color: '#16a34a' }}>
+                            <CheckIcon sx={{ fontSize: 24 }} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Reject">
+                          <IconButton onClick={() => setRemarkModal({ open: true, requestId: req.id })} sx={{ color: '#dc2626' }}>
+                            <CloseIcon sx={{ fontSize: 24 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {totalPages > 1 && (
+            <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page - 1)}
+                disabled={currentPage === 1}
+                sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <Button
+                  key={page}
+                  size="small"
+                  onClick={() => setCurrentPage(page)}
+                  variant={currentPage === page ? 'contained' : 'text'}
+                  sx={{ minWidth: 32, fontWeight: 700 }}
+                >
+                  {page}
+                </Button>
               ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page + 1)}
+                disabled={currentPage === totalPages}
+                sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+              >
+                Next
+              </Button>
+            </Stack>
+          )}
+        </>
       )}
 
-      {/* --- DOCUMENT INFO MODAL (STYLE FROM FIRST PIC) --- */}
+      {/* --- DOCUMENT INFO MODAL ---
+          Rebuilt to mirror AdminDashboard.jsx's Document Info reference:
+          Title/Author as a heading block, then an icon + label InfoRow grid
+          (now including Section, Program, Publisher, Edition, ISBN,
+          Language), using formatPublishedDate for the Published value.
+          The file-size row is kept since it's unique, existing
+          functionality on this screen that the Admin reference doesn't have. */}
       <Dialog 
         open={infoModalOpen} 
         onClose={() => setInfoModalOpen(false)}
@@ -460,45 +591,63 @@ const DeleteRequests = () => {
                   boxShadow: 3,
                   border: `1px solid ${borderCol}`,
                   bgcolor: 'transparent',
-                  objectFit: 'cover'
+                  objectFit: 'cover',
+                  flexShrink: 0
                 }}
               >
                 {!selectedPdfInfo.image_url && <PictureAsPdfIcon sx={{ fontSize: 60, color: '#ef4444' }} />}
               </Avatar>
 
-              {/* Details List */}
+              {/* Details */}
               <Box sx={{ flexGrow: 1, width: '100%' }}>
-                <Stack spacing={1.5}>
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <TitleIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Title:</strong> {selectedPdfInfo.title || 'N/A'}</Typography>
-                  </Stack>
+                <Typography variant="h6" fontWeight="900" sx={{ mb: 0.5 }}>
+                  {selectedPdfInfo.title || 'Untitled Document'}
+                </Typography>
+                <Typography variant="body2" fontWeight="700" color="text.secondary" sx={{ mb: 2 }}>
+                  Author: {selectedPdfInfo.author || 'N/A'}
+                </Typography>
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <PersonIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Author:</strong> {selectedPdfInfo.author || 'N/A'}</Typography>
-                  </Stack>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto auto' },
+                    justifyContent: 'start',
+                    columnGap: 3,
+                    rowGap: 1,
+                    mb: 2,
+                  }}
+                >
+                  <InfoRow icon={<MenuBookIcon color="primary" fontSize="small" />} label="Type" value={selectedPdfInfo.category || selectedPdfInfo.type || 'book'} />
+                  <InfoRow icon={<CategoryIcon color="primary" fontSize="small" />} label="Genre" value={selectedPdfInfo.genre} />
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <MenuBookIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Type:</strong> {selectedPdfInfo.category || selectedPdfInfo.type || 'book'}</Typography>
-                  </Stack>
+                  {selectedPdfInfo.section && (
+                    <InfoRow icon={<BookmarkIcon color="primary" fontSize="small" />} label="Section" value={selectedPdfInfo.section} />
+                  )}
+                  {selectedPdfInfo.program_course && (
+                    <InfoRow icon={<SchoolIcon color="primary" fontSize="small" />} label="Program" value={selectedPdfInfo.program_course} />
+                  )}
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <CategoryIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Genre:</strong> {selectedPdfInfo.genre || 'N/A'}</Typography>
-                  </Stack>
+                  <InfoRow
+                    icon={<EventIcon color="primary" fontSize="small" />}
+                    label="Published"
+                    value={formatPublishedDate(selectedPdfInfo) || selectedPdfInfo.published_date || 'N/A'}
+                  />
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <EventIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Published:</strong> {selectedPdfInfo.published_date || selectedPdfInfo.published_year || selectedPdfInfo.year || 'N/A'}</Typography>
-                  </Stack>
+                  {selectedPdfInfo.publisher && (
+                    <InfoRow icon={<BusinessIcon color="primary" fontSize="small" />} label="Publisher" value={selectedPdfInfo.publisher} />
+                  )}
+                  {selectedPdfInfo.edition && (
+                    <InfoRow icon={<LayersIcon color="primary" fontSize="small" />} label="Edition" value={selectedPdfInfo.edition} />
+                  )}
+                  {selectedPdfInfo.isbn && (
+                    <InfoRow icon={<ConfirmationNumberIcon color="primary" fontSize="small" />} label="ISBN" value={selectedPdfInfo.isbn} />
+                  )}
+                  {selectedPdfInfo.language && (
+                    <InfoRow icon={<LanguageIcon color="primary" fontSize="small" />} label="Language" value={selectedPdfInfo.language} />
+                  )}
 
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <StorageIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Size:</strong> {selectedPdfFileSize}</Typography>
-                  </Stack>
-                </Stack>
+                  <InfoRow icon={<StorageIcon color="primary" fontSize="small" />} label="Size" value={selectedPdfFileSize} />
+                </Box>
 
                 <Divider sx={{ my: 2, opacity: 0.2 }} />
 

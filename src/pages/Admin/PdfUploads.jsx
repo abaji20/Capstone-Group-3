@@ -987,7 +987,9 @@ const PdfUploads = () => {
             <Divider />
             <DialogContent sx={{ mt: 2 }}>
               <Grid container spacing={3}>
-                {/* COVER IMAGE */}
+                {/* COVER IMAGE — falls back to the GLC logo, matching every
+                    other cover placeholder in the app, instead of a plain
+                    "No Cover Available" box. */}
                 <Grid size={{ xs: 12, md: 4 }}>
                   {selectedItemInfo.image_url ? (
                     <Box
@@ -1000,15 +1002,13 @@ const PdfUploads = () => {
                     <Box sx={{ 
                       height: 260, 
                       borderRadius: '12px', 
-                      bgcolor: inputBg, 
+                      bgcolor: isDarkMode ? '#0f172a' : '#f1f5f9', 
                       display: 'flex', 
-                      flexDirection: 'column', 
                       alignItems: 'center', 
                       justifyContent: 'center',
-                      color: 'text.secondary'
+                      p: 3
                     }}>
-                      <FontAwesomeIcon icon={faFilePdf} style={{ fontSize: 48, marginBottom: 8, color: '#94a3b8' }} />
-                      <Typography variant="caption" fontWeight="700">No Cover Available</Typography>
+                      <Box component="img" src={glclogo} alt="GLC logo" sx={{ maxWidth: '70%', maxHeight: '70%', objectFit: 'contain', opacity: 0.9 }} />
                     </Box>
                   )}
                 </Grid>

@@ -10,11 +10,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // 1. Standard Client (Uses sessionStorage — wipes auth state when tab closes)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: window.sessionStorage, // <-- ADDED: Clears login data on tab closure
+    storage: window.sessionStorage, // <-- this line prevents the cross-tab bug
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    multiTab: false, // <-- IMPORTANTE: Binabara nito ang BroadcastChannel syncing sa ibang tabs
   },
 });
 

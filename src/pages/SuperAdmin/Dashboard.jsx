@@ -30,8 +30,17 @@ import BookIcon from '@mui/icons-material/Book';
 import HistoryIcon from '@mui/icons-material/History';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CloseIcon from '@mui/icons-material/Close';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+// Icons for the metadata fields (mirrors AdminDashboard.jsx / pdfCard.jsx)
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import SchoolIcon from '@mui/icons-material/School';
+import BusinessIcon from '@mui/icons-material/Business';
+import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
+import LayersIcon from '@mui/icons-material/Layers';
+import LanguageIcon from '@mui/icons-material/Language';
+import CategoryIcon from '@mui/icons-material/Category';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
+import DateRangeIcon from '@mui/icons-material/DateRange';
 
 const getStorageImageUrl = (imageUrl) => {
   if (!imageUrl) return null;
@@ -143,6 +152,34 @@ const autoSizeColumns = (ws, rows, headers) => {
   ws['!views'] = [{ state: 'frozen', ySplit: 1 }];
 };
 
+// ---------------------------------------------------------------------
+// One label/value line for the Book Details dialog, matching
+// AdminDashboard.jsx / pdfCard.jsx's InfoRow so both "document info"
+// surfaces look and behave the same way (icon + bold label + value,
+// wraps instead of truncating).
+// ---------------------------------------------------------------------
+const InfoRow = ({ icon, label, value }) => (
+  <Typography
+    variant="body2"
+    component="div"
+    sx={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 1,
+      minWidth: 0,
+      '& > svg': { flexShrink: 0 },
+      '& > strong': { flexShrink: 0 },
+      '& > span': {
+        minWidth: 0,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+      },
+    }}
+  >
+    {icon} <strong>{label}:</strong> <span>{value || 'N/A'}</span>
+  </Typography>
+);
+
 const Dashboard = () => {
   const currentYear = new Date().getFullYear();
   const firstDownloadYear = 2026;
@@ -184,9 +221,13 @@ const Dashboard = () => {
       if (accountsData) setRecentAccounts(accountsData);
 
       // 2. Fetch Recent Books
+      // Explicit column list now also includes the digital-library metadata
+      // fields (section, program_course, publisher, isbn, edition,
+      // language, published_month, published_day) so the "See More" dialog
+      // below can display them — matching the Admin Dashboard's query.
       const { data: booksData } = await supabase
         .from('pdfs')
-        .select('id, created_at, title, author, genre, published_date, description, image_url, file_url, category, is_archived')
+        .select('id, created_at, title, author, genre, published_date, description, image_url, file_url, category, is_archived, section, program_course, publisher, isbn, edition, language, published_month, published_day')
         .eq('category', 'book')
         .eq('is_archived', false)
         .order('created_at', { ascending: false })
@@ -786,11 +827,12 @@ const Dashboard = () => {
                         >
                           <TableCell>
                             <Stack direction="row" spacing={1.5} alignItems="center">
-                              {book.imageUrl ? (
-                                <Box component="img" src={book.imageUrl} alt="" sx={{ width: 34, height: 34, borderRadius: '8px', objectFit: 'cover' }} />
-                              ) : (
-                                <Avatar sx={{ bgcolor: '#f43f5e', width: 34, height: 34 }}><BookIcon sx={{ fontSize: '1.1rem' }} /></Avatar>
-                              )}
+                              <Box
+                                component="img"
+                                src={book.imageUrl || glclogo}
+                                alt=""
+                                sx={{ width: 34, height: 34, borderRadius: '8px', objectFit: book.imageUrl ? 'cover' : 'contain', bgcolor: book.imageUrl ? 'transparent' : (isDarkMode ? '#0f172a' : '#f1f5f9'), p: book.imageUrl ? 0 : 0.5 }}
+                              />
                               <Typography variant="body2" fontWeight="700" sx={{ color: '#2563eb', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
                                 {book.title || 'Untitled Material'}
                               </Typography>
@@ -934,7 +976,10 @@ const Dashboard = () => {
 
       </Container>
 
-      {/* "SEE MORE" BOOK DETAILS DIALOG */}
+      {/* "SEE MORE" BOOK DETAILS DIALOG — now mirrors AdminDashboard.jsx's
+          Document Info layout (icon + label + value InfoRow grid) instead
+          of the plain Chips row, and includes the new metadata fields
+          (Section, Program, Publisher, Edition, ISBN, Language). */}
       <Dialog 
         open={bookDialogOpen} 
         onClose={handleCloseBookDetail}
@@ -979,13 +1024,11 @@ const Dashboard = () => {
                       borderRadius: '12px', 
                       bgcolor: isDarkMode ? '#0f172a' : '#f1f5f9', 
                       display: 'flex', 
-                      flexDirection: 'column', 
                       alignItems: 'center', 
-                      justify: 'center',
-                      color: 'text.secondary'
+                      justifyContent: 'center',
+                      p: 3
                     }}>
-                      <BookIcon sx={{ fontSize: 60, mb: 1, color: '#94a3b8' }} />
-                      <Typography variant="caption" fontWeight="700">No Cover Available</Typography>
+                      <Box component="img" src={glclogo} alt="GLC logo" sx={{ maxWidth: '70%', maxHeight: '70%', objectFit: 'contain', opacity: 0.9 }} />
                     </Box>
                   )}
                 </Grid>
@@ -997,13 +1040,47 @@ const Dashboard = () => {
                     Author: {selectedBook.author || 'Unknown'}
                   </Typography>
 
-                  <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
-                    <Chip label={`Genre: ${selectedBook.genre || 'General'}`} color="primary" variant="outlined" size="small" sx={{ fontWeight: 700 }} />
-                    <Chip label={`Category: ${selectedBook.category || 'Book'}`} color="secondary" variant="outlined" size="small" sx={{ fontWeight: 700 }} />
-                    {selectedBook.published_date && (
-                      <Chip label={`Published: ${selectedBook.published_date}`} variant="outlined" size="small" sx={{ fontWeight: 700 }} />
+                  {/* Metadata rows in a responsive 2-column grid — matches
+                      AdminDashboard.jsx's InfoRow grid exactly, including
+                      the new schema fields. Each optional row only renders
+                      when the value is actually present. */}
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto auto' },
+                      justifyContent: 'start',
+                      columnGap: 3,
+                      rowGap: 1,
+                      mb: 2.5,
+                    }}
+                  >
+                    <InfoRow icon={<LibraryBooksIcon fontSize="small" color="primary" />} label="Type" value={selectedBook.category || 'Book'} />
+                    <InfoRow icon={<CategoryIcon fontSize="small" color="primary" />} label="Genre" value={selectedBook.genre || 'General'} />
+
+                    {selectedBook.section && (
+                      <InfoRow icon={<BookmarkIcon fontSize="small" color="primary" />} label="Section" value={selectedBook.section} />
                     )}
-                  </Stack>
+                    {selectedBook.program_course && (
+                      <InfoRow icon={<SchoolIcon fontSize="small" color="primary" />} label="Program" value={selectedBook.program_course} />
+                    )}
+
+                    {selectedBook.published_date && (
+                      <InfoRow icon={<DateRangeIcon fontSize="small" color="primary" />} label="Published" value={formatPublishedDate(selectedBook)} />
+                    )}
+
+                    {selectedBook.publisher && (
+                      <InfoRow icon={<BusinessIcon fontSize="small" color="primary" />} label="Publisher" value={selectedBook.publisher} />
+                    )}
+                    {selectedBook.edition && (
+                      <InfoRow icon={<LayersIcon fontSize="small" color="primary" />} label="Edition" value={selectedBook.edition} />
+                    )}
+                    {selectedBook.isbn && (
+                      <InfoRow icon={<ConfirmationNumberIcon fontSize="small" color="primary" />} label="ISBN" value={selectedBook.isbn} />
+                    )}
+                    {selectedBook.language && (
+                      <InfoRow icon={<LanguageIcon fontSize="small" color="primary" />} label="Language" value={selectedBook.language} />
+                    )}
+                  </Box>
 
                   <Typography variant="subtitle2" fontWeight="800" sx={{ mb: 0.5, color: 'text.secondary' }}>
                     DESCRIPTION / ABSTRACT

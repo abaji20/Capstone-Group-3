@@ -18,7 +18,7 @@ import EditPdfModal from '../../shared/EditPdfModal';
 import { supabase } from '../../supabaseClient'; 
 
 // Import your logo asset
-import logo from '../../assets/nonamelogo.png'; 
+import logo from '../../assets/glclogo.png'; 
 
 const EditPDFs = () => {
   const theme = useTheme();
@@ -280,7 +280,7 @@ const EditPDFs = () => {
                             sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}
                           >
                             {!pdf.image_url && (
-                              <Box component="img" src={logo} sx={{ width: '80%', opacity: 0.8 }} />
+                              <Box component="img" src={logo} sx={{ width: '100%', opacity: 0.8 }} />
                             )}
                           </Avatar>
                           <Typography sx={{ fontWeight: 700 }}>{pdf.title}</Typography>
@@ -333,7 +333,7 @@ const EditPDFs = () => {
                     sx={{ width: 90, height: 120, mx: 'auto', mb: 2, bgcolor: 'transparent', borderRadius: 2 }}
                   >
                     {!pdf.image_url && (
-                      <Box component="img" src={logo} sx={{ width: '70%', opacity: 0.8 }} />
+                      <Box component="img" src={logo} sx={{ width: '80%', opacity: 0.8 }} />
                     )}
                   </Avatar>
                   <Typography variant="h6" sx={{ fontWeight: 800 }}>{pdf.title}</Typography>

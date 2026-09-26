@@ -54,6 +54,9 @@ const PendingUpload = () => {
   const [dayFilter, setDayFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
 
+  // --- PAGINATION STATE ---
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Dialog State for Item Details
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedDocDetails, setSelectedDocDetails] = useState(null);
@@ -203,6 +206,24 @@ const PendingUpload = () => {
     return matchesSearch && matchesCategory && matchesGenre && matchesDate;
   });
 
+  // --- PAGINATION (12 per page, same pattern as ManageAccount.jsx) ---
+  const requestsPerPage = 12;
+  const totalPages = Math.ceil(filteredRequests.length / requestsPerPage);
+  const paginatedRequests = filteredRequests.slice(
+    (currentPage - 1) * requestsPerPage,
+    currentPage * requestsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter, genreFilter, monthFilter, dayFilter, yearFilter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const RequestMobileCard = ({ req }) => (
     <Card 
       onClick={(e) => handleOpenDetails(req, e)}
@@ -210,7 +231,7 @@ const PendingUpload = () => {
     >
       <CardContent>
         <Stack direction="row" spacing={2} alignItems="flex-start">
-          <Avatar variant="rounded" src={req.cover_url ? getImageUrl(req.cover_url) : glclogo} sx={{ width: 60, height: 80, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
+          <Avatar variant="rounded" src={req.cover_url ? getImageUrl(req.cover_url) : glclogo} sx={{ width: 60, height: 60, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
             {!req.cover_url && <PdfIcon sx={{ color: 'red', fontSize: '2rem' }} />}
           </Avatar>
           <Box sx={{ flexGrow: 1 }}>
@@ -316,7 +337,7 @@ const PendingUpload = () => {
         ) : (
           <>
             {isMobile ? (
-              <Box>{filteredRequests.map((req) => <RequestMobileCard key={req.id} req={req} />)}</Box>
+              <Box>{paginatedRequests.map((req) => <RequestMobileCard key={req.id} req={req} />)}</Box>
             ) : (
               <TableContainer component={Paper} sx={{ borderRadius: 1, backgroundColor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                 <Table>
@@ -331,7 +352,7 @@ const PendingUpload = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredRequests.map((req) => (
+                    {paginatedRequests.map((req) => (
                       <TableRow 
                         key={req.id}
                         hover 
@@ -340,7 +361,7 @@ const PendingUpload = () => {
                       >
                         <TableCell>
                           <Stack direction="row" alignItems="center" spacing={2}>
-                            <Avatar variant="rounded" src={req.cover_url ? getImageUrl(req.cover_url) : glclogo} sx={{ width: 45, height: 50, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
+                            <Avatar variant="rounded" src={req.cover_url ? getImageUrl(req.cover_url) : glclogo} sx={{ width: 50, height: 50, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
                               {!req.cover_url && <PdfIcon sx={{ color: 'red' }} />}
                             </Avatar>
                             <Box>
@@ -380,6 +401,38 @@ const PendingUpload = () => {
                 </Table>
               </TableContainer>
             )}
+
+            {totalPages > 1 && (
+              <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+                <Button
+                  size="small"
+                  onClick={() => setCurrentPage((page) => page - 1)}
+                  disabled={currentPage === 1}
+                  sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+                >
+                  Previous
+                </Button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                  <Button
+                    key={page}
+                    size="small"
+                    onClick={() => setCurrentPage(page)}
+                    variant={currentPage === page ? 'contained' : 'text'}
+                    sx={{ minWidth: 32, fontWeight: 700 }}
+                  >
+                    {page}
+                  </Button>
+                ))}
+                <Button
+                  size="small"
+                  onClick={() => setCurrentPage((page) => page + 1)}
+                  disabled={currentPage === totalPages}
+                  sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+                >
+                  Next
+                </Button>
+              </Stack>
+            )}
           </>
         )}
       </Container>
@@ -402,7 +455,7 @@ const PendingUpload = () => {
                 variant="rounded" 
                 src={selectedDocDetails.cover_url ? getImageUrl(selectedDocDetails.cover_url) : glclogo} 
                 sx={{ 
-                  width: { xs: 160, md: 210 }, 
+                  width: { xs: 160, md: 200 }, 
                   height: { xs: 200, md: 200 }, 
                   boxShadow: 3,
                   border: `1px solid ${borderCol}`,

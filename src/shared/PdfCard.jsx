@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import { 
   Card, CardMedia, CardContent, Typography, Button, Box, 
   Dialog, DialogTitle, DialogContent, DialogActions, Stack, Divider, useTheme,
@@ -60,6 +60,39 @@ const InfoRow = ({ icon, label, value }) => (
   </Typography>
 );
 
+// Shrinks an element's font-size (down to a floor) until its wrapped text
+// fits inside a FIXED pixel height, instead of truncating with "...".
+// Because the box height never changes, every card ends up the same size
+// no matter how long the title/author is — only the font size adapts.
+// Re-runs whenever the element is resized (e.g. the card shrinks on a
+// smaller screen), so it stays correct at every breakpoint.
+const useFitText = (text, { max, min, step = 0.5 } = {}) => {
+  const ref = useRef(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const fit = () => {
+      let size = max;
+      el.style.fontSize = `${size}px`;
+      // Step down until the full (wrapped) text height fits in the box.
+      while (el.scrollHeight > el.clientHeight + 1 && size > min) {
+        size -= step;
+        el.style.fontSize = `${size}px`;
+      }
+    };
+
+    fit();
+
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text, max, min, step]);
+
+  return ref;
+};
+
 const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
@@ -76,6 +109,14 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
   const poppinsFont = { fontFamily: "'Poppins', sans-serif" };
 
   const isSmall = variant === "small";
+
+  // Fixed box heights (px) the title/author must fit into — these do NOT
+  // change when the font shrinks, which is what keeps every card equal.
+  const TITLE_BOX_HEIGHT = isSmall ? 36 : 42;   // ~2 lines
+  const AUTHOR_BOX_HEIGHT = 18;                  // 1 line
+
+  const titleRef = useFitText(pdf.title, { max: isSmall ? 14 : 16, min: 10, step: 0.5 });
+  const authorRef = useFitText(pdf.author, { max: 12, min: 9, step: 0.5 });
 
   // Utility Function para i-convert ang bytes papuntang readable format (KB, MB, GB)
   const formatBytes = (bytes) => {
@@ -219,18 +260,45 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
         )}
         
         <CardContent sx={{ flexGrow: 1, p: isSmall ? 1.5 : 2 }}>
-          <Typography 
-            variant={isSmall ? "body2" : "body1"} 
-            noWrap 
-            sx={{ fontWeight: 700, color: isDarkMode ? '#f8fafc' : 'inherit' }}
+          {/* Title never truncates with "..." — instead its font-size
+              shrinks (via useFitText) so the full text fits in this fixed
+              height box, keeping every card the same size. */}
+          <Typography
+            ref={titleRef}
+            variant={isSmall ? "body2" : "body1"}
+            sx={{
+              fontWeight: 700,
+              color: isDarkMode ? '#f8fafc' : 'inherit',
+              whiteSpace: 'normal',
+              overflowWrap: 'anywhere',
+              overflow: 'hidden',
+              lineHeight: 1.25,
+              height: `${TITLE_BOX_HEIGHT}px`,
+              // Box is always reserved at 2-line height (so cards stay equal
+              // size), but the text itself sits at the BOTTOM of that box.
+              // A short 1-line title then sits right above the author
+              // instead of leaving a visible empty gap above it.
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'flex-end',
+            }}
           >
             {pdf.title}
           </Typography>
-          <Typography 
-            variant="caption" 
-            color="text.secondary" 
-            noWrap 
-            sx={{ color: isDarkMode ? '#94a3b8' : 'text.secondary' }}
+          {/* Author gets the same treatment (1 line worth of fixed height) */}
+          <Typography
+            ref={authorRef}
+            variant="caption"
+            sx={{
+              display: 'block',
+              color: isDarkMode ? '#94a3b8' : 'text.secondary',
+              whiteSpace: 'normal',
+              overflowWrap: 'anywhere',
+              overflow: 'hidden',
+              lineHeight: 1.3,
+              height: `${AUTHOR_BOX_HEIGHT}px`,
+              mt: 0.25,
+            }}
           >
             {pdf.author}
           </Typography>

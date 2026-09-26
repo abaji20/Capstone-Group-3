@@ -63,9 +63,9 @@ const AdminManageAccount = () => {
   const [yearFilter, setYearFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All Departments');
 
-  // Pagination State
+  // Pagination State (matches Superadmin ManageAccount: 12 per page)
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
+  const accountsPerPage = 12;
 
   // Restore create form data and modal open status from sessionStorage if available
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(() => {
@@ -389,16 +389,22 @@ const AdminManageAccount = () => {
     });
   }, [users, searchTerm, monthFilter, dayFilter, yearFilter, departmentFilter]);
 
-  // Pagination Calculations
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentUsers = filteredUsers.slice(startIndex, startIndex + itemsPerPage);
+  // --- PAGINATION CALCULATIONS (matches Superadmin ManageAccount.jsx exactly, 12 per page) ---
+  const totalPages = Math.ceil(filteredUsers.length / accountsPerPage);
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * accountsPerPage,
+    currentPage * accountsPerPage
+  );
 
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, monthFilter, dayFilter, yearFilter, departmentFilter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
-  };
+  }, [currentPage, totalPages]);
 
   // --- STATUS CONTROL DROPDOWN (adapted from ManageAccount.jsx's StatusControlDropdown) ---
   const StatusControlDropdown = ({ user }) => {
@@ -459,7 +465,7 @@ const AdminManageAccount = () => {
           fullWidth 
           placeholder="Search by name, email, ID, dept, year, or status..." 
           value={searchTerm} 
-          onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
+          onChange={(e) => setSearchTerm(e.target.value)} 
           sx={{ bgcolor: inputBg, borderRadius: 0.5, ...removeAutofillBg }} 
           InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} 
         />
@@ -468,7 +474,7 @@ const AdminManageAccount = () => {
           select 
           label="Month" 
           value={monthFilter} 
-          onChange={(e) => { setMonthFilter(e.target.value); setCurrentPage(1); }} 
+          onChange={(e) => setMonthFilter(e.target.value)} 
           sx={{ minWidth: 145, bgcolor: inputBg, borderRadius: 0.5 }}
         >
           <MenuItem value="">All Months</MenuItem>
@@ -479,7 +485,7 @@ const AdminManageAccount = () => {
           select 
           label="Date" 
           value={dayFilter} 
-          onChange={(e) => { setDayFilter(e.target.value); setCurrentPage(1); }} 
+          onChange={(e) => setDayFilter(e.target.value)} 
           sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}
         >
           <MenuItem value="">All Dates</MenuItem>
@@ -490,7 +496,7 @@ const AdminManageAccount = () => {
           select 
           label="Year" 
           value={yearFilter} 
-          onChange={(e) => { setYearFilter(e.target.value); setCurrentPage(1); }} 
+          onChange={(e) => setYearFilter(e.target.value)} 
           sx={{ minWidth: 125, bgcolor: inputBg, borderRadius: 0.5 }}
         >
           <MenuItem value="">All Years</MenuItem>
@@ -501,7 +507,7 @@ const AdminManageAccount = () => {
           select 
           label="Department" 
           value={departmentFilter} 
-          onChange={(e) => { setDepartmentFilter(e.target.value); setCurrentPage(1); }} 
+          onChange={(e) => setDepartmentFilter(e.target.value)} 
           sx={{ minWidth: { md: 220 }, bgcolor: inputBg, borderRadius: 0.5 }}
         >
           {uniqueDepartments.map(dept => <MenuItem key={dept} value={dept}>{dept}</MenuItem>)}
@@ -532,7 +538,7 @@ const AdminManageAccount = () => {
         </Box>
       ) : isMobile ? (
         <Stack spacing={2}>
-          {currentUsers.map((user) => (
+          {paginatedUsers.map((user) => (
             <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
               <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}> <Avatar sx={{ width: 45, height: 45, bgcolor: '#fbc02d', color: '#000000', fontWeight: 700 }}>{user.full_name?.charAt(0)}</Avatar> </Box>
               <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
@@ -565,7 +571,7 @@ const AdminManageAccount = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {currentUsers.map((user) => (
+              {paginatedUsers.map((user) => (
                 <TableRow key={user.id} hover>
                   <TableCell>
                     <Stack direction="row" spacing={2} alignItems="center">
@@ -592,46 +598,37 @@ const AdminManageAccount = () => {
         </TableContainer>
       )}
 
-      {/* Pagination Controls */}
+      {/* Pagination Controls (matches Superadmin ManageAccount.jsx) */}
       {totalPages > 1 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mt: 4, gap: 1 }}>
-          {currentPage > 1 && (
-            <Button 
-              onClick={() => handlePageChange(currentPage - 1)}
-              sx={{ minWidth: 'auto', px: 1.5, color: '#0000ff', fontWeight: 500, fontSize: '1rem', textTransform: 'none' }}
-            >
-              Prev
-            </Button>
-          )}
-
+        <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+          <Button
+            size="small"
+            onClick={() => setCurrentPage((page) => page - 1)}
+            disabled={currentPage === 1}
+            sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+          >
+            Previous
+          </Button>
           {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
             <Button
               key={page}
-              onClick={() => handlePageChange(page)}
-              sx={{
-                height: '32px',
-                p: 0,
-                fontSize: '1rem',
-                fontWeight: page === currentPage ? 700 : 400,
-                color: page === currentPage ? '#854d0e' : '#0000ff',
-                textTransform: 'none',
-                minWidth: 'auto',
-                mx: 0.5
-              }}
+              size="small"
+              onClick={() => setCurrentPage(page)}
+              variant={currentPage === page ? 'contained' : 'text'}
+              sx={{ minWidth: 32, fontWeight: 700 }}
             >
               {page}
             </Button>
           ))}
-
-          {currentPage < totalPages && (
-            <Button 
-              onClick={() => handlePageChange(currentPage + 1)}
-              sx={{ minWidth: 'auto', px: 1.5, color: '#0000ff', fontWeight: 500, fontSize: '1rem', textTransform: 'none' }}
-            >
-              Next
-            </Button>
-          )}
-        </Box>
+          <Button
+            size="small"
+            onClick={() => setCurrentPage((page) => page + 1)}
+            disabled={currentPage === totalPages}
+            sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+          >
+            Next
+          </Button>
+        </Stack>
       )}
 
       {/* CREATE MODAL */}

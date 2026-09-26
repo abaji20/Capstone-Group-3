@@ -39,6 +39,9 @@ const SuperAdminEditPDFs = () => {
   const [dayFilter, setDayFilter] = useState("");
   const [yearFilter, setYearFilter] = useState("");
 
+  // --- PAGINATION STATE ---
+  const [currentPage, setCurrentPage] = useState(1);
+
   // --- STYLING ---
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff';
   const cardBg = isDarkMode ? '#1e293b' : 'rgba(255, 255, 255, 0.9)';
@@ -121,6 +124,24 @@ const SuperAdminEditPDFs = () => {
       return matchesSearch && matchesGenre && matchesCategory && matchesDate;
     });
   }, [pdfs, searchQuery, selectedGenre, selectedCategory, monthFilter, dayFilter, yearFilter]);
+
+  // --- PAGINATION (12 per page, same pattern as ManageAccount.jsx) ---
+  const pdfsPerPage = 12;
+  const totalPages = Math.ceil(filteredPdfs.length / pdfsPerPage);
+  const paginatedPdfs = filteredPdfs.slice(
+    (currentPage - 1) * pdfsPerPage,
+    currentPage * pdfsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedGenre, selectedCategory, monthFilter, dayFilter, yearFilter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const getImageUrl = (path) => {
     if (!path) return null;
@@ -257,7 +278,7 @@ const SuperAdminEditPDFs = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredPdfs.map((pdf) => (
+                  {paginatedPdfs.map((pdf) => (
                     <TableRow key={pdf.id} hover>
                       <TableCell>
                         <Stack direction="row" alignItems="center" spacing={2}>
@@ -292,7 +313,7 @@ const SuperAdminEditPDFs = () => {
             </TableContainer>
           ) : (
             <Stack spacing={2}>
-              {filteredPdfs.map((pdf) => (
+              {paginatedPdfs.map((pdf) => (
                 <Paper key={pdf.id} sx={{ p: 2, bgcolor: cardBg, borderRadius: 4, border: `1px solid ${borderCol}`, textAlign: 'center' }}>
                   <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 90, height: 120, mx: 'auto', mb: 2, bgcolor: 'transparent' }}>
                     {!pdf.image_url && <Box component="img" src={glclogo} sx={{ width: '70%', opacity: 0.8 }} />}
@@ -310,6 +331,38 @@ const SuperAdminEditPDFs = () => {
                   </Stack>
                 </Paper>
               ))}
+            </Stack>
+          )}
+
+          {totalPages > 1 && (
+            <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page - 1)}
+                disabled={currentPage === 1}
+                sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <Button
+                  key={page}
+                  size="small"
+                  onClick={() => setCurrentPage(page)}
+                  variant={currentPage === page ? 'contained' : 'text'}
+                  sx={{ minWidth: 32, fontWeight: 700 }}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                size="small"
+                onClick={() => setCurrentPage((page) => page + 1)}
+                disabled={currentPage === totalPages}
+                sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+              >
+                Next
+              </Button>
             </Stack>
           )}
         </Box>

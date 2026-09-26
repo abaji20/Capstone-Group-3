@@ -25,7 +25,7 @@ const ClientLayout = () => {
       if (!isUserTyping) {
         navigate(0);
       }
-    }, 190000); // 1 minute interval
+    }, 19000000); // 1 minute interval
 
     return () => clearInterval(interval);
   }, [navigate]);
