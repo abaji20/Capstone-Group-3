@@ -4,7 +4,6 @@ import {
   MenuItem, TextField, useTheme, Button,
   Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert,
   Avatar, Card, CardContent, Grid, Divider,
-  Menu, LinearProgress, Chip, Table, TableHead, TableRow, TableCell, TableBody,
   IconButton,
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -25,8 +24,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faFilePdf, faImage, faCloudUploadAlt, faCheckCircle, 
   faFileAlt, faDownload, faBook, faGraduationCap, faInfoCircle,
-  // NEW: icons for import/export
-  faFileExcel, faFileArchive,
 } from '@fortawesome/free-solid-svg-icons';
 import { 
   uploadPdfWithFiles, 
@@ -43,12 +40,6 @@ import {
 } from '../../utils/formatPublishedDate';
 // NEW: tidy sectioned layout + autofill colour fix
 import FormSection, { span, autofillFix } from '../../shared/FormLayout';
-// NEW: Excel/ZIP import-export feature
-import { downloadErrorReport } from '../../utils/pdfExcelUtils';
-import {
-  parseImportFile, validateImportRows, commitImport,
-  fetchMaterialsForExport, exportMaterialsToExcel, exportMaterialsToZip,
-} from '../../services/pdfImportExportService';
 
 // Preset options for the Section dropdown — same list used on the user-side
 // request form, kept free-text-friendly via "Other" since it isn't a DB enum.
@@ -138,18 +129,6 @@ const PdfUploads = () => {
   
   // Review/Pre-Upload Confirmation Modal State
   const [reviewOpen, setReviewOpen] = useState(false);
-
-  // --- NEW: IMPORT / EXPORT STATE ---
-  const [importOpen, setImportOpen] = useState(false);
-  const [importStep, setImportStep] = useState('select'); // select | preview | committing | summary
-  const [parsedRows, setParsedRows] = useState([]);
-  const [pdfFiles, setPdfFiles] = useState(new Map());
-  const [imageFiles, setImageFiles] = useState(new Map());
-  const [importProgress, setImportProgress] = useState({ done: 0, total: 0 });
-  const [importSummary, setImportSummary] = useState(null);
-  const [exportAnchor, setExportAnchor] = useState(null);
-  const [exporting, setExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState(null);
 
   // --- REAL-TIME SUBSCRIPTION & DATA FETCHING ---
   useEffect(() => {
@@ -383,80 +362,6 @@ const PdfUploads = () => {
     } finally { setLoading(false); }
   };
 
-  // --- NEW: IMPORT WIZARD HANDLERS ---
-  const closeImport = () => {
-    setImportOpen(false);
-    setImportStep('select');
-    setParsedRows([]);
-    setPdfFiles(new Map());
-    setImageFiles(new Map());
-    setImportSummary(null);
-    setImportProgress({ done: 0, total: 0 });
-  };
-
-  const handleImportFileSelected = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = null;
-    if (!file) return;
-    try {
-      const { rows, isZipImport, pdfFiles: pf, imageFiles: imf } = await parseImportFile(file);
-      if (!rows.length) { showStatus('error', 'The file has no data rows.'); return; }
-      const validated = await validateImportRows(rows, { pdfFiles: pf, imageFiles: imf, isZipImport });
-      setParsedRows(validated);
-      setPdfFiles(pf);
-      setImageFiles(imf);
-      setImportStep('preview');
-    } catch (err) {
-      showStatus('error', err.message || 'Failed to read the file.');
-    }
-  };
-
-  const handleConfirmImport = async () => {
-    setImportStep('committing');
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const result = await commitImport(parsedRows, pdfFiles, imageFiles, user?.id, setImportProgress);
-      setImportSummary(result);
-      setImportStep('summary');
-      await fetchData(); // refresh Recent Uploaded + stats immediately
-    } catch (err) {
-      showStatus('error', `Import failed: ${err.message}`);
-      setImportStep('preview');
-    }
-  };
-
-  // --- NEW: EXPORT HANDLERS ---
-  const handleExportExcel = async () => {
-    setExportAnchor(null);
-    setExporting(true);
-    try {
-      const materials = await fetchMaterialsForExport({ includeArchived: false });
-      if (!materials.length) { showStatus('error', 'No materials to export.'); return; }
-      exportMaterialsToExcel(materials);
-      showStatus('success', `Exported ${materials.length} record(s).`);
-    } catch (err) {
-      showStatus('error', `Export failed: ${err.message}`);
-    } finally { setExporting(false); }
-  };
-
-  const handleExportZip = async () => {
-    setExportAnchor(null);
-    setExporting(true);
-    setExportProgress({ done: 0, total: 0 });
-    try {
-      const materials = await fetchMaterialsForExport({ includeArchived: false });
-      if (!materials.length) { showStatus('error', 'No materials to export.'); return; }
-      await exportMaterialsToZip(materials, setExportProgress);
-      showStatus('success', `Exported ${materials.length} record(s) with PDFs.`);
-    } catch (err) {
-      showStatus('error', `Export failed: ${err.message}`);
-    } finally { setExporting(false); setExportProgress(null); }
-  };
-
-  const importInvalidCount = parsedRows.filter(r => r.status === 'invalid').length;
-  const importUpdateCount = parsedRows.filter(r => r.status === 'update').length;
-  const importNewCount = parsedRows.filter(r => r.status === 'new').length;
-
   const inputStyle = { 
     '& .MuiOutlinedInput-root': { 
       borderRadius: '10px',
@@ -477,60 +382,6 @@ const PdfUploads = () => {
         <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 700, mt: 0.5 }}>
           ADD NEW ACADEMIC MATERIALS TO THE REPOSITORY SYSTEM
         </Typography>
-      </Box>
-
-      {/* IMPORT / EXPORT TOOLBAR — no card/background/border, just the buttons kept in place */}
-      <Box
-        sx={{
-          width: '100%',
-          maxWidth: '1600px',
-          margin: '0 auto 16px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 1,
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-        }}
-      >
-        <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={<FontAwesomeIcon icon={faCloudUploadAlt} />}
-            onClick={() => setImportOpen(true)}
-            sx={{ borderRadius: '10px', fontWeight: 800, px: 3 }}
-          >
-            Import
-          </Button>
-          <Button
-            variant="outlined"
-            size="large"
-            startIcon={<FontAwesomeIcon icon={faFileExcel} />}
-            onClick={(e) => setExportAnchor(e.currentTarget)}
-            disabled={exporting}
-            sx={{ borderRadius: '10px', fontWeight: 800, px: 3 }}
-          >
-            {exporting ? 'Exporting…' : 'Export'}
-          </Button>
-          <Menu anchorEl={exportAnchor} open={Boolean(exportAnchor)} onClose={() => setExportAnchor(null)}>
-            <MenuItem onClick={handleExportExcel}>
-              <FontAwesomeIcon icon={faFileExcel} style={{ marginRight: 10 }} /> Excel only (metadata + links)
-            </MenuItem>
-            <MenuItem onClick={handleExportZip}>
-              <FontAwesomeIcon icon={faFileArchive} style={{ marginRight: 10 }} /> ZIP (Excel + PDFs)
-            </MenuItem>
-          </Menu>
-        </Stack>
-
-        {/* export progress (only shown during a ZIP export) */}
-        {exportProgress && exportProgress.total > 0 && (
-          <Box sx={{ width: '100%' }}>
-            <Typography variant="caption" color="text.secondary">
-              Bundling PDFs: {exportProgress.done} / {exportProgress.total}
-            </Typography>
-            <LinearProgress variant="determinate" value={(exportProgress.done / exportProgress.total) * 100} sx={{ mt: 0.5, borderRadius: 5 }} />
-          </Box>
-        )}
       </Box>
 
       {/* MAIN CONTENT GRID */}
@@ -1180,123 +1031,6 @@ const PdfUploads = () => {
           <Button fullWidth onClick={handleReplace} variant="contained" color="warning" sx={{ borderRadius: 2, fontWeight: 800 }}>Replace Existing</Button>
           <Button fullWidth onClick={handleAddAnyway} variant="outlined" sx={{ borderRadius: 2, fontWeight: 800 }}>Keep Both</Button>
           <Button fullWidth onClick={() => setConfirmData({ open: false, record: null })} color="inherit">Cancel</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* IMPORT WIZARD */}
-      <Dialog
-        open={importOpen}
-        onClose={importStep === 'committing' ? undefined : closeImport}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{ sx: { borderRadius: 3, bgcolor: cardBg } }}
-      >
-        <DialogTitle sx={{ fontWeight: 900 }}>Import Academic Materials</DialogTitle>
-        <DialogContent dividers sx={{ borderColor: borderCol }}>
-
-          {importStep === 'select' && (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Upload a filled-in template (.xlsx), or a .zip containing the template plus a{' '}
-                <code>pdfs/</code> folder of the matching PDF files.
-              </Typography>
-              <Button component="label" variant="contained" startIcon={<FontAwesomeIcon icon={faCloudUploadAlt} />}>
-                Select File
-                <input type="file" hidden accept=".xlsx,.zip" onChange={handleImportFileSelected} />
-              </Button>
-            </Box>
-          )}
-
-          {importStep === 'preview' && (
-            <>
-              <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
-                <Chip label={`${importNewCount} new`} color="success" size="small" />
-                <Chip label={`${importUpdateCount} update`} color="info" size="small" />
-                <Chip label={`${importInvalidCount} invalid`} color="error" size="small" />
-              </Stack>
-              <Box sx={{ maxHeight: 400, overflow: 'auto', border: `1px solid ${borderCol}`, borderRadius: 2 }}>
-                <Table size="small" stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Row</TableCell>
-                      <TableCell>Title</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>Notes</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {parsedRows.map((r) => (
-                      <TableRow key={r.rowNumber}>
-                        <TableCell>{r.rowNumber}</TableCell>
-                        <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.data.title || '—'}</TableCell>
-                        <TableCell>
-                          {r.status === 'invalid' && <Chip label="Invalid" color="error" size="small" />}
-                          {r.status === 'update' && <Chip label="Update" color="info" size="small" />}
-                          {r.status === 'new' && <Chip label="New" color="success" size="small" />}
-                        </TableCell>
-                        <TableCell sx={{ fontSize: '0.75rem' }}>
-                          {[...r.errors, ...r.warnings].join(' · ') || '—'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </Box>
-              {importInvalidCount > 0 && (
-                <Alert severity="warning" sx={{ mt: 2 }}>
-                  {importInvalidCount} row(s) have errors and will be skipped. Fix them in your file and re-upload, or continue to import the valid rows only.
-                </Alert>
-              )}
-            </>
-          )}
-
-          {importStep === 'committing' && (
-            <Box sx={{ py: 4, textAlign: 'center' }}>
-              <Typography variant="body2" sx={{ mb: 2 }}>
-                Importing {importProgress.done} / {importProgress.total}…
-              </Typography>
-              <LinearProgress variant="determinate" value={importProgress.total ? (importProgress.done / importProgress.total) * 100 : 0} sx={{ borderRadius: 5 }} />
-            </Box>
-          )}
-
-          {importStep === 'summary' && importSummary && (
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 900, mb: 2 }}>Import Complete</Typography>
-              <Stack spacing={1}>
-                <Typography variant="body2">✅ Created: <strong>{importSummary.imported}</strong></Typography>
-                <Typography variant="body2">🔄 Updated: <strong>{importSummary.updated}</strong></Typography>
-                <Typography variant="body2">⏭️ Skipped (invalid): <strong>{importSummary.skipped}</strong></Typography>
-                <Typography variant="body2">❌ Failed: <strong>{importSummary.failed}</strong></Typography>
-              </Stack>
-              {importSummary.failedRows.length > 0 && (
-                <Button
-                  sx={{ mt: 2 }}
-                  variant="outlined"
-                  color="error"
-                  startIcon={<FontAwesomeIcon icon={faDownload} />}
-                  onClick={() => downloadErrorReport(importSummary.failedRows)}
-                >
-                  Download Error Report
-                </Button>
-              )}
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          {importStep === 'select' && <Button onClick={closeImport}>Cancel</Button>}
-          {importStep === 'preview' && (
-            <>
-              <Button onClick={closeImport} color="inherit">Cancel</Button>
-              <Button
-                variant="contained"
-                disabled={importNewCount + importUpdateCount === 0}
-                onClick={handleConfirmImport}
-              >
-                Confirm Import ({importNewCount + importUpdateCount} row{importNewCount + importUpdateCount === 1 ? '' : 's'})
-              </Button>
-            </>
-          )}
-          {importStep === 'summary' && <Button variant="contained" onClick={closeImport}>Done</Button>}
         </DialogActions>
       </Dialog>
 

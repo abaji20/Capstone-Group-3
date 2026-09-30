@@ -392,7 +392,7 @@ const Archived = () => {
             ARCHIVED PDFs
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
-            RESTORE OR PERMANENTLY DELETE ARCHIVED FILES.
+            RESTORE OR PERMANENTLY DELETE ARCHIVED FILES
           </Typography>
         </Box>
 

@@ -4,15 +4,21 @@ import {
   TableRow, Stack, Typography, MenuItem, TextField, InputAdornment, Avatar,
   IconButton, Chip, useTheme, useMediaQuery, Divider, Snackbar, Alert,
   Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button,
-  Tabs, Tab
+  Tabs, Tab, Checkbox, FormControlLabel, Menu
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, PrimaryButton, DeleteButton, ActionModal, FormInput } from '../../shared';
+import BulkCreateAccountDialog from '../../shared/BulkCreateAccountDialog';
+import { exportAccountsToExcel } from '../../utils/exportAccounts';
 import { supabase } from '../../supabaseClient';
 
 // Icons
 import SearchIcon from '@mui/icons-material/Search';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import GroupAddIcon from '@mui/icons-material/GroupAdd';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import EditIcon from '@mui/icons-material/Edit';
 import BadgeIcon from '@mui/icons-material/Badge';
 import EmailIcon from '@mui/icons-material/Email';
@@ -77,11 +83,17 @@ const ManageAccount = () => {
   
   // Modal/Dialog States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isBulkCreateOpen, setIsBulkCreateOpen] = useState(false);
+  const [createMenuAnchor, setCreateMenuAnchor] = useState(null); // New Account dropdown
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false); // Restore confirmation state
   const [isPermanentDeleteOpen, setIsPermanentDeleteOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+
+  // Archived selection (Select All + individual checkboxes)
+  const [selectedArchivedIds, setSelectedArchivedIds] = useState([]);
+  const [bulkArchiveAction, setBulkArchiveAction] = useState(null); // 'restore' | 'delete' | null
   
   // Data States
   const [selectedUser, setSelectedUser] = useState(null);
@@ -529,6 +541,80 @@ const ManageAccount = () => {
     }
   };
 
+  // --- ARCHIVED SELECTION (Select All + individual checkboxes) ---
+  // Drop selections for accounts that no longer exist in the archived list
+  // (restored, permanently deleted, refreshed, etc.).
+  useEffect(() => {
+    setSelectedArchivedIds((prev) => {
+      const next = prev.filter((id) => archivedUsers.some((u) => u.id === id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [archivedUsers]);
+
+  // Start fresh whenever the user leaves the Archived tab.
+  useEffect(() => {
+    if (activeTab !== 2) setSelectedArchivedIds([]);
+  }, [activeTab]);
+
+  const selectedArchivedCount = selectedArchivedIds.length;
+  const allArchivedSelected = archivedUsers.length > 0 && selectedArchivedCount === archivedUsers.length;
+  const someArchivedSelected = selectedArchivedCount > 0 && !allArchivedSelected;
+
+  const toggleArchivedSelectAll = () => {
+    setSelectedArchivedIds(allArchivedSelected ? [] : archivedUsers.map((u) => u.id));
+  };
+
+  const toggleArchivedUser = (id) => {
+    setSelectedArchivedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  // Bulk actions operate ONLY on the checked accounts.
+  const handleBulkArchiveAction = async () => {
+    const ids = [...selectedArchivedIds];
+    if (!ids.length || !bulkArchiveAction) return;
+    const names = archivedUsers.filter((u) => ids.includes(u.id)).map((u) => u.full_name).join(', ');
+    setLoading(true);
+    try {
+      if (bulkArchiveAction === 'restore') {
+        const { error } = await supabase.from('profiles').update({ is_archived: false }).in('id', ids);
+        if (error) throw error;
+        await createAuditLog('Restore Account', `Restored ${ids.length} account(s): ${names}`);
+        setNotify({ open: true, message: `${ids.length} account(s) restored successfully!`, severity: 'success' });
+      } else {
+        await supabase.from('audit_logs').delete().in('user_id', ids);
+        const { error } = await supabase.from('profiles').delete().in('id', ids);
+        if (error) throw error;
+        await createAuditLog('Permanent Delete Account', `Permanently deleted ${ids.length} account(s): ${names}`);
+        setNotify({ open: true, message: `${ids.length} account(s) permanently deleted!`, severity: 'success' });
+      }
+      setSelectedArchivedIds([]);
+      setBulkArchiveAction(null);
+      fetchUsers();
+    } catch (err) {
+      console.error("Bulk archive action failed:", err);
+      setNotify({ open: true, message: 'Bulk action failed. Some accounts may have active dependencies.', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const EXPORT_OPTS = { includeRole: true, filename: 'accounts' };
+
+  const handleExportAccounts = () => {
+    setCreateMenuAnchor(null);
+    if (!users.length) {
+      setNotify({ open: true, message: 'No accounts to export.', severity: 'error' });
+      return;
+    }
+    try {
+      exportAccountsToExcel(users, EXPORT_OPTS);
+      setNotify({ open: true, message: `Exported ${users.length} account(s).`, severity: 'success' });
+    } catch (err) {
+      console.error('Export failed:', err);
+      setNotify({ open: true, message: 'Export failed.', severity: 'error' });
+    }
+  };
+
   const StyledAvatar = ({ user, size = 30 }) => {
     const colors = getAvatarColors(user?.role);
     return (
@@ -724,7 +810,30 @@ const ManageAccount = () => {
               <MenuItem value="admin">Admin</MenuItem>
               <MenuItem value="client">User</MenuItem>
             </TextField>
-            <PrimaryButton fullWidth={isMobile} sx={{color: '#ffffff', bgcolor: '#28334e', '&:hover': { bgcolor: '#1e293b' }}} startIcon={<AddCircleOutlineIcon />} onClick={() => setIsCreateModalOpen(true)}> New Account </PrimaryButton>
+            <PrimaryButton
+              fullWidth={isMobile}
+              sx={{color: '#ffffff', bgcolor: '#28334e', whiteSpace: 'nowrap', flexShrink: 0, minWidth: { sm: 200 }, '&:hover': { bgcolor: '#1e293b' }}}
+              startIcon={<AddCircleOutlineIcon />}
+              onClick={(e) => setCreateMenuAnchor(e.currentTarget)}
+            >
+              New Account <KeyboardArrowDownIcon fontSize="small" sx={{ ml: 0.5 }} />
+            </PrimaryButton>
+            <Menu
+              anchorEl={createMenuAnchor}
+              open={Boolean(createMenuAnchor)}
+              onClose={() => setCreateMenuAnchor(null)}
+              PaperProps={{ sx: { borderRadius: 2, minWidth: 220 } }}
+            >
+              <MenuItem onClick={() => { setCreateMenuAnchor(null); setIsCreateModalOpen(true); }} sx={{ fontWeight: 600 }}>
+                <PersonAddIcon fontSize="small" sx={{ mr: 1.5 }} /> Add Account
+              </MenuItem>
+              <MenuItem onClick={() => { setCreateMenuAnchor(null); setIsBulkCreateOpen(true); }} sx={{ fontWeight: 600 }}>
+                <GroupAddIcon fontSize="small" sx={{ mr: 1.5 }} /> Add Bulk Accounts
+              </MenuItem>
+              <MenuItem onClick={handleExportAccounts} sx={{ fontWeight: 600 }}>
+                <FileDownloadIcon fontSize="small" sx={{ mr: 1.5 }} /> Export Accounts
+              </MenuItem>
+            </Menu>
           </Stack>   
 
           {isMobile ? (
@@ -955,6 +1064,58 @@ const ManageAccount = () => {
         </>
       ) : (
         <>
+          {/* Archived bulk-selection bar */}
+          {archivedUsers.length > 0 && (
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1.5}
+              justifyContent="space-between"
+              alignItems={{ xs: 'flex-start', sm: 'center' }}
+              sx={{ mb: 2 }}
+            >
+              {isMobile ? (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={allArchivedSelected}
+                      indeterminate={someArchivedSelected}
+                      onChange={toggleArchivedSelectAll}
+                    />
+                  }
+                  label={<Typography variant="body2" fontWeight={700}>Select All ({selectedArchivedCount} of {archivedUsers.length} selected)</Typography>}
+                />
+              ) : (
+                <Typography variant="body2" fontWeight={700} color="text.secondary">
+                  {selectedArchivedCount} of {archivedUsers.length} selected
+                </Typography>
+              )}
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<RestoreIcon />}
+                  disabled={selectedArchivedCount === 0}
+                  onClick={() => setBulkArchiveAction('restore')}
+                  sx={{ borderRadius: '8px', fontWeight: 700 }}
+                >
+                  Restore Selected ({selectedArchivedCount})
+                </Button>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="error"
+                  startIcon={<DeleteForeverIcon />}
+                  disabled={selectedArchivedCount === 0}
+                  onClick={() => setBulkArchiveAction('delete')}
+                  sx={{ borderRadius: '8px', fontWeight: 700, boxShadow: 'none' }}
+                >
+                  Delete Selected ({selectedArchivedCount})
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+
           {isMobile ? (
             <Stack spacing={2} alignItems="center">
               {archivedUsers.length === 0 ? (
@@ -962,6 +1123,13 @@ const ManageAccount = () => {
               ) : (
                 archivedUsers.map((user) => (
                   <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: -1 }}>
+                      <Checkbox
+                        checked={selectedArchivedIds.includes(user.id)}
+                        onChange={() => toggleArchivedUser(user.id)}
+                        inputProps={{ 'aria-label': `Select ${user.full_name}` }}
+                      />
+                    </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={user} size={40} /></Box>
                     <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{user.email}</Typography>
@@ -1002,6 +1170,20 @@ const ManageAccount = () => {
             <Table>
               <TableHead sx={{ bgcolor: isDarkMode ? '#0f172a' : '#213C51' }}>
                 <TableRow>
+                  <TableCell padding="checkbox" sx={{ width: 48 }}>
+                    <Checkbox
+                      checked={allArchivedSelected}
+                      indeterminate={someArchivedSelected}
+                      onChange={toggleArchivedSelectAll}
+                      disabled={archivedUsers.length === 0}
+                      inputProps={{ 'aria-label': 'Select all archived accounts' }}
+                      sx={{
+                        color: 'white',
+                        '&.Mui-checked, &.MuiCheckbox-indeterminate': { color: 'white' },
+                        '&.Mui-disabled': { color: 'rgba(255,255,255,0.3)' }
+                      }}
+                    />
+                  </TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 750 }}>ARCHIVED USER DETAILS</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ID NUMBER</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ROLE</TableCell>
@@ -1011,10 +1193,17 @@ const ManageAccount = () => {
               </TableHead>
               <TableBody>
                 {archivedUsers.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} align="center" sx={{ py: 8 }}><Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}> No archived accounts found. </Typography></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} align="center" sx={{ py: 8 }}><Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}> No archived accounts found. </Typography></TableCell></TableRow>
                 ) : (
                   archivedUsers.map((user) => (
-                    <TableRow key={user.id} hover>
+                    <TableRow key={user.id} hover selected={selectedArchivedIds.includes(user.id)}>
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={selectedArchivedIds.includes(user.id)}
+                          onChange={() => toggleArchivedUser(user.id)}
+                          inputProps={{ 'aria-label': `Select ${user.full_name}` }}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={2} alignItems="center">
                           <StyledAvatar user={user} />
@@ -1108,6 +1297,39 @@ const ManageAccount = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Bulk Archived Action Confirmation (Restore Selected / Delete Selected) */}
+      <Dialog
+        open={Boolean(bulkArchiveAction)}
+        onClose={() => { if (!loading) setBulkArchiveAction(null); }}
+        PaperProps={{ sx: { borderRadius: 3, p: 1, width: '400px' } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: bulkArchiveAction === 'delete' ? theme.palette.error.main : theme.palette.primary.main }}>
+          {bulkArchiveAction === 'delete' ? <WarningAmberIcon color="error" /> : <RestoreIcon color="primary" />}
+          {bulkArchiveAction === 'delete' ? 'Confirm Permanent Deletion' : 'Confirm Account Restoration'}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ fontWeight: 500 }}>
+            {bulkArchiveAction === 'delete'
+              ? <>Permanently delete <b>{selectedArchivedCount}</b> selected account(s) from the database? This action is irreversible.</>
+              : <>Restore <b>{selectedArchivedCount}</b> selected account(s)? They will move back to the active user list.</>}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ pb: 2, px: 3 }}>
+          <Button onClick={() => setBulkArchiveAction(null)} disabled={loading} sx={{ color: 'text.secondary' }}>Cancel</Button>
+          <Button
+            onClick={handleBulkArchiveAction}
+            variant="contained"
+            disabled={loading}
+            color={bulkArchiveAction === 'delete' ? 'error' : 'primary'}
+            sx={{ borderRadius: 2, boxShadow: 'none' }}
+          >
+            {loading
+              ? (bulkArchiveAction === 'delete' ? 'Deleting...' : 'Restoring...')
+              : (bulkArchiveAction === 'delete' ? 'Permanently Delete' : 'Restore Accounts')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Reject Request Modal */}
       <ActionModal 
         open={isRejectModalOpen} 
@@ -1130,6 +1352,19 @@ const ManageAccount = () => {
           />
         </Stack>
       </ActionModal>
+
+      {/* Bulk Create Account Wizard */}
+      <BulkCreateAccountDialog
+        open={isBulkCreateOpen}
+        onClose={() => setIsBulkCreateOpen(false)}
+        mode="superadmin"
+        departments={departments}
+        yearLevels={yearLevels}
+        formatIdNumber={formatIdNumber}
+        createAuditLog={createAuditLog}
+        onNotify={(message, severity) => setNotify({ open: true, message, severity })}
+        onCompleted={fetchUsers}
+      />
 
       {/* Create Account Modal */}
       <ActionModal 

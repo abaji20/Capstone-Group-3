@@ -539,7 +539,7 @@ const Dashboard = () => {
   };
 
  const commonPaperStyle = {
-  borderRadius: '16px',
+  borderRadius: '0px',
   backgroundColor: isDarkMode ? '#283446' : '#ffffff',   // was '#6b778c'
   border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : '#e2e8f0'}`,
   color: isDarkMode ? '#f8fafc' : '#1e293b',

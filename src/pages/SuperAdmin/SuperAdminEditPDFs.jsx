@@ -204,7 +204,7 @@ const SuperAdminEditPDFs = () => {
           MANAGE PDFs INFORMATION
         </Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: 1, display: 'block' }}>
-          MANAGE AND EDIT YOUR ACADEMIC DOCUMENTS.
+          MANAGE AND EDIT YOUR ACADEMIC DOCUMENTS
         </Typography>
       </Box>
 

@@ -3,15 +3,21 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Stack, Typography, MenuItem, TextField, InputAdornment, Avatar,
   IconButton, Chip, useTheme, useMediaQuery, Divider, Snackbar, Alert,
-  CircularProgress, Button
+  CircularProgress, Button, Menu
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { PrimaryButton, ActionModal, FormInput } from '../../shared';
+import BulkCreateAccountDialog from '../../shared/BulkCreateAccountDialog';
+import { exportAccountsToExcel } from '../../utils/exportAccounts';
 import { supabase } from '../../supabaseClient';
 
 // Icons
 import SearchIcon from '@mui/icons-material/Search';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import GroupAddIcon from '@mui/icons-material/GroupAdd';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import EditIcon from '@mui/icons-material/Edit';
 import BadgeIcon from '@mui/icons-material/Badge';
 import EmailIcon from '@mui/icons-material/Email';
@@ -76,6 +82,8 @@ const AdminManageAccount = () => {
     return saved ? JSON.parse(saved) : defaultFormData;
   });
 
+  const [isBulkCreateOpen, setIsBulkCreateOpen] = useState(false);
+  const [createMenuAnchor, setCreateMenuAnchor] = useState(null); // New Account dropdown
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editData, setEditData] = useState({ id: '', fullName: '', role: 'client', oldName: '', idNumber: '', department: '', yearLevel: '' });
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
@@ -182,6 +190,23 @@ const AdminManageAccount = () => {
       setNotify({ open: true, message: 'Failed to update account status.', severity: 'error' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const EXPORT_OPTS = { includeRole: false, filename: 'client-accounts' };
+
+  const handleExportAccounts = () => {
+    setCreateMenuAnchor(null);
+    if (!users.length) {
+      setNotify({ open: true, message: 'No accounts to export.', severity: 'error' });
+      return;
+    }
+    try {
+      exportAccountsToExcel(users, EXPORT_OPTS);
+      setNotify({ open: true, message: `Exported ${users.length} account(s).`, severity: 'success' });
+    } catch (err) {
+      console.error('Export failed:', err);
+      setNotify({ open: true, message: 'Export failed.', severity: 'error' });
     }
   };
 
@@ -518,15 +543,33 @@ const AdminManageAccount = () => {
             bgcolor: isDarkMode ? '#28334e' : '#213C51', 
             color: '#ffffff',
             height: '56px', 
-            minWidth: 180, 
+            minWidth: 200, 
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
             borderRadius: 0.5, 
             '&:hover': { bgcolor: isDarkMode ? '#3b486b' : '#1a3041' } 
           }} 
           startIcon={<AddCircleOutlineIcon sx={{ color: '#ffffff' }} />} 
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={(e) => setCreateMenuAnchor(e.currentTarget)}
         > 
-          New Account 
+          New Account <KeyboardArrowDownIcon fontSize="small" sx={{ ml: 0.5 }} />
         </PrimaryButton>
+        <Menu
+          anchorEl={createMenuAnchor}
+          open={Boolean(createMenuAnchor)}
+          onClose={() => setCreateMenuAnchor(null)}
+          PaperProps={{ sx: { borderRadius: 2, minWidth: 220 } }}
+        >
+          <MenuItem onClick={() => { setCreateMenuAnchor(null); setIsCreateModalOpen(true); }} sx={{ fontWeight: 600 }}>
+            <PersonAddIcon fontSize="small" sx={{ mr: 1.5 }} /> Add Account
+          </MenuItem>
+          <MenuItem onClick={() => { setCreateMenuAnchor(null); setIsBulkCreateOpen(true); }} sx={{ fontWeight: 600 }}>
+            <GroupAddIcon fontSize="small" sx={{ mr: 1.5 }} /> Add Bulk Accounts
+          </MenuItem>
+          <MenuItem onClick={handleExportAccounts} sx={{ fontWeight: 600 }}>
+            <FileDownloadIcon fontSize="small" sx={{ mr: 1.5 }} /> Export Accounts
+          </MenuItem>
+        </Menu>
       </Stack>
 
       {loading ? (
@@ -630,6 +673,19 @@ const AdminManageAccount = () => {
           </Button>
         </Stack>
       )}
+
+      {/* BULK CREATE ACCOUNT WIZARD */}
+      <BulkCreateAccountDialog
+        open={isBulkCreateOpen}
+        onClose={() => setIsBulkCreateOpen(false)}
+        mode="admin"
+        departments={departments}
+        yearLevels={yearLevels}
+        formatIdNumber={formatIdNumber}
+        createAuditLog={createAuditLog}
+        onNotify={(message, severity) => setNotify({ open: true, message, severity })}
+        onCompleted={fetchClients}
+      />
 
       {/* CREATE MODAL */}
       <ActionModal 
