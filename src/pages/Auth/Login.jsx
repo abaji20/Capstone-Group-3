@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { ColorModeContext } from '../../App'; 
 import glcBG from '../../assets/glclogin.jpg';
-import libraryBG from '../../assets/libraryBG.jpg';
+import libraryBG from '../../assets/librarybackground.png';
 import glclogo from '../../assets/glclogo.png';
 
 const Login = () => {
