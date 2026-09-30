@@ -131,13 +131,15 @@ const TopbarSearch = ({ open, onClose }) => {
       sx={{ '& .MuiDialog-container': { alignItems: 'flex-start', justifyContent: 'center' } }}
       PaperProps={{
         sx: {
-          mt: isMobile ? 0 : { sm: 8, md: 10 },
+          // Was { sm: 8, md: 10 } — that pushed the panel well down the page.
+          // Now sits just under the topbar.
+          mt: isMobile ? 0 : { sm: 2, md: 2.5 },
           mx: isMobile ? 0 : { sm: 2 },
           width: isMobile ? '100%' : { sm: 'calc(100% - 32px)' },
           borderRadius: isMobile ? 0 : 1,
           bgcolor: isDarkMode ? '#0f172a' : '#ffffff',
           backgroundImage: 'none',
-          maxHeight: isMobile ? '100%' : 'calc(100vh - 100px)',
+          maxHeight: isMobile ? '100%' : 'calc(100vh - 40px)',
           overflow: 'hidden',
         },
       }}
@@ -263,13 +265,25 @@ const TopbarSearch = ({ open, onClose }) => {
             <Box
               sx={{
                 display: 'grid',
-                gap: { xs: 1.25, sm: 1.5 },
+                // Gap between PdfCards in this grid — tweak these numbers
+                // directly to make it tighter/looser (MUI spacing unit,
+                // 1 = 8px).
+                gap: { xs: 1, sm: 1.25, md: 1.5 },
+                // Was repeat(2, minmax(0,1fr)) / repeat(3, minmax(0,1fr)):
+                // those force each column to stretch to half/third of the
+                // row width, but PdfCard itself only fills ~130-145px of
+                // that column (justifyItems below stops it from
+                // stretching) — the leftover space inside each column read
+                // as one huge gap between cards. Sizing columns to the
+                // card's own width at every breakpoint removes that
+                // leftover space; the browser just fits as many columns as
+                // will actually hold a card.
                 gridTemplateColumns: {
-                  xs: 'repeat(2, minmax(0, 1fr))',
-                  sm: 'repeat(3, minmax(0, 1fr))',
-                  md: 'repeat(auto-fill, minmax(170px, 1fr))',
+                  xs: 'repeat(auto-fill, minmax(130px, 130px))',
+                  sm: 'repeat(auto-fill, minmax(145px, 145px))',
+                  md: 'repeat(auto-fill, minmax(150px, 150px))',
                 },
-                '& .MuiCard-root': { width: '100%', minWidth: 0, maxWidth: 'none' },
+                justifyContent: 'start',
               }}
             >
               {visibleResults.map((doc) => (
