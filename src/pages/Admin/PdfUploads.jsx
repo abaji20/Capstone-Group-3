@@ -27,7 +27,6 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { 
   uploadPdfWithFiles, 
-  checkDuplicate, 
   deletePdf, 
   uploadNewPdf, 
   fetchPdfs 
@@ -54,6 +53,26 @@ const EMPTY_FORM = {
   published_month: '', published_day: '',
   // NEW: digital-library metadata fields
   section: '', program_course: '', publisher: '', isbn: '', edition: '', language: 'English'
+};
+
+// --- DUPLICATE CHECK HELPERS ---
+// Case / extra-space insensitive text compare, and ISBN compare that ignores dashes.
+const norm = (s) => (s || '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
+const normIsbn = (s) => (s || '').toString().replace(/[-\s]/g, '').toUpperCase();
+
+// SHA-256 of a File/Blob, as a hex string.
+const hashBlob = async (blob) => {
+  const buf = await blob.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+};
+
+// Messages shown in the duplicate dialog, by match type.
+const DUPLICATE_MESSAGES = {
+  title_author: 'A document with the same title and author is already registered.',
+  title_author_file: 'A document with the same title, author and PDF file is already registered.',
+  title_author_isbn: 'A document with the same title, author and ISBN is already registered.',
+  title_author_isbn_edition: 'A document with the same title, author, ISBN and edition is already registered.',
 };
 
 // One label/value line in the Document Info grid. Same shape as
@@ -125,7 +144,8 @@ const PdfUploads = () => {
   const [selectedItemFileSize, setSelectedItemFileSize] = useState('Fetching size...');
 
   const [status, setStatus] = useState({ open: false, type: 'success', message: '' });
-  const [confirmData, setConfirmData] = useState({ open: false, record: null });
+  // type = which duplicate rule matched (see DUPLICATE_MESSAGES)
+  const [confirmData, setConfirmData] = useState({ open: false, record: null, type: null });
   
   // Review/Pre-Upload Confirmation Modal State
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -275,6 +295,76 @@ const PdfUploads = () => {
     if (data?.publicUrl) window.open(data.publicUrl, '_blank');
   };
 
+  // --- DUPLICATE DETECTION ---
+  // Is the selected PDF the same file as the one stored for `record`?
+  // 1) compare byte size (cheap) — if different, it's a different file
+  // 2) if the size is equal, download the stored PDF and compare SHA-256
+  //    (only happens for records that already match title + author)
+  const isSameFile = async (record) => {
+    if (!selectedFile || !record?.file_url) return false;
+    try {
+      const { data } = supabase.storage.from('pdfs').getPublicUrl(record.file_url);
+      const url = data?.publicUrl;
+      if (!url) return false;
+
+      // Stored size: use the numeric column if there is one, else ask the server.
+      let storedSize = Number(record.file_size);
+      if (!Number.isFinite(storedSize) || storedSize <= 0) {
+        const head = await fetch(url, { method: 'HEAD' });
+        storedSize = parseInt(head.headers.get('content-length'), 10);
+      }
+      if (!Number.isFinite(storedSize) || storedSize !== selectedFile.size) return false;
+
+      // Same size -> confirm with a hash. If the download fails, trust the size match.
+      try {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const [storedHash, newHash] = await Promise.all([hashBlob(blob), hashBlob(selectedFile)]);
+        return storedHash === newHash;
+      } catch (e) {
+        return true;
+      }
+    } catch (e) {
+      console.error('Same-file check failed:', e);
+      return false;
+    }
+  };
+
+  // Returns { type, record } for the most specific match, or null.
+  // A record is only a duplicate if title + author match; then:
+  //   title + author + ISBN + edition -> Replace / Cancel
+  //   title + author + ISBN           -> Replace / Cancel
+  //   title + author + same file      -> Replace / Cancel
+  //   title + author                  -> Replace / Keep Both / Cancel
+  const findDuplicate = async () => {
+    const all = await fetchPdfs();
+    const title = norm(formData.title);
+    const author = norm(formData.author);
+
+    const matches = (all || []).filter(
+      (r) => norm(r.title) === title && norm(r.author) === author
+    );
+    if (matches.length === 0) return null;
+
+    const isbn = normIsbn(formData.isbn);
+    const edition = norm(formData.edition);
+
+    if (isbn) {
+      const isbnMatches = matches.filter((r) => normIsbn(r.isbn) === isbn);
+
+      const full = isbnMatches.find((r) => edition && norm(r.edition) === edition);
+      if (full) return { type: 'title_author_isbn_edition', record: full };
+
+      if (isbnMatches.length > 0) return { type: 'title_author_isbn', record: isbnMatches[0] };
+    }
+
+    for (const r of matches) {
+      if (await isSameFile(r)) return { type: 'title_author_file', record: r };
+    }
+
+    return { type: 'title_author', record: matches[0] };
+  };
+
   // --- TRIGGER REVIEW MODAL & VALIDATE FIELDS ---
   const handlePreUploadCheck = () => {
     if (!selectedFile) {
@@ -309,16 +399,10 @@ const PdfUploads = () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      // Duplicate = same title + author + edition + ISBN
-      const existingRecord = await checkDuplicate(
-        formData.title.trim(), 
-        formData.author.trim(), 
-        formData.edition, 
-        formData.isbn
-      );
-      
-      if (existingRecord) {
-        setConfirmData({ open: true, record: existingRecord });
+
+      const dup = await findDuplicate();
+      if (dup) {
+        setConfirmData({ open: true, record: dup.record, type: dup.type });
         setLoading(false);
         return; 
       }
@@ -334,7 +418,7 @@ const PdfUploads = () => {
 
   const handleReplace = async () => {
     const recordId = confirmData.record.id;
-    setConfirmData({ open: false, record: null });
+    setConfirmData({ open: false, record: null, type: null });
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -349,7 +433,7 @@ const PdfUploads = () => {
   };
 
   const handleAddAnyway = async () => {
-    setConfirmData({ open: false, record: null });
+    setConfirmData({ open: false, record: null, type: null });
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -943,96 +1027,134 @@ const PdfUploads = () => {
         </Alert>
       </Snackbar>
 
-      {/* DUPLICATE DIALOG WITH FULL EXISTING RECORD DETAILS */}
-      <Dialog 
-        open={confirmData.open} 
-        onClose={() => setConfirmData({ open: false, record: null })} 
-        PaperProps={{ sx: { borderRadius: 3, bgcolor: cardBg, maxWidth: '500px', width: '100%' } }}
-      >
-        <DialogTitle sx={{ fontWeight: 900 }}>Duplicate Found</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            A document with the same title, author, edition and ISBN is already registered in the system. Review its details below:
-          </Typography>
-          {confirmData.record && (
-            <Box sx={{ p: 2.5, bgcolor: inputBg, borderRadius: 2, border: `1px solid ${borderCol}` }}>
-              <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-                <Avatar 
-                  variant="rounded" 
-                  src={confirmData.record.image_url ? getImageUrl(confirmData.record.image_url) : glclogo} 
-                  sx={{ width: 70, height: 95, borderRadius: 2 }}
-                >
-                  {!confirmData.record.image_url && <FontAwesomeIcon icon={faFilePdf} style={{ fontSize: '26px' }} />}
-                </Avatar>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 900, lineHeight: 1.2 }}>{confirmData.record.title}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 700, mt: 0.5 }}>{confirmData.record.author || 'Unknown'}</Typography>
-                  <Typography variant="caption" sx={{ display: 'inline-block', mt: 1, px: 1, py: 0.3, bgcolor: '#3b82f6', color: '#fff', borderRadius: 1, fontWeight: 800, textTransform: 'uppercase' }}>
-                    {confirmData.record.category}
-                  </Typography>
-                </Box>
-              </Stack>
+      {/* DUPLICATE DIALOG — same layout as the "Document Info" dialog */}
+<Dialog 
+  open={confirmData.open} 
+  onClose={() => setConfirmData({ open: false, record: null, type: null })} 
+  maxWidth="md"
+  fullWidth
+  PaperProps={{ sx: { borderRadius: '20px', bgcolor: cardBg, p: 1 } }}
+>
+  <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+    <Stack direction="row" spacing={1} alignItems="center">
+      <PictureAsPdfIcon color="warning" />
+      <Typography variant="h6" fontWeight="800">Duplicate Found</Typography>
+    </Stack>
+    <IconButton onClick={() => setConfirmData({ open: false, record: null, type: null })} size="small">
+      <CloseIcon />
+    </IconButton>
+  </DialogTitle>
+  <Divider />
 
-              <Divider sx={{ my: 1.5 }} />
+  <DialogContent sx={{ mt: 2 }}>
+    <Alert severity="warning" sx={{ mb: 2.5, borderRadius: '10px', fontWeight: 600 }}>
+      {DUPLICATE_MESSAGES[confirmData.type] || 'A similar document is already registered.'}
+    </Alert>
 
-              <Stack spacing={1}>
-                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>GENRE / FIELD</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.genre || 'N/A'}</Typography>
-
-                {confirmData.record.section && (
-                  <>
-                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>SECTION</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.section}</Typography>
-                  </>
-                )}
-                {confirmData.record.program_course && (
-                  <>
-                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>PROGRAM / COURSE</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.program_course}</Typography>
-                  </>
-                )}
-                {confirmData.record.publisher && (
-                  <>
-                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>PUBLISHER</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.publisher}</Typography>
-                  </>
-                )}
-                {confirmData.record.isbn && (
-                  <>
-                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>ISBN</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.isbn}</Typography>
-                  </>
-                )}
-                {confirmData.record.edition && (
-                  <>
-                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>EDITION</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.edition}</Typography>
-                  </>
-                )}
-                {confirmData.record.language && (
-                  <>
-                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>LANGUAGE</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{confirmData.record.language}</Typography>
-                  </>
-                )}
-
-                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>PUBLICATION DATE</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatPublishedDate(confirmData.record)}</Typography>
-
-                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mt: 1 }}>DESCRIPTION</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.5, maxHeight: '80px', overflowY: 'auto' }}>
-                  {confirmData.record.description || 'No description available for this document.'}
-                </Typography>
-              </Stack>
+    {confirmData.record && (
+      <Grid container spacing={3}>
+        {/* COVER */}
+        <Grid size={{ xs: 12, md: 4 }}>
+          {confirmData.record.image_url ? (
+            <Box
+              component="img"
+              src={getImageUrl(confirmData.record.image_url)}
+              alt={confirmData.record.title}
+              sx={{ width: '100%', borderRadius: '12px', height: 260, objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+            />
+          ) : (
+            <Box sx={{ 
+              height: 260, 
+              borderRadius: '12px', 
+              bgcolor: isDarkMode ? '#0f172a' : '#f1f5f9', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              p: 3
+            }}>
+              <Box component="img" src={glclogo} alt="GLC logo" sx={{ maxWidth: '70%', maxHeight: '70%', objectFit: 'contain', opacity: 0.9 }} />
             </Box>
           )}
-        </DialogContent>
-        <DialogActions sx={{ p: 3, flexDirection: 'column', gap: 1 }}>
-          <Button fullWidth onClick={handleReplace} variant="contained" color="warning" sx={{ borderRadius: 2, fontWeight: 800 }}>Replace Existing</Button>
-          <Button fullWidth onClick={handleAddAnyway} variant="outlined" sx={{ borderRadius: 2, fontWeight: 800 }}>Keep Both</Button>
-          <Button fullWidth onClick={() => setConfirmData({ open: false, record: null })} color="inherit">Cancel</Button>
-        </DialogActions>
-      </Dialog>
+        </Grid>
+
+        {/* DETAILS */}
+        <Grid size={{ xs: 12, md: 8 }}>
+          <Typography variant="h5" fontWeight="900" sx={{ mb: 1 }}>
+            {confirmData.record.title || 'Untitled Material'}
+          </Typography>
+          <Typography variant="subtitle1" fontWeight="700" color="text.secondary" sx={{ mb: 2 }}>
+            Author: {confirmData.record.author || 'Unknown'}
+          </Typography>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto auto' },
+              justifyContent: 'start',
+              columnGap: 3,
+              rowGap: 1,
+              mb: 2.5,
+            }}
+          >
+            <InfoRow icon={<MenuBookIcon fontSize="small" color="primary" />} label="Type" value={confirmData.record.category || 'book'} />
+            <InfoRow icon={<CategoryIcon fontSize="small" color="primary" />} label="Genre" value={confirmData.record.genre || 'General'} />
+
+            {confirmData.record.section && (
+              <InfoRow icon={<BookmarkIcon fontSize="small" color="primary" />} label="Section" value={confirmData.record.section} />
+            )}
+            {confirmData.record.program_course && (
+              <InfoRow icon={<SchoolIcon fontSize="small" color="primary" />} label="Program" value={confirmData.record.program_course} />
+            )}
+
+            <InfoRow icon={<EventIcon fontSize="small" color="primary" />} label="Published" value={formatPublishedDate(confirmData.record)} />
+
+            {confirmData.record.publisher && (
+              <InfoRow icon={<BusinessIcon fontSize="small" color="primary" />} label="Publisher" value={confirmData.record.publisher} />
+            )}
+            {confirmData.record.edition && (
+              <InfoRow icon={<LayersIcon fontSize="small" color="primary" />} label="Edition" value={confirmData.record.edition} />
+            )}
+            {confirmData.record.isbn && (
+              <InfoRow icon={<ConfirmationNumberIcon fontSize="small" color="primary" />} label="ISBN" value={confirmData.record.isbn} />
+            )}
+            {confirmData.record.language && (
+              <InfoRow icon={<LanguageIcon fontSize="small" color="primary" />} label="Language" value={confirmData.record.language} />
+            )}
+          </Box>
+
+          <Typography variant="subtitle2" fontWeight="800" sx={{ mb: 0.5, color: 'text.secondary' }}>
+            DESCRIPTION / ABSTRACT
+          </Typography>
+          <Typography variant="body2" sx={{ lineHeight: 1.7, color: isDarkMode ? '#cbd5e1' : '#475569', maxHeight: 120, overflowY: 'auto' }}>
+            {confirmData.record.description || 'No description available for this document.'}
+          </Typography>
+        </Grid>
+      </Grid>
+    )}
+  </DialogContent>
+
+  <DialogActions sx={{ p: 2, pt: 0, justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+    <Button
+      onClick={() => setConfirmData({ open: false, record: null, type: null })}
+      variant="outlined"
+      color="inherit"
+      sx={{ fontWeight: 700, borderRadius: '8px' }}
+    >
+      Cancel
+    </Button>
+    <Stack direction="row" spacing={1}>
+      {/* Keep Both is only offered for a plain title + author match */}
+      {confirmData.type === 'title_author' && (
+        <Button onClick={handleAddAnyway} variant="outlined" sx={{ fontWeight: 700, borderRadius: '8px' }}>
+          Keep Both
+        </Button>
+      )}
+      <Button onClick={handleReplace} variant="contained" color="warning" sx={{ fontWeight: 700, borderRadius: '8px' }}>
+        Replace Existing
+      </Button>
+    </Stack>
+  </DialogActions>
+</Dialog>
 
     </Box>
   );
