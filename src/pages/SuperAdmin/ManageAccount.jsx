@@ -94,6 +94,10 @@ const ManageAccount = () => {
   // Archived selection (Select All + individual checkboxes)
   const [selectedArchivedIds, setSelectedArchivedIds] = useState([]);
   const [bulkArchiveAction, setBulkArchiveAction] = useState(null); // 'restore' | 'delete' | null
+
+  // User List selection (Select All + individual checkboxes -> bulk archive)
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [isBulkArchiveOpen, setIsBulkArchiveOpen] = useState(false);
   
   // Data States
   const [selectedUser, setSelectedUser] = useState(null);
@@ -691,6 +695,56 @@ const ManageAccount = () => {
     return matchesSearch && matchesRole && matchesDate;
   });
 
+  // --- USER LIST SELECTION (Select All + individual checkboxes) ---
+  // Drop selections for accounts that no longer exist in the active list
+  // (archived, refreshed, etc.).
+  useEffect(() => {
+    setSelectedUserIds((prev) => {
+      const next = prev.filter((id) => users.some((u) => u.id === id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [users]);
+
+  // Start fresh whenever the user leaves the User List tab.
+  useEffect(() => {
+    if (activeTab !== 0) setSelectedUserIds([]);
+  }, [activeTab]);
+
+  const selectedUserCount = selectedUserIds.length;
+  const allUsersSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selectedUserIds.includes(u.id));
+  const someUsersSelected = selectedUserCount > 0 && !allUsersSelected;
+
+  // "Select All" selects everything matching the current search/filters (all pages).
+  const toggleUserSelectAll = () => {
+    setSelectedUserIds(allUsersSelected ? [] : filteredUsers.map((u) => u.id));
+  };
+
+  const toggleUserSelected = (id) => {
+    setSelectedUserIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  // Bulk archive operates ONLY on the checked accounts.
+  const handleBulkArchiveUsers = async () => {
+    const ids = [...selectedUserIds];
+    if (!ids.length) return;
+    const names = users.filter((u) => ids.includes(u.id)).map((u) => u.full_name).join(', ');
+    setLoading(true);
+    try {
+      const { error } = await supabase.from('profiles').update({ is_archived: true }).in('id', ids);
+      if (error) throw error;
+      await createAuditLog('Archive Account', `Archived ${ids.length} account(s): ${names}`);
+      setNotify({ open: true, message: `${ids.length} account(s) moved to Archive!`, severity: 'success' });
+      setSelectedUserIds([]);
+      setIsBulkArchiveOpen(false);
+      fetchUsers();
+    } catch (err) {
+      console.error('Bulk archive failed:', err);
+      setNotify({ open: true, message: 'Bulk archive failed.', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const accountsPerPage = 12;
   const totalPages = Math.ceil(filteredUsers.length / accountsPerPage);
   const paginatedUsers = filteredUsers.slice(
@@ -836,10 +890,58 @@ const ManageAccount = () => {
             </Menu>
           </Stack>   
 
+          {/* User List bulk-selection bar — only appears once something is selected
+              (on mobile it stays so the "Select All" checkbox is reachable) */}
+          {(isMobile || selectedUserCount > 0) && filteredUsers.length > 0 && (
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1.5}
+              justifyContent="space-between"
+              alignItems={{ xs: 'flex-start', sm: 'center' }}
+              sx={{ mb: 2 }}
+            >
+              {isMobile ? (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={allUsersSelected}
+                      indeterminate={someUsersSelected}
+                      onChange={toggleUserSelectAll}
+                    />
+                  }
+                  label={<Typography variant="body2" fontWeight={700}>Select All ({selectedUserCount} of {filteredUsers.length} selected)</Typography>}
+                />
+              ) : (
+                <Typography variant="body2" fontWeight={700} color="text.secondary">
+                  {selectedUserCount} of {filteredUsers.length} selected
+                </Typography>
+              )}
+              {selectedUserCount > 0 && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="error"
+                  startIcon={<ArchiveIcon />}
+                  onClick={() => setIsBulkArchiveOpen(true)}
+                  sx={{ borderRadius: '8px', fontWeight: 700, boxShadow: 'none' }}
+                >
+                  Archive Selected ({selectedUserCount})
+                </Button>
+              )}
+            </Stack>
+          )}
+
           {isMobile ? (
             <Stack spacing={2} alignItems="center">
               {paginatedUsers.map((user) => (
                 <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: -1 }}>
+                    <Checkbox
+                      checked={selectedUserIds.includes(user.id)}
+                      onChange={() => toggleUserSelected(user.id)}
+                      inputProps={{ 'aria-label': `Select ${user.full_name}` }}
+                    />
+                  </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={user} size={40} /></Box>
                   <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
                   <Typography variant="body2" color="text.secondary">{user.email}</Typography>
@@ -863,6 +965,20 @@ const ManageAccount = () => {
               <Table>
                 <TableHead sx={{ bgcolor: isDarkMode ? '#0f172a' : '#213C51' }}>
                   <TableRow>
+                    <TableCell padding="checkbox" sx={{ width: 48 }}>
+                      <Checkbox
+                        checked={allUsersSelected}
+                        indeterminate={someUsersSelected}
+                        onChange={toggleUserSelectAll}
+                        disabled={filteredUsers.length === 0}
+                        inputProps={{ 'aria-label': 'Select all accounts' }}
+                        sx={{
+                          color: 'white',
+                          '&.Mui-checked, &.MuiCheckbox-indeterminate': { color: 'white' },
+                          '&.Mui-disabled': { color: 'rgba(255,255,255,0.3)' }
+                        }}
+                      />
+                    </TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }}>USER DETAILS</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">ID NUMBER</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 750 }} align="center">STATUS</TableCell>
@@ -874,7 +990,14 @@ const ManageAccount = () => {
                 </TableHead>
                 <TableBody>
                   {paginatedUsers.map((user) => (
-                    <TableRow key={user.id} hover>
+                    <TableRow key={user.id} hover selected={selectedUserIds.includes(user.id)}>
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={selectedUserIds.includes(user.id)}
+                          onChange={() => toggleUserSelected(user.id)}
+                          inputProps={{ 'aria-label': `Select ${user.full_name}` }}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={2} alignItems="center">
                           <StyledAvatar user={user} />
@@ -1064,8 +1187,9 @@ const ManageAccount = () => {
         </>
       ) : (
         <>
-          {/* Archived bulk-selection bar */}
-          {archivedUsers.length > 0 && (
+          {/* Archived bulk-selection bar — only appears once something is selected
+              (on mobile it stays so the "Select All" checkbox is reachable) */}
+          {archivedUsers.length > 0 && (isMobile || selectedArchivedCount > 0) && (
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
               spacing={1.5}
@@ -1089,30 +1213,30 @@ const ManageAccount = () => {
                   {selectedArchivedCount} of {archivedUsers.length} selected
                 </Typography>
               )}
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  startIcon={<RestoreIcon />}
-                  disabled={selectedArchivedCount === 0}
-                  onClick={() => setBulkArchiveAction('restore')}
-                  sx={{ borderRadius: '8px', fontWeight: 700 }}
-                >
-                  Restore Selected ({selectedArchivedCount})
-                </Button>
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="error"
-                  startIcon={<DeleteForeverIcon />}
-                  disabled={selectedArchivedCount === 0}
-                  onClick={() => setBulkArchiveAction('delete')}
-                  sx={{ borderRadius: '8px', fontWeight: 700, boxShadow: 'none' }}
-                >
-                  Delete Selected ({selectedArchivedCount})
-                </Button>
-              </Stack>
+              {selectedArchivedCount > 0 && (
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<RestoreIcon />}
+                    onClick={() => setBulkArchiveAction('restore')}
+                    sx={{ borderRadius: '8px', fontWeight: 700 }}
+                  >
+                    Restore Selected ({selectedArchivedCount})
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="error"
+                    startIcon={<DeleteForeverIcon />}
+                    onClick={() => setBulkArchiveAction('delete')}
+                    sx={{ borderRadius: '8px', fontWeight: 700, boxShadow: 'none' }}
+                  >
+                    Delete Selected ({selectedArchivedCount})
+                  </Button>
+                </Stack>
+              )}
             </Stack>
           )}
 
@@ -1265,6 +1389,28 @@ const ManageAccount = () => {
           <Button onClick={() => setIsConfirmOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button>
           <Button onClick={handleArchiveAccount} variant="contained" color="error" sx={{ borderRadius: 2, boxShadow: 'none' }}> 
             {loading ? "Archiving..." : "Confirm Archive"} 
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Bulk Archive Confirmation (Archive Selected from User List) */}
+      <Dialog
+        open={isBulkArchiveOpen}
+        onClose={() => { if (!loading) setIsBulkArchiveOpen(false); }}
+        PaperProps={{ sx: { borderRadius: 3, p: 1, width: '400px' } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: theme.palette.error.main }}>
+          <ArchiveIcon color="error" /> Confirm Archive
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ fontWeight: 500 }}>
+            Move <b>{selectedUserCount}</b> selected account(s) to archived accounts? They will no longer appear in the active user list.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ pb: 2, px: 3 }}>
+          <Button onClick={() => setIsBulkArchiveOpen(false)} disabled={loading} sx={{ color: 'text.secondary' }}>Cancel</Button>
+          <Button onClick={handleBulkArchiveUsers} variant="contained" color="error" disabled={loading} sx={{ borderRadius: 2, boxShadow: 'none' }}>
+            {loading ? 'Archiving...' : 'Archive Accounts'}
           </Button>
         </DialogActions>
       </Dialog>

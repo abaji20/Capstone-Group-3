@@ -189,20 +189,6 @@ const TopbarSearch = ({ open, onClose }) => {
           }}
         />
 
-        <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
-          {CATEGORY_TABS.map((tab) => (
-            <Chip
-              key={tab.value}
-              label={tab.label}
-              size="small"
-              onClick={() => setCategory(tab.value)}
-              color={category === tab.value ? 'primary' : 'default'}
-              variant={category === tab.value ? 'filled' : 'outlined'}
-              sx={{ fontWeight: 700 }}
-            />
-          ))}
-        </Stack>
-
         {/* Filters: 2 columns on phones, 3 on tablets, 6 on desktop */}
         {showFilters && (
           <Box
@@ -239,6 +225,21 @@ const TopbarSearch = ({ open, onClose }) => {
             </TextField>
           </Box>
         )}
+
+        {/* Category chips (now below the filters) */}
+        <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
+          {CATEGORY_TABS.map((tab) => (
+            <Chip
+              key={tab.value}
+              label={tab.label}
+              size="small"
+              onClick={() => setCategory(tab.value)}
+              color={category === tab.value ? 'primary' : 'default'}
+              variant={category === tab.value ? 'filled' : 'outlined'}
+              sx={{ fontWeight: 700 }}
+            />
+          ))}
+        </Stack>
       </Box>
 
       <Divider />
@@ -269,15 +270,9 @@ const TopbarSearch = ({ open, onClose }) => {
                 // directly to make it tighter/looser (MUI spacing unit,
                 // 1 = 8px).
                 gap: { xs: 1, sm: 1.25, md: 1.5 },
-                // Was repeat(2, minmax(0,1fr)) / repeat(3, minmax(0,1fr)):
-                // those force each column to stretch to half/third of the
-                // row width, but PdfCard itself only fills ~130-145px of
-                // that column (justifyItems below stops it from
-                // stretching) — the leftover space inside each column read
-                // as one huge gap between cards. Sizing columns to the
-                // card's own width at every breakpoint removes that
-                // leftover space; the browser just fits as many columns as
-                // will actually hold a card.
+                // Columns are sized to the card's own width at every
+                // breakpoint so there's no leftover space inside each
+                // column; the browser fits as many columns as will hold a card.
                 gridTemplateColumns: {
                   xs: 'repeat(auto-fill, minmax(130px, 130px))',
                   sm: 'repeat(auto-fill, minmax(145px, 145px))',

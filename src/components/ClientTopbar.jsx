@@ -18,6 +18,8 @@ import { supabase } from '../supabaseClient';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { navLinks } from '../navConfig';
 import { LogoutButton, ActionModal, FormInput, TopbarSearch } from '../shared';
+// NEW: notification bell (panel with request status + library updates)
+import NotificationBell from '../shared/NotificationBell';
 import glclogo from '../assets/glclogo.png';
 import glclogdesktop from '../assets/glclogdesktop.png';
 import { ColorModeContext } from '../App';
@@ -334,6 +336,9 @@ const ClientTopbar = () => {
             >
               <SearchIcon fontSize="small" />
             </IconButton>
+
+            {/* Notifications — bell with unread badge; opens the notification panel */}
+            <NotificationBell />
 
             <ButtonBase onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'white', p: 0.5, px: 1, borderRadius: '10px', bgcolor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', transition: 'all 0.3s ease', '&:hover': { bgcolor: 'rgba(59, 130, 246, 0.2)' } }}>
               {!isMobile && (

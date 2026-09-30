@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, CircularProgress, Typography, Stack, Chip, useTheme, useMediaQuery, 
-  Container, Button, Modal, Fade, Backdrop 
+  Container, Button, Modal, Fade, Backdrop, Checkbox, FormControlLabel
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
@@ -21,8 +21,14 @@ const PendingActions = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // --- SELECTION STATE (Select All + individual checkboxes -> bulk delete) ---
+  // Only finished requests (APPROVED / REJECTED / CANCELLED) can be selected.
+  // PENDING requests must be cancelled first, so they have no checkbox.
+  const [selectedIds, setSelectedIds] = useState([]);
+
   // --- DELETE MODAL STATE ---
-  const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
+  // bulk: false -> delete the single request in `id`; bulk: true -> delete all selected.
+  const [deleteModal, setDeleteModal] = useState({ open: false, id: null, bulk: false });
 
   const pageBg = isDarkMode ? '#0f172a' : '#ffffff'; 
   const cardBg = isDarkMode ? '#1e293b' : '#ffffff';
@@ -76,7 +82,52 @@ const PendingActions = () => {
     }
   };
 
+  // --- SELECTION LOGIC ---
+  const deletableRequests = requests.filter((req) => req.status !== 'PENDING');
+
+  // Drop selections that are gone or became PENDING again.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = prev.filter((id) => requests.some((r) => r.id === id && r.status !== 'PENDING'));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [requests]);
+
+  const selectedCount = selectedIds.length;
+  const allSelected = deletableRequests.length > 0 && deletableRequests.every((r) => selectedIds.includes(r.id));
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? [] : deletableRequests.map((r) => r.id));
+  };
+
+  const toggleSelected = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const closeDeleteModal = () => setDeleteModal({ open: false, id: null, bulk: false });
+
   const handleDelete = async () => {
+    if (deleteModal.bulk) {
+      // Bulk delete operates ONLY on the checked logs.
+      const ids = [...selectedIds];
+      if (!ids.length) { closeDeleteModal(); return; }
+
+      const { error } = await supabase
+        .from('delete_requests')
+        .delete()
+        .in('id', ids);
+
+      if (error) {
+        alert("Failed to delete logs: " + error.message);
+      } else {
+        setRequests(requests.filter(req => !ids.includes(req.id)));
+        setSelectedIds([]);
+        closeDeleteModal();
+      }
+      return;
+    }
+
     const { error } = await supabase
       .from('delete_requests')
       .delete()
@@ -86,7 +137,8 @@ const PendingActions = () => {
       alert("Failed to delete log: " + error.message);
     } else {
       setRequests(requests.filter(req => req.id !== deleteModal.id));
-      setDeleteModal({ open: false, id: null });
+      setSelectedIds((prev) => prev.filter((id) => id !== deleteModal.id));
+      closeDeleteModal();
     }
   };
 
@@ -134,6 +186,48 @@ const PendingActions = () => {
           </Box>
         ) : (
           <>
+            {/* Bulk-selection bar — only appears once something is selected
+                (on mobile it stays so the "Select All" checkbox is reachable,
+                as long as at least one log is deletable) */}
+            {deletableRequests.length > 0 && (isMobile || selectedCount > 0) && (
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1.5}
+                justifyContent="space-between"
+                alignItems={{ xs: 'flex-start', sm: 'center' }}
+                sx={{ mb: 2 }}
+              >
+                {isMobile ? (
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        onChange={toggleSelectAll}
+                      />
+                    }
+                    label={<Typography variant="body2" fontWeight={700}>Select All ({selectedCount} of {deletableRequests.length} selected)</Typography>}
+                  />
+                ) : (
+                  <Typography variant="body2" fontWeight={700} color="text.secondary">
+                    {selectedCount} of {deletableRequests.length} selected
+                  </Typography>
+                )}
+                {selectedCount > 0 && (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="error"
+                    startIcon={<DeleteOutlineIcon />}
+                    onClick={() => setDeleteModal({ open: true, id: null, bulk: true })}
+                    sx={{ borderRadius: '8px', fontWeight: 700, boxShadow: 'none' }}
+                  >
+                    Delete Selected ({selectedCount})
+                  </Button>
+                )}
+              </Stack>
+            )}
+
             {isMobile ? (
               <Stack spacing={2}>
                 {requests.map((req) => (
@@ -143,6 +237,15 @@ const PendingActions = () => {
                     border: `1px solid ${borderCol}`, boxShadow: 'none'
                   }}>
                     <Stack spacing={1}>
+                      {req.status !== 'PENDING' && (
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: -1, ml: -1 }}>
+                          <Checkbox
+                            checked={selectedIds.includes(req.id)}
+                            onChange={() => toggleSelected(req.id)}
+                            inputProps={{ 'aria-label': `Select ${req.pdfs?.title || 'log'}` }}
+                          />
+                        </Box>
+                      )}
                       <Stack direction="row" justifyContent="space-between">
                         <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
                           {req.pdfs?.title || 'Untitled Document'}
@@ -184,7 +287,7 @@ const PendingActions = () => {
                               color="error" 
                               sx={{ fontWeight: 700 }}
                               startIcon={<DeleteOutlineIcon />}
-                              onClick={() => setDeleteModal({ open: true, id: req.id })}
+                              onClick={() => setDeleteModal({ open: true, id: req.id, bulk: false })}
                             >
                               Delete Log
                             </Button>
@@ -200,6 +303,20 @@ const PendingActions = () => {
                 <Table>
                   <TableHead sx={{ bgcolor: headerBg }}>
                     <TableRow>
+                      <TableCell padding="checkbox" sx={{ width: 48 }}>
+                        <Checkbox
+                          checked={allSelected}
+                          indeterminate={someSelected}
+                          onChange={toggleSelectAll}
+                          disabled={deletableRequests.length === 0}
+                          inputProps={{ 'aria-label': 'Select all deletable logs' }}
+                          sx={{
+                            color: 'white',
+                            '&.Mui-checked, &.MuiCheckbox-indeterminate': { color: 'white' },
+                            '&.Mui-disabled': { color: 'rgba(255,255,255,0.3)' }
+                          }}
+                        />
+                      </TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>REASON</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>REMARKS</TableCell>
@@ -210,7 +327,15 @@ const PendingActions = () => {
                   </TableHead>
                   <TableBody>
                     {requests.map((req) => (
-                      <TableRow key={req.id} hover>
+                      <TableRow key={req.id} hover selected={selectedIds.includes(req.id)}>
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            checked={selectedIds.includes(req.id)}
+                            onChange={() => toggleSelected(req.id)}
+                            disabled={req.status === 'PENDING'}
+                            inputProps={{ 'aria-label': `Select ${req.pdfs?.title || 'log'}` }}
+                          />
+                        </TableCell>
                         <TableCell sx={{ fontWeight: 700 }}>{req.pdfs?.title}</TableCell>
                         <TableCell sx={{ color: 'text.secondary', maxWidth: 250 }}>{req.reason}</TableCell>
                         {/* Separate Remarks Column for Desktop */}
@@ -251,7 +376,7 @@ const PendingActions = () => {
                                 color="error" 
                                 startIcon={<DeleteOutlineIcon />}
                                 sx={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem' }}
-                                onClick={() => setDeleteModal({ open: true, id: req.id })}
+                                onClick={() => setDeleteModal({ open: true, id: req.id, bulk: false })}
                               >
                                 Delete Log
                               </Button>
@@ -270,7 +395,7 @@ const PendingActions = () => {
 
       <Modal
         open={deleteModal.open}
-        onClose={() => setDeleteModal({ open: false, id: null })}
+        onClose={closeDeleteModal}
         closeAfterTransition
         BackdropComponent={Backdrop}
         BackdropProps={{ timeout: 500 }}
@@ -282,12 +407,16 @@ const PendingActions = () => {
             border: `1px solid ${borderCol}`, outline: 'none'
           }}>
             <WarningAmberIcon sx={{ fontSize: 60, color: '#ef4444', mb: 2 }} />
-            <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>Delete Log Entry?</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>
+              {deleteModal.bulk ? 'Delete Selected Logs?' : 'Delete Log Entry?'}
+            </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-              This will permanently remove this record from the history.
+              {deleteModal.bulk
+                ? `This will permanently remove ${selectedCount} selected record(s) from the history.`
+                : 'This will permanently remove this record from the history.'}
             </Typography>
             <Stack direction="row" spacing={2}>
-              <Button fullWidth onClick={() => setDeleteModal({ open: false, id: null })}>Cancel</Button>
+              <Button fullWidth onClick={closeDeleteModal}>Cancel</Button>
               <Button fullWidth variant="contained" color="error" onClick={handleDelete}>Delete</Button>
             </Stack>
           </Box>

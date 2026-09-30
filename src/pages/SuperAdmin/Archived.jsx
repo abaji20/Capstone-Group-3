@@ -4,7 +4,8 @@ import {
   TableRow, Typography, CircularProgress, Stack, IconButton, Avatar,
   useTheme, useMediaQuery, Card, CardContent, Button, TextField, 
   MenuItem, InputAdornment, Modal, Fade, Backdrop, Tooltip,
-  Dialog, DialogTitle, DialogContent, DialogActions, Divider
+  Dialog, DialogTitle, DialogContent, DialogActions, Divider,
+  Checkbox, FormControlLabel
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 import glclogo from '../../assets/glclogo.png';
@@ -79,6 +80,9 @@ const Archived = () => {
   // --- PAGINATION STATE ---
   const [currentPage, setCurrentPage] = useState(1);
 
+  // --- SELECTION STATE (Select All + individual checkboxes) ---
+  const [selectedIds, setSelectedIds] = useState([]);
+
   // --- MODAL STATES ---
   const [infoModalOpen, setInfoModalOpen] = useState(false);
   const [selectedPdfInfo, setSelectedPdfInfo] = useState(null);
@@ -140,62 +144,6 @@ const Archived = () => {
     }
   };
 
-  const handleRestoreAll = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase
-      .from('pdfs')
-      .update({ is_archived: false })
-      .eq('is_archived', true);
-    
-    if (error) {
-      alert("Error restoring all: " + error.message);
-    } else {
-      if (user) {
-        await supabase.from('audit_logs').insert({
-          user_id: user.id,
-          action_type: 'RESTORE ALL',
-          description: `Restored all ${archivedFiles.length} archived files`
-        });
-      }
-      fetchArchived();
-    }
-    handleCloseConfirm();
-  };
-
-  const handlePurgeAll = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const ids = archivedFiles.map(f => f.id);
-      const filePaths = archivedFiles.map(f => f.file_url).filter(Boolean);
-      const count = archivedFiles.length;
-
-      if (ids.length > 0) {
-        await supabase.from('audit_logs').delete().in('pdf_id', ids.map(String));
-        await supabase.from('delete_requests').delete().in('pdf_id', ids);
-        
-        if (filePaths.length > 0) {
-          await supabase.storage.from('pdfs').remove(filePaths);
-        }
-
-        const { error } = await supabase.from('pdfs').delete().in('id', ids);
-        if (error) throw error;
-
-        if (user) {
-          await supabase.from('audit_logs').insert({
-            user_id: user.id,
-            action_type: 'PERMANENTLY DELETED ALL',
-            description: `Permanently deleted all ${count} archived files from the system`
-          });
-        }
-      }
-      fetchArchived();
-    } catch (error) {
-      console.error("Purge All error:", error.message);
-      alert("Failed to delete all.");
-    }
-    handleCloseConfirm();
-  };
-
   const filteredFiles = archivedFiles.filter(file => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch = 
@@ -230,6 +178,35 @@ const Archived = () => {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
+
+  // --- SELECTION LOGIC ---
+  // Drop selections for files that no longer exist in the archived list
+  // (restored, purged, refreshed, etc.).
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = prev.filter((id) => archivedFiles.some((f) => f.id === id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [archivedFiles]);
+
+  // Start fresh whenever the filters change, so nothing that is currently
+  // hidden from view can be restored/purged by accident.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [searchTerm, monthFilter, dayFilter, yearFilter, genreFilter, categoryFilter]);
+
+  const selectedCount = selectedIds.length;
+  const allSelected = filteredFiles.length > 0 && filteredFiles.every((f) => selectedIds.includes(f.id));
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  // "Select All" selects everything matching the current search/filters (all pages).
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? [] : filteredFiles.map((f) => f.id));
+  };
+
+  const toggleSelected = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   const uniqueGenres = ['All Genres', ...new Set(archivedFiles.map(f => f.genre).filter(Boolean))];
   const categories = ['All Categories', ...new Set(archivedFiles.map(file => file.category).filter(Boolean))];
@@ -302,6 +279,72 @@ const Archived = () => {
     handleCloseConfirm();
   };
 
+  // --- BULK ACTIONS: operate ONLY on the checked files ---
+  const handleRestoreSelected = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) { handleCloseConfirm(); return; }
+    const count = ids.length;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from('pdfs')
+      .update({ is_archived: false })
+      .in('id', ids);
+    
+    if (error) {
+      alert("Error restoring selected files: " + error.message);
+    } else {
+      if (user) {
+        await supabase.from('audit_logs').insert({
+          user_id: user.id,
+          action_type: 'RESTORED FILES',
+          description: `Restored ${count} selected archived file(s)`
+        });
+      }
+      setSelectedIds([]);
+      fetchArchived();
+    }
+    handleCloseConfirm();
+  };
+
+  const handlePurgeSelected = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) { handleCloseConfirm(); return; }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const filesToPurge = archivedFiles.filter((f) => ids.includes(f.id));
+      const filePaths = filesToPurge.map((f) => f.file_url).filter(Boolean);
+      const count = filesToPurge.length;
+
+      await supabase.from('audit_logs').delete().in('pdf_id', ids.map(String));
+      await supabase.from('delete_requests').delete().in('pdf_id', ids);
+      
+      if (filePaths.length > 0) {
+        await supabase.storage.from('pdfs').remove(filePaths);
+      }
+
+      const { error } = await supabase.from('pdfs').delete().in('id', ids);
+      if (error) throw error;
+
+      if (user) {
+        await supabase.from('audit_logs').insert({
+          user_id: user.id,
+          action_type: 'PERMANENTLY DELETED FILES',
+          description: `Permanently deleted ${count} selected archived file(s) from the system`
+        });
+      }
+      setSelectedIds([]);
+      fetchArchived();
+    } catch (error) {
+      console.error("Purge Selected error:", error.message);
+      alert("Failed to delete selected files.");
+    }
+    handleCloseConfirm();
+  };
+
+  const isPurgeType = (type) => type === 'purge' || type === 'purgeSelected';
+
   const getImageUrl = (path) => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
@@ -316,6 +359,13 @@ const Archived = () => {
       sx={{ mb: 2, bgcolor: cardBg, border: `1px solid ${borderCol}`, borderRadius: 2, cursor: 'pointer', boxShadow: 'none' }}
     >
       <CardContent>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: -0.5, ml: -1 }} onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedIds.includes(file.id)}
+            onChange={() => toggleSelected(file.id)}
+            inputProps={{ 'aria-label': `Select ${file.title}` }}
+          />
+        </Box>
         <Stack direction="row" spacing={2} alignItems="flex-start">
           <Avatar 
             variant="rounded" 
@@ -376,7 +426,7 @@ const Archived = () => {
   return (
     <Box sx={{ p: { xs: 2, md: 4 }, bgcolor: pageBg, minHeight: '100vh', width: '100%', boxSizing: 'border-box' }}>
       
-      {/* HEADER WITH BULK ACTIONS */}
+      {/* HEADER */}
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} sx={{ mb: 4 }} spacing={2}>
         <Box>
           <Typography 
@@ -395,29 +445,6 @@ const Archived = () => {
             RESTORE OR PERMANENTLY DELETE ARCHIVED FILES
           </Typography>
         </Box>
-
-        <Stack direction="row" spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
-          <Button 
-            variant="contained" 
-            color="info" 
-            startIcon={<RestoreFromTrashIcon />} 
-            onClick={(e) => handleOpenConfirm('restoreAll', null, e)}
-            disabled={archivedFiles.length === 0}
-            sx={{ fontWeight: 800, borderRadius: 1, flex: 1, fontSize: { xs: '0.7rem', sm: '0.8rem', md: '1rem' }, whiteSpace: 'nowrap', px: { xs: 1, sm: 2 } }}
-          >
-            Restore All
-          </Button>
-          <Button 
-            variant="contained" 
-            color="error" 
-            startIcon={<DeleteForeverIcon />} 
-            onClick={(e) => handleOpenConfirm('purgeAll', null, e)}
-            disabled={archivedFiles.length === 0}
-            sx={{ fontWeight: 800, borderRadius: 1, flex: 1, fontSize: { xs: '0.7rem', sm: '0.8rem', md: '1rem' }, whiteSpace: 'nowrap', px: { xs: 1, sm: 2 } }}
-          >
-            Purge All
-          </Button>
-        </Stack>
       </Stack>
 
       {/* STANDARDIZED FILTER BAR */}
@@ -479,11 +506,78 @@ const Archived = () => {
         </Box>
       ) : (
         <>
+          {/* Bulk-selection bar — only appears once something is selected
+              (on mobile it stays so the "Select All" checkbox is reachable) */}
+          {(isMobile || selectedCount > 0) && (
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1.5}
+              justifyContent="space-between"
+              alignItems={{ xs: 'flex-start', sm: 'center' }}
+              sx={{ mb: 2 }}
+            >
+              {isMobile ? (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={toggleSelectAll}
+                    />
+                  }
+                  label={<Typography variant="body2" fontWeight={700}>Select All ({selectedCount} of {filteredFiles.length} selected)</Typography>}
+                />
+              ) : (
+                <Typography variant="body2" fontWeight={700} color="text.secondary">
+                  {selectedCount} of {filteredFiles.length} selected
+                </Typography>
+              )}
+              {selectedCount > 0 && (
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="info"
+                    startIcon={<RestoreFromTrashIcon />}
+                    onClick={(e) => handleOpenConfirm('restoreSelected', null, e)}
+                    sx={{ borderRadius: '8px', fontWeight: 700 }}
+                  >
+                    Restore Selected ({selectedCount})
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="error"
+                    startIcon={<DeleteForeverIcon />}
+                    onClick={(e) => handleOpenConfirm('purgeSelected', null, e)}
+                    sx={{ borderRadius: '8px', fontWeight: 700, boxShadow: 'none' }}
+                  >
+                    Purge Selected ({selectedCount})
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
+          )}
+
           {!isMobile ? (
             <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
               <Table>
                 <TableHead sx={{ bgcolor: headerColor }}>
                   <TableRow>
+                    <TableCell padding="checkbox" sx={{ width: 48 }}>
+                      <Checkbox
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        onChange={toggleSelectAll}
+                        disabled={filteredFiles.length === 0}
+                        inputProps={{ 'aria-label': 'Select all archived files' }}
+                        sx={{
+                          color: 'white',
+                          '&.Mui-checked, &.MuiCheckbox-indeterminate': { color: 'white' },
+                          '&.Mui-disabled': { color: 'rgba(255,255,255,0.3)' }
+                        }}
+                      />
+                    </TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }}>GENRE</TableCell>
                     <TableCell sx={{ color: 'white', fontWeight: 800 }}>CATEGORY</TableCell>
@@ -496,9 +590,17 @@ const Archived = () => {
                     <TableRow 
                       key={file.id}
                       hover 
+                      selected={selectedIds.includes(file.id)}
                       onClick={() => handleOpenInfo(file)}
                       sx={{ cursor: 'pointer' }}
                     >
+                      <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.includes(file.id)}
+                          onChange={() => toggleSelected(file.id)}
+                          inputProps={{ 'aria-label': `Select ${file.title}` }}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Stack direction="row" alignItems="center" spacing={2}>
                           <Avatar 
@@ -709,17 +811,17 @@ const Archived = () => {
             width: { xs: '90%', sm: 400 }, bgcolor: cardBg, border: `1px solid ${borderCol}`,
             borderRadius: 3, p: 4, textAlign: 'center', boxShadow: 24, outline: 'none'
           }}>
-            <WarningAmberIcon sx={{ fontSize: 60, color: (confirmModal.type === 'purge' || confirmModal.type === 'purgeAll') ? '#ef4444' : '#0ea5e9', mb: 2 }} />
+            <WarningAmberIcon sx={{ fontSize: 60, color: isPurgeType(confirmModal.type) ? '#ef4444' : '#0ea5e9', mb: 2 }} />
             
             <Typography variant="h5" sx={{ fontWeight: 800, mb: 1, color: isDarkMode ? '#fff' : '#213C51' }}>
-              {(confirmModal.type === 'purge' || confirmModal.type === 'purgeAll') ? 'Permanent Delete?' : 'Restore File?'}
+              {isPurgeType(confirmModal.type) ? 'Permanent Delete?' : 'Restore File?'}
             </Typography>
             
             <Typography variant="body2" sx={{ opacity: 0.7, mb: 4, color: isDarkMode ? '#fff' : '#213C51' }}>
               {confirmModal.type === 'purge' && `Are you sure you want to permanently delete "${confirmModal.file?.title}"? This cannot be undone.`}
               {confirmModal.type === 'restore' && `Do you want to restore "${confirmModal.file?.title}"?`}
-              {confirmModal.type === 'restoreAll' && `Are you sure you want to restore ALL archived documents?`}
-              {confirmModal.type === 'purgeAll' && `WARNING: You are about to permanently delete ALL archived documents. This cannot be undone!`}
+              {confirmModal.type === 'restoreSelected' && `Are you sure you want to restore ${selectedCount} selected document(s)?`}
+              {confirmModal.type === 'purgeSelected' && `WARNING: You are about to permanently delete ${selectedCount} selected document(s). This cannot be undone!`}
             </Typography>
 
             <Stack direction="row" spacing={2}>
@@ -729,12 +831,12 @@ const Archived = () => {
               <Button 
                 fullWidth 
                 variant="contained" 
-                color={(confirmModal.type === 'purge' || confirmModal.type === 'purgeAll') ? 'error' : 'info'}
+                color={isPurgeType(confirmModal.type) ? 'error' : 'info'}
                 onClick={() => {
                   if (confirmModal.type === 'purge') handlePurge(confirmModal.file);
                   else if (confirmModal.type === 'restore') handleRestore(confirmModal.file.id);
-                  else if (confirmModal.type === 'restoreAll') handleRestoreAll();
-                  else if (confirmModal.type === 'purgeAll') handlePurgeAll();
+                  else if (confirmModal.type === 'restoreSelected') handleRestoreSelected();
+                  else if (confirmModal.type === 'purgeSelected') handlePurgeSelected();
                 }}
                 sx={{ fontWeight: 700 }}
               >
