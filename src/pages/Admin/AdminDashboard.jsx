@@ -15,6 +15,9 @@ import autoTable from 'jspdf-autotable';
 import glclogo from '../../assets/glclogo.png';
 // Shared date formatter (year / month / day -> "March 15, 2020")
 import { formatPublishedDate } from '../../utils/formatPublishedDate';
+// Shared numeric summary (headline numbers + bar charts) for the PDF report.
+// Same file is used by SuperAdminDashboard.jsx.
+import { drawReportSummary } from '../../utils/Reportsummary';
 
 // MUI Icons
 import GroupIcon from '@mui/icons-material/Group';
@@ -53,35 +56,13 @@ const getStorageImageUrl = (imageUrl) => {
 // ---------------------------------------------------------------------
 // Shared PDF report design system. These exact constants and helpers are
 // duplicated in SuperAdminDashboard.jsx so both dashboards' PDF reports
-// share one palette, one type scale and one set of card/table dimensions
-// instead of each drifting into its own look.
+// share one palette, one type scale and one set of table dimensions
+// instead of each drifting into its own look. The summary section itself
+// (headline numbers + bar charts) lives in utils/reportSummary.js.
 // ---------------------------------------------------------------------
 const REPORT_NAVY = [33, 60, 81];
 const REPORT_BLUE = [37, 99, 235];
-const REPORT_PALETTE = [
-  [37, 99, 235],   // blue
-  [147, 51, 234],  // purple
-  [5, 150, 105],   // green
-  [79, 70, 229],   // indigo
-  [217, 119, 6],   // amber
-  [220, 38, 38],   // red
-  [13, 148, 136],  // teal
-  [219, 39, 119],  // pink
-];
 const REPORT_PAGE = { width: 297, height: 210, margin: 14 };
-
-// One colored KPI card for the summary section.
-const drawReportStatCard = (doc, x, y, w, h, label, value, color) => {
-  doc.setFillColor(color[0], color[1], color[2]);
-  doc.roundedRect(x, y, w, h, 2, 2, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont(undefined, 'bold');
-  doc.setFontSize(7.5);
-  doc.text(String(label).toUpperCase(), x + 4, y + 7, { maxWidth: w - 8 });
-  doc.setFontSize(17);
-  doc.text(String(value), x + 4, y + h - 6);
-  doc.setFont(undefined, 'normal');
-};
 
 // Page header banner + accent stripe. Returns the Y position
 // content can safely start at.
@@ -491,31 +472,20 @@ const AdminDashboard = () => {
     const generatedAt = now.toLocaleString();
     let nextY = drawReportHeader(doc, 'ADMIN DASHBOARD REPORT', generatedAt);
 
-    // Summary as colored KPI cards (same palette/sizing as the Superadmin
-    // report) instead of a plain metric/value table.
-    const summaryStats = [
-      ['Registered User Accounts', accountTotals.users],
-      ['Total Accounts', accountTotals.totalAccounts],
-      ['Total Users', accountTotals.users],
-      ['Total Admins', accountTotals.admins],
-      ['Total Super Admins', accountTotals.superAdmins],
-      ['Total PDFs', materials?.length || 0],
-      ['Pending Requests', requests?.length || 0],
-      ['Total Downloads', downloads?.length || 0],
-      ['User Requests', requests?.length || 0]
-    ];
-    const cardCols = 3;
-    const cardGap = 6;
-    const cardW = (REPORT_PAGE.width - REPORT_PAGE.margin * 2 - cardGap * (cardCols - 1)) / cardCols;
-    const cardH = 22;
-    summaryStats.forEach(([label, value], i) => {
-      const col = i % cardCols;
-      const row = Math.floor(i / cardCols);
-      const x = REPORT_PAGE.margin + col * (cardW + cardGap);
-      const y = nextY + row * (cardH + cardGap);
-      drawReportStatCard(doc, x, y, cardW, cardH, label, value, REPORT_PALETTE[i % REPORT_PALETTE.length]);
+    // Summary is now NUMERICAL: headline numbers + bar charts (accounts by
+    // role, library activity) instead of nine colored KPI rectangles. Same
+    // nine metrics as before. Shared with the SuperAdmin report.
+    nextY = drawReportSummary(doc, nextY, {
+      registeredUsers: accountTotals.users,
+      totalAccounts: accountTotals.totalAccounts,
+      users: accountTotals.users,
+      admins: accountTotals.admins,
+      superAdmins: accountTotals.superAdmins,
+      totalPdfs: materials?.length || 0,
+      pendingRequests: requests?.length || 0,
+      totalDownloads: downloads?.length || 0,
+      userRequests: requests?.length || 0,
     });
-    nextY += Math.ceil(summaryStats.length / cardCols) * (cardH + cardGap) + 6;
 
     const categories = [...new Set((materials || []).map(material => material.category || 'Uncategorized'))];
     categories.forEach((category, catIdx) => {
@@ -525,7 +495,7 @@ const AdminDashboard = () => {
       drawReportSectionLabel(doc, category, REPORT_PAGE.margin, nextY, sectionColor);
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Title', 'Author', 'Type', 'Genre', 'Published', 'Publisher', 'Edition', 'Language', 'Date Added', 'Status']],
+        head: [['Title', 'Author', 'Type', 'Genre', 'Published', 'Publisher', 'Edition', 'Language', 'ISBN', 'Date Added', 'Status']],
         body: categoryRows.map(material => [
           material.title || 'Untitled',
           material.author || 'N/A',
@@ -535,14 +505,15 @@ const AdminDashboard = () => {
           material.publisher || 'N/A',
           material.edition || 'N/A',
           material.language || 'N/A',
+          material.isbn || 'N/A',
           formatReportDate(material.created_at),
           material.is_archived ? 'Archived' : 'Active'
         ]),
         styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
         columnStyles: {
-          0: { cellWidth: 45 }, 1: { cellWidth: 30 }, 2: { cellWidth: 20 }, 3: { cellWidth: 22 },
-          4: { cellWidth: 20 }, 5: { cellWidth: 28 }, 6: { cellWidth: 16 }, 7: { cellWidth: 18 },
-          8: { cellWidth: 26 }, 9: { cellWidth: 18 }
+          0: { cellWidth: 42 }, 1: { cellWidth: 28 }, 2: { cellWidth: 18 }, 3: { cellWidth: 20 },
+          4: { cellWidth: 20 }, 5: { cellWidth: 26 }, 6: { cellWidth: 14 }, 7: { cellWidth: 16 },
+          8: { cellWidth: 27 }, 9: { cellWidth: 26 }, 10: { cellWidth: 17 }
         },
         headStyles: { fillColor: sectionColor, textColor: [255, 255, 255] },
         alternateRowStyles: { fillColor: [244, 247, 250] },

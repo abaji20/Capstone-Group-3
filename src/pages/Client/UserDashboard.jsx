@@ -2,12 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Container, Card, CardContent, Typography, Avatar, Chip,
-  CircularProgress, useTheme, Stack, Divider, Button, Tooltip,
-  Select, MenuItem
+  CircularProgress, useTheme, Stack, Divider, Button, Tooltip
 } from '@mui/material';
-import { LineChart } from '@mui/x-charts/LineChart';
 import { PieChart } from '@mui/x-charts/PieChart';
-import { BarChart } from '@mui/x-charts/BarChart';
 import DownloadIcon from '@mui/icons-material/Download';
 import PublishIcon from '@mui/icons-material/Publish';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -19,6 +16,10 @@ import { supabase } from '../../supabaseClient';
 import { BookShelf } from '../../shared';
 import glclogo from '../../assets/glclogo.png';
 import clientbackground from '../../assets/clientbackground.png';
+// Bar-chart Download Overview card (horizontal bars on mobile, fills the
+// card height on laptop). Lives next to this file — adjust the path if you
+// put it somewhere else.
+import DownloadOverview from './Downloadoverview';
 
 // How many books to load per page in the "Recent Download" and
 // "New in the Library" shelves.
@@ -699,44 +700,14 @@ const UserDashboard = () => {
               </CardContent>
             </Card>
 
-            {/* Download Overview */}
-            <Card sx={{ ...cardSx, width: '100%', overflow: 'hidden', flexGrow: 1 }}>
-              <Box sx={{
-                background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)',
-                px: 3, py: 2.5,
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                flexWrap: 'wrap', gap: 2,
-              }}>
-                <Typography variant="subtitle1" fontWeight="800" sx={{ color: '#ffffff', letterSpacing: 0.5 }}>
-                  DOWNLOAD OVERVIEW
-                </Typography>
-                <Select
-                  value={downloadYear}
-                  onChange={(e) => setDownloadYear(e.target.value)}
-                  size="small"
-                  sx={{
-                    color: '#ffffff',
-                    bgcolor: 'rgba(255,255,255,0.1)',
-                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.2)' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#ffffff' },
-                    '.MuiSvgIcon-root': { color: '#ffffff' },
-                    fontWeight: 700, borderRadius: '8px', height: 38,
-                  }}
-                >
-                  {downloadYears.map((year) => (
-                    <MenuItem key={year} value={year}>Year {year}</MenuItem>
-                  ))}
-                </Select>
-              </Box>
-              <Box sx={{ width: '100%', height: 300, p: { xs: 1, sm: 2 } }}>
-                <LineChart
-                  xAxis={[{ scaleType: 'point', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] }]}
-                  series={[{ data: monthlyDownloads, color: '#3b82f6', area: true, showMark: true, label: 'My Downloads' }]}
-                  height={280}
-                  margin={{ top: 20, bottom: 25, left: 45, right: 25 }}
-                />
-              </Box>
-            </Card>
+            {/* Download Overview — bar chart (horizontal on mobile) */}
+            <DownloadOverview
+              year={downloadYear}
+              years={downloadYears}
+              onYearChange={setDownloadYear}
+              monthlyDownloads={monthlyDownloads}
+              cardSx={cardSx}
+            />
           </Box>
 
           {/* ── RIGHT COLUMN ───────────────────────────────────────────── */}
