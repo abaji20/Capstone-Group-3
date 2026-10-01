@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, createContext } from 'react';
+import { useEffect, useState, useMemo, useRef, createContext } from 'react';
 import { flushSync } from 'react-dom';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
@@ -46,33 +46,72 @@ function App() {
   const [role, setRole] = useState(() => sessionStorage.getItem('current_tab_role') || null);
   const [loading, setLoading] = useState(() => !sessionStorage.getItem('current_tab_role'));
   const [mode, setMode] = useState(localStorage.getItem('themeMode') || 'light');
+  const modeRef = useRef(mode);
+  const transitionSnapshotRef = useRef(null);
+  const activeThemeAnimationRef = useRef(null);
 
   const colorMode = useMemo(() => ({
     toggleColorMode: (event) => {
-      const nextMode = mode === 'light' ? 'dark' : 'light';
-      const applyMode = () => {
-        localStorage.setItem('themeMode', nextMode);
-        setMode(nextMode);
-      };
-
-      if (!document.startViewTransition) {
-        applyMode();
-        return;
-      }
-
+      const nextMode = modeRef.current === 'light' ? 'dark' : 'light';
       const bounds = event?.currentTarget?.getBoundingClientRect();
       const originX = bounds ? bounds.left + bounds.width / 2 : window.innerWidth / 2;
       const originY = bounds ? bounds.top + bounds.height / 2 : window.innerHeight / 2;
-      const root = document.documentElement;
 
-      root.style.setProperty('--theme-origin-x', `${originX}px`);
-      root.style.setProperty('--theme-origin-y', `${originY}px`);
+      activeThemeAnimationRef.current?.cancel();
+      activeThemeAnimationRef.current = null;
+      transitionSnapshotRef.current?.remove();
 
-      document.startViewTransition(() => {
-        flushSync(applyMode);
+      const bodySnapshot = document.body.cloneNode(true);
+      bodySnapshot.querySelectorAll('script, [data-theme-transition-snapshot]').forEach((node) => node.remove());
+      Object.assign(bodySnapshot.style, {
+        position: 'absolute',
+        top: `${-window.scrollY}px`,
+        left: '0',
+        width: '100%',
+        minHeight: '100vh',
+        margin: '0',
+        pointerEvents: 'none',
       });
+
+      const snapshot = document.createElement('div');
+      snapshot.dataset.themeTransitionSnapshot = 'true';
+      snapshot.setAttribute('aria-hidden', 'true');
+      snapshot.inert = true;
+      Object.assign(snapshot.style, {
+        position: 'fixed',
+        inset: '0',
+        zIndex: '2147483647',
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        backgroundColor: getComputedStyle(document.body).backgroundColor,
+      });
+      const revealMask = `radial-gradient(circle at ${originX}px ${originY}px, transparent var(--theme-reveal-radius), black calc(var(--theme-reveal-radius) + 1px))`;
+      snapshot.style.maskImage = revealMask;
+      snapshot.style.WebkitMaskImage = revealMask;
+      snapshot.style.setProperty('--theme-reveal-radius', '0px');
+      snapshot.append(bodySnapshot);
+
+      modeRef.current = nextMode;
+      flushSync(() => {
+        localStorage.setItem('themeMode', nextMode);
+        setMode(nextMode);
+      });
+      document.body.append(snapshot);
+      transitionSnapshotRef.current = snapshot;
+
+      const animation = snapshot.animate(
+        [{ '--theme-reveal-radius': '0px' }, { '--theme-reveal-radius': '150vmax' }],
+        { duration: 1300, easing: 'cubic-bezier(0.2, 0.75, 0.25, 1)', fill: 'both' }
+      );
+      activeThemeAnimationRef.current = animation;
+      animation.onfinish = () => {
+        if (activeThemeAnimationRef.current !== animation) return;
+        snapshot.remove();
+        activeThemeAnimationRef.current = null;
+        transitionSnapshotRef.current = null;
+      };
     },
-  }), [mode]);
+  }), []);
 
   const theme = useMemo(() => createTheme({
     palette: {
