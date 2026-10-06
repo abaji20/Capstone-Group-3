@@ -8,7 +8,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import TuneIcon from '@mui/icons-material/Tune';
 import PdfCard from './PdfCard';
 import { fetchPdfs } from '../services/pdfService';
-import { MONTH_NAMES } from '../utils/formatPublishedDate';
 
 const CATEGORY_TABS = [
   { label: 'All', value: 'All' },
@@ -16,34 +15,120 @@ const CATEGORY_TABS = [
   { label: 'Academic Paper', value: 'academic paper' },
 ];
 
-// Same small helper Browse.jsx uses to build a filter dropdown's option list
-// from a flat (non comma-separated) text field. Kept local to this component
-// so TopbarSearch has no dependency on Browse.jsx internals.
-const buildOptionList = (documents, field) => {
-  const values = documents.map((doc) => doc[field]).filter(Boolean);
-  return ['All', ...Array.from(new Set(values)).sort()];
+// ---------------------------------------------------------------------------
+// FIXED OPTION LISTS
+// ---------------------------------------------------------------------------
+
+// Always show all 12 months, regardless of what's in the database.
+const MONTH_OPTIONS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+].map((label, i) => ({ value: i + 1, label }));
+
+// Always show days 1-31.
+const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
+
+// Default library sections. Edit this list to match the real sections of the
+// Goldenlink College library. Any extra section found in the database is
+// automatically added on top of these.
+const DEFAULT_SECTIONS = [
+  'Circulation',
+  'Filipiana',
+  'General Reference',
+  'General Collection',
+  'Fiction',
+  'Non-Fiction',
+  'Reserve',
+  'Periodicals',
+  'Journals & Magazines',
+  'Newspapers',
+  'Thesis & Dissertations',
+  'Research & Special Projects',
+  'Graduate Studies',
+  'Electronic Resources',
+  'Audio-Visual',
+  'Special Collection',
+  'Vertical Files',
+  'Textbooks',
+  'Children’s Section',
+  'Young Adult Section',
+];
+
+// Default programs/courses. Same idea: edit to match your school.
+const DEFAULT_PROGRAMS = [
+  "BS-Information Technology",
+    "BS-Business Administration",
+    "BS-Accounting Information Systems",
+    "BS-Elementary Education",
+    "BS-Psychology",
+    "BS-Mathematics",
+    "BS-Science",
+    "BS-English",
+    "BS-Computer Science",
+    "BS-Information Systems",
+    "BS-Management Accounting",
+    'BS-Entrepreneurship',
+    "BS-Hospitality Management",
+    "BS-Tourism Management",
+    "BS-Criminology",
+    "BS-Nursing",
+    "BS-Pharmacy",
+    "BS-Architecture",
+    "BS-Civil Engineering",
+    "BS-Electrical Engineering",
+    "BS-Mechanical Engineering",
+    "BS-Chemical Engineering",
+    "BS-Industrial Engineering",
+    "BS-Computer Engineering",
+    "BS-Environmental Engineering",
+    "BS-Information Technology",
+    "High School",
+    "Senior High School",
+    "Junior High School",
+    "Elementary",
+];
+
+// ---------------------------------------------------------------------------
+// HELPERS
+// ---------------------------------------------------------------------------
+
+// Defaults + whatever is actually in the database, de-duplicated
+// (case-insensitive) and sorted alphabetically.
+const buildMergedOptionList = (documents, field, defaults = []) => {
+  const map = new Map();
+  [...defaults, ...documents.map((doc) => doc[field])]
+    .filter(Boolean)
+    .forEach((value) => {
+      const clean = String(value).trim();
+      const key = clean.toLowerCase();
+      if (clean && !map.has(key)) map.set(key, clean);
+    });
+  const sorted = Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  return ['All', ...sorted];
 };
 
-// Same idea but for numeric publication fields (year / month / day), sorted
-// numerically instead of alphabetically. 0 is a valid falsy-looking value for
-// some fields so we filter on null/undefined/'' rather than truthiness.
-const buildNumericOptionList = (documents, field, order = 'asc') => {
+// Year options come from the real data only, most recent first.
+const buildYearList = (documents, field) => {
   const values = documents
     .map((doc) => doc[field])
-    .filter((v) => v !== null && v !== undefined && v !== '');
-  const unique = Array.from(new Set(values));
-  unique.sort((a, b) => (order === 'desc' ? Number(b) - Number(a) : Number(a) - Number(b)));
+    .filter((v) => v !== null && v !== undefined && v !== '')
+    .map(Number)
+    .filter((n) => !Number.isNaN(n));
+  const unique = Array.from(new Set(values)).sort((a, b) => b - a);
   return ['All', ...unique];
 };
 
-// Cap how many PdfCard tiles render at once so a broad/empty query doesn't
-// mount hundreds of cards (each with its own dialog state) at once.
+// Safe comparisons (handles "3" vs 3, and trailing spaces / casing).
+const sameNumber = (a, b) => Number(a) === Number(b);
+const sameText = (a, b) =>
+  String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
+// Cap how many PdfCard tiles render at once.
 const RESULTS_LIMIT = 24;
 
 const TopbarSearch = ({ open, onClose }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
-  // Phones: the search panel takes the whole screen instead of a floating box.
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [documents, setDocuments] = useState([]);
@@ -59,8 +144,7 @@ const TopbarSearch = ({ open, onClose }) => {
   const [selectedMonth, setSelectedMonth] = useState('All');
   const [selectedDay, setSelectedDay] = useState('All');
 
-  // Lazy-load once on first open; cached for the rest of the session so
-  // reopening the panel doesn't refetch every time.
+  // Lazy-load once on first open; cached for the rest of the session.
   useEffect(() => {
     if (open && documents.length === 0 && !loading) {
       setLoading(true);
@@ -70,18 +154,29 @@ const TopbarSearch = ({ open, onClose }) => {
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Genre: real data only (comma-separated field).
   const genres = useMemo(() => {
     const dbGenres = documents.flatMap((doc) =>
       doc.genre ? doc.genre.split(',').map((g) => g.trim()) : []
     );
     return ['All', ...new Set(dbGenres.filter(Boolean))];
   }, [documents]);
-  const sectionsList = useMemo(() => buildOptionList(documents, 'section'), [documents]);
-  const programsList = useMemo(() => buildOptionList(documents, 'program_course'), [documents]);
-  // Most recent year first; month/day in natural calendar order.
-  const yearsList = useMemo(() => buildNumericOptionList(documents, 'published_date', 'desc'), [documents]);
-  const monthsList = useMemo(() => buildNumericOptionList(documents, 'published_month', 'asc'), [documents]);
-  const daysList = useMemo(() => buildNumericOptionList(documents, 'published_day', 'asc'), [documents]);
+
+  // Section & Program: defaults + real data.
+  const sectionsList = useMemo(
+    () => buildMergedOptionList(documents, 'section', DEFAULT_SECTIONS),
+    [documents]
+  );
+  const programsList = useMemo(
+    () => buildMergedOptionList(documents, 'program_course', DEFAULT_PROGRAMS),
+    [documents]
+  );
+
+  // Year: real data only, newest first.
+  const yearsList = useMemo(
+    () => buildYearList(documents, 'published_date'),
+    [documents]
+  );
 
   const hasActiveFilter =
     category !== 'All' || selectedGenre !== 'All' || selectedSection !== 'All' ||
@@ -104,11 +199,11 @@ const TopbarSearch = ({ open, onClose }) => {
       const matchesGenre =
         selectedGenre === 'All' ||
         (doc.genre && doc.genre.split(',').map((g) => g.trim()).includes(selectedGenre));
-      const matchesSection = selectedSection === 'All' || doc.section === selectedSection;
-      const matchesProgram = selectedProgram === 'All' || doc.program_course === selectedProgram;
-      const matchesYear = selectedYear === 'All' || doc.published_date === selectedYear;
-      const matchesMonth = selectedMonth === 'All' || doc.published_month === selectedMonth;
-      const matchesDay = selectedDay === 'All' || doc.published_day === selectedDay;
+      const matchesSection = selectedSection === 'All' || sameText(doc.section, selectedSection);
+      const matchesProgram = selectedProgram === 'All' || sameText(doc.program_course, selectedProgram);
+      const matchesYear = selectedYear === 'All' || sameNumber(doc.published_date, selectedYear);
+      const matchesMonth = selectedMonth === 'All' || sameNumber(doc.published_month, selectedMonth);
+      const matchesDay = selectedDay === 'All' || sameNumber(doc.published_day, selectedDay);
 
       return matchesSearch && matchesCategory && matchesGenre && matchesSection &&
         matchesProgram && matchesYear && matchesMonth && matchesDay;
@@ -121,6 +216,11 @@ const TopbarSearch = ({ open, onClose }) => {
     bgcolor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
   };
 
+  // Keeps long dropdown lists (sections, programs, days) scrollable.
+  const selectMenuProps = {
+    SelectProps: { MenuProps: { PaperProps: { sx: { maxHeight: 320 } } } },
+  };
+
   return (
     <Dialog
       open={open}
@@ -131,8 +231,6 @@ const TopbarSearch = ({ open, onClose }) => {
       sx={{ '& .MuiDialog-container': { alignItems: 'flex-start', justifyContent: 'center' } }}
       PaperProps={{
         sx: {
-          // Was { sm: 8, md: 10 } — that pushed the panel well down the page.
-          // Now sits just under the topbar.
           mt: isMobile ? 0 : { sm: 2, md: 2.5 },
           mx: isMobile ? 0 : { sm: 2 },
           width: isMobile ? '100%' : { sm: 'calc(100% - 32px)' },
@@ -148,8 +246,6 @@ const TopbarSearch = ({ open, onClose }) => {
       <Box
         sx={{
           p: { xs: 2, sm: 2.5 }, pb: 1.5, flexShrink: 0,
-          // if many filters are open on a small screen, let the header scroll
-          // instead of pushing the results off-screen
           maxHeight: '60vh', overflowY: 'auto',
         }}
       >
@@ -203,30 +299,41 @@ const TopbarSearch = ({ open, onClose }) => {
               },
             }}
           >
-            <TextField select fullWidth size="small" label="Genre" value={selectedGenre} onChange={(e) => setSelectedGenre(e.target.value)} sx={filterSelectSx}>
+            <TextField select fullWidth size="small" label="Genre" value={selectedGenre} onChange={(e) => setSelectedGenre(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
               {genres.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
             </TextField>
-            <TextField select fullWidth size="small" label="Section" value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} sx={filterSelectSx}>
+
+            <TextField select fullWidth size="small" label="Section" value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
               {sectionsList.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
             </TextField>
-            <TextField select fullWidth size="small" label="Program" value={selectedProgram} onChange={(e) => setSelectedProgram(e.target.value)} sx={filterSelectSx}>
+
+            <TextField select fullWidth size="small" label="Program" value={selectedProgram} onChange={(e) => setSelectedProgram(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
               {programsList.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
             </TextField>
-            <TextField select fullWidth size="small" label="Year" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} sx={filterSelectSx}>
+
+            <TextField select fullWidth size="small" label="Year" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
               {yearsList.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
             </TextField>
-            <TextField select fullWidth size="small" label="Month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} sx={filterSelectSx}>
-              {monthsList.map((opt) => (
-                <MenuItem key={opt} value={opt}>{opt === 'All' ? 'All' : MONTH_NAMES[opt - 1]}</MenuItem>
+
+            {/* Month: always January - December */}
+            <TextField select fullWidth size="small" label="Month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
+              <MenuItem value="All">All</MenuItem>
+              {MONTH_OPTIONS.map((m) => (
+                <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
               ))}
             </TextField>
-            <TextField select fullWidth size="small" label="Day" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} sx={filterSelectSx}>
-              {daysList.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
+
+            {/* Day: always 1 - 31 */}
+            <TextField select fullWidth size="small" label="Day" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
+              <MenuItem value="All">All</MenuItem>
+              {DAY_OPTIONS.map((d) => (
+                <MenuItem key={d} value={d}>{d}</MenuItem>
+              ))}
             </TextField>
           </Box>
         )}
 
-        {/* Category chips (now below the filters) */}
+        {/* Category chips */}
         <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
           {CATEGORY_TABS.map((tab) => (
             <Chip
@@ -260,19 +367,10 @@ const TopbarSearch = ({ open, onClose }) => {
           </Typography>
         ) : (
           <>
-            {/* Fluid grid: 2 cards per row on phones, 3 on tablets, then as
-                many as fit. PdfCard has a fixed min/max width, so it's
-                overridden here to fill its grid cell. */}
             <Box
               sx={{
                 display: 'grid',
-                // Gap between PdfCards in this grid — tweak these numbers
-                // directly to make it tighter/looser (MUI spacing unit,
-                // 1 = 8px).
                 gap: { xs: 1, sm: 1.25, md: 1.5 },
-                // Columns are sized to the card's own width at every
-                // breakpoint so there's no leftover space inside each
-                // column; the browser fits as many columns as will hold a card.
                 gridTemplateColumns: {
                   xs: 'repeat(auto-fill, minmax(130px, 130px))',
                   sm: 'repeat(auto-fill, minmax(145px, 145px))',

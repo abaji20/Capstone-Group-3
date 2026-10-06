@@ -17,7 +17,8 @@ import {
   School as SchoolIcon,
   AssignmentInd as AssignmentIndIcon,
   ChatBubbleOutline as ChatIcon,
-  Lock as LockIcon
+  Lock as LockIcon,
+  Cancel as CancelIcon
 } from '@mui/icons-material';
 import { navLinks } from '../navConfig';
 import { supabase } from '../supabaseClient';
@@ -129,15 +130,20 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           setUserRoleText(profile.role.toUpperCase());
         }
 
+        // 'id' is now selected so a pending request can be cancelled
         const { data: lastReq } = await supabase
           .from('role_requests')
-          .select('status, remarks, requested_role')
+          .select('id, status, remarks, requested_role')
           .eq('requested_by', user.id)
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
         
-        if (lastReq) setLatestRequest(lastReq);
+        if (lastReq) {
+          setLatestRequest(lastReq);
+        } else {
+          setLatestRequest(null);
+        }
       }
     }
   };
@@ -241,6 +247,34 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     setPasswordError('');
     setIsProfileModalOpen(false);
     setRequestData({ role: '', reason: '' }); 
+    setLoading(false);
+  };
+
+  // Cancel a pending role request (same flow as ClientTopbar)
+  const handleCancelRequest = async () => {
+    if (!latestRequest) return;
+    setLoading(true);
+
+    const { error } = await supabase
+      .from('role_requests')
+      .update({ status: 'cancelled' })
+      .eq('id', latestRequest.id);
+
+    if (error) {
+      setNotify({ open: true, message: 'Failed to cancel role request!', severity: 'error' });
+    } else {
+      await supabase.from('audit_logs').insert([{
+        user_id: userData.id,
+        action_type: 'Cancel Role Request',
+        description: `Cancelled request for role: ${latestRequest.requested_role}`,
+        created_at: new Date().toISOString()
+      }]);
+
+      setNotify({ open: true, message: 'Role request cancelled successfully!', severity: 'success' });
+      setLatestRequest(null);
+      setRequestData({ role: '', reason: '' });
+      fetchProfile();
+    }
     setLoading(false);
   };
 
@@ -666,36 +700,65 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
           )}
 
           {latestRequest?.status === 'pending' && (
-            <Alert severity="info" variant="outlined" sx={{ borderRadius: '8px' }}>
+            <Alert
+              severity="info"
+              variant="outlined"
+              sx={{
+                borderRadius: '8px',
+                alignItems: 'center',
+                '& .MuiAlert-message': { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }
+              }}
+            >
               <Typography variant="body2">Request for <b>{latestRequest.requested_role}</b> is pending review.</Typography>
+              <Button
+                size="small"
+                variant="contained"
+                color="error"
+                startIcon={<CancelIcon />}
+                onClick={handleCancelRequest}
+                disabled={loading}
+                sx={{
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  textTransform: 'none'
+                }}
+              >
+                Cancel Request
+              </Button>
             </Alert>
           )}
 
-          <Divider sx={{ my: 1 }}><Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', px: 1 }}>REQUEST ROLE</Typography></Divider>
-          
-          <Stack spacing={2}>
-            <FormControl fullWidth variant="outlined" size="small">
-              <InputLabel sx={{ fontWeight: 600 }}>Request Access Level</InputLabel>
-              <Select
-                value={requestData.role}
-                label="Request Access Level"
-                onChange={(e) => setRequestData({...requestData, role: e.target.value})}
-                startAdornment={<AssignmentIndIcon sx={{ mr: 1, opacity: 0.7, fontSize: 20 }} />}
-                sx={{ borderRadius: '8px', fontWeight: 700 }}
-              >
-                <MenuItem value="">None</MenuItem>
-                <MenuItem value="superadmin">Superadmin</MenuItem>
-                <MenuItem value="client">Client</MenuItem>
-              </Select>
-            </FormControl>
+          {/* Role request form is hidden while a request is still pending (same as ClientTopbar) */}
+          {!latestRequest || latestRequest?.status !== 'pending' ? (
+            <>
+              <Divider sx={{ my: 1 }}><Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', px: 1 }}>REQUEST ROLE</Typography></Divider>
+              
+              <Stack spacing={2}>
+                <FormControl fullWidth variant="outlined" size="small">
+                  <InputLabel sx={{ fontWeight: 600 }}>Request Access Level</InputLabel>
+                  <Select
+                    value={requestData.role}
+                    label="Request Access Level"
+                    onChange={(e) => setRequestData({...requestData, role: e.target.value})}
+                    startAdornment={<AssignmentIndIcon sx={{ mr: 1, opacity: 0.7, fontSize: 20 }} />}
+                    sx={{ borderRadius: '8px', fontWeight: 700 }}
+                  >
+                    <MenuItem value="">None</MenuItem>
+                    <MenuItem value="superadmin">Superadmin</MenuItem>
+                    <MenuItem value="client">Client</MenuItem>
+                  </Select>
+                </FormControl>
 
-            {requestData.role && (
-              <TextField
-                fullWidth multiline rows={2} label="Reason" placeholder="Why do you need superadmin access?" value={requestData.reason} onChange={(e) => setRequestData({...requestData, reason: e.target.value})} InputProps={{ startAdornment: <ChatIcon sx={{ mr: 1, mt: 1, opacity: 0.7, alignSelf: 'flex-start' }} /> }}
-                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-              />
-            )}
-          </Stack>
+                {requestData.role && (
+                  <TextField
+                    fullWidth multiline rows={2} label="Reason" placeholder="Why do you need superadmin access?" value={requestData.reason} onChange={(e) => setRequestData({...requestData, reason: e.target.value})} InputProps={{ startAdornment: <ChatIcon sx={{ mr: 1, mt: 1, opacity: 0.7, alignSelf: 'flex-start' }} /> }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                  />
+                )}
+              </Stack>
+            </>
+          ) : null}
         </Stack>
       </ActionModal>
     </Box>

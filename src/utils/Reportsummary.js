@@ -1,8 +1,9 @@
-// src/utils/reportSummary.js
+// src/utils/Reportsummary.js
 // Numerical summary section for the Admin + SuperAdmin PDF reports.
-// Replaces the 9 colored KPI rectangles with: a headline number strip +
-// two bar-chart panels (accounts by role, library activity).
-// Pure jsPDF drawing, no extra libraries. Same 9 metrics as before.
+// Headline number strip + two bar-chart panels (accounts by role,
+// library statistics). Pure jsPDF drawing, no extra libraries.
+// Pass `weekly: true` in the stats object to relabel everything for the
+// weekly report ("New Accounts", "PDFs Added", ...).
 
 const NAVY = [33, 60, 81];
 const BLUE = [37, 99, 235];
@@ -87,13 +88,15 @@ const drawBarRows = (doc, x, y, w, rows, { rowH = 11, labelW = 40, valueW = 30, 
  * @param doc    jsPDF instance (landscape)
  * @param startY y where the section may start (return value of drawReportHeader)
  * @param s      { registeredUsers, totalAccounts, users, admins, superAdmins,
- *                 totalPdfs, pendingRequests, totalDownloads, userRequests }
+ *                 totalPdfs, pendingRequests, totalDownloads, userRequests,
+ *                 weekly? }
  * @returns      y where the next section can start
  */
 export const drawReportSummary = (doc, startY, s) => {
   const pageW = doc.internal.pageSize.getWidth();
   const M = 14;
   const W = pageW - M * 2;
+  const weekly = Boolean(s.weekly);
   let y = startY;
 
   // 1) Headline numbers
@@ -102,10 +105,10 @@ export const drawReportSummary = (doc, startY, s) => {
   const cw = (W - gap * (cols - 1)) / cols;
   const ch = 20;
   [
-    ['Registered User Accounts', s.registeredUsers, COLORS.blue],
-    ['Total Accounts', s.totalAccounts, COLORS.purple],
-    ['Total PDFs', s.totalPdfs, COLORS.green],
-    ['Total Downloads', s.totalDownloads, COLORS.amber],
+    [weekly ? 'New User Accounts' : 'Registered User Accounts', s.registeredUsers, COLORS.blue],
+    [weekly ? 'New Accounts' : 'Total Accounts', s.totalAccounts, COLORS.purple],
+    [weekly ? 'PDFs Added' : 'Total PDFs', s.totalPdfs, COLORS.green],
+    [weekly ? 'Downloads This Week' : 'Total Downloads', s.totalDownloads, COLORS.amber],
   ].forEach(([label, value, color], i) => {
     drawHeadlineStat(doc, M + i * (cw + gap), y, cw, ch, label, value, color);
   });
@@ -117,27 +120,27 @@ export const drawReportSummary = (doc, startY, s) => {
   const rightW = W - leftW - 6;
 
   // Accounts by role (bar length = share of total accounts)
-  drawPanel(doc, M, y, leftW, panelH, 'Accounts by Role');
+  drawPanel(doc, M, y, leftW, panelH, weekly ? 'New Accounts by Role' : 'Accounts by Role');
   const total = s.totalAccounts || 0;
   const pct = (v) => (total ? ` (${Math.round((v / total) * 100)}%)` : '');
   drawBarRows(
     doc, M + 5, y + 17, leftW - 10,
     [
-      { label: 'Total Users', value: s.users, color: COLORS.green, valueText: `${fmt(s.users)}${pct(s.users)}` },
-      { label: 'Total Admins', value: s.admins, color: COLORS.indigo, valueText: `${fmt(s.admins)}${pct(s.admins)}` },
-      { label: 'Total Super Admins', value: s.superAdmins, color: COLORS.purple, valueText: `${fmt(s.superAdmins)}${pct(s.superAdmins)}` },
+      { label: weekly ? 'New Users' : 'Total Users', value: s.users, color: COLORS.green, valueText: `${fmt(s.users)}${pct(s.users)}` },
+      { label: weekly ? 'New Admins' : 'Total Admins', value: s.admins, color: COLORS.indigo, valueText: `${fmt(s.admins)}${pct(s.admins)}` },
+      { label: weekly ? 'New Super Admins' : 'Total Super Admins', value: s.superAdmins, color: COLORS.purple, valueText: `${fmt(s.superAdmins)}${pct(s.superAdmins)}` },
     ],
     { rowH: 12, labelW: 36, valueW: 28, max: total }
   );
 
-  // Library activity
+  // Library statistics
   const rx = M + leftW + 6;
-  drawPanel(doc, rx, y, rightW, panelH, 'Library Activity');
+  drawPanel(doc, rx, y, rightW, panelH, 'Library Statistics');
   drawBarRows(
     doc, rx + 5, y + 17, rightW - 10,
     [
-      { label: 'Total PDFs', value: s.totalPdfs, color: COLORS.blue },
-      { label: 'Total Downloads', value: s.totalDownloads, color: COLORS.amber },
+      { label: weekly ? 'PDFs Added' : 'Total PDFs', value: s.totalPdfs, color: COLORS.blue },
+      { label: weekly ? 'Downloads' : 'Total Downloads', value: s.totalDownloads, color: COLORS.amber },
       { label: 'Pending Requests', value: s.pendingRequests, color: COLORS.red },
       { label: 'User Requests', value: s.userRequests, color: COLORS.teal },
     ],

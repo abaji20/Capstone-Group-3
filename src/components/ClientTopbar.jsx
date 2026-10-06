@@ -71,12 +71,18 @@ const ClientTopbar = () => {
   const colorMode = useContext(ColorModeContext);
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  // Hamburger drawer = page navigation only: Library, Request Upload,
-  // Dashboard, Downloads (all from NavConfig, in that order).
+  // Hamburger drawer = page navigation only: Dashboard, Library, Request
+  // Upload, Downloads. Dashboard is listed first in the menu, but this only
+  // changes the ORDER of the menu items — the default / landing page is
+  // still the Library (routing is untouched).
   // Profile Settings / Change Password / Theme now live in the user dropdown.
-  const drawerNavItems = [
+  const baseNavItems = [
     ...navLinks.client.filter((item) => item.group === 'main'),
     ...navLinks.client.filter((item) => item.group === 'profile'),
+  ];
+  const drawerNavItems = [
+    ...baseNavItems.filter((item) => item.name === 'Dashboard'),
+    ...baseNavItems.filter((item) => item.name !== 'Dashboard'),
   ];
 
   const fetchUser = async () => {
@@ -269,7 +275,7 @@ const ClientTopbar = () => {
       </Box>
 
       <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-        {/* One "Main" section: Library, Request Upload, Dashboard, Downloads */}
+        {/* One "Main" section: Dashboard, Library, Request Upload, Downloads */}
         <List sx={{ px: 1.5 }}>
           {drawerNavItems.map(renderNavListItem)}
         </List>
@@ -474,7 +480,7 @@ const ClientTopbar = () => {
         </Stack>
       </ActionModal>
 
-      {/* Hamburger drawer: Library, Request Upload, Dashboard, Downloads */}
+      {/* Hamburger drawer: Dashboard, Library, Request Upload, Downloads */}
       <Drawer variant="temporary" open={mobileOpen} onClose={handleDrawerToggle} sx={{ zIndex: theme.zIndex.drawer + 2, '& .MuiDrawer-paper': { width: expandedWidth, border: 'none', bgcolor: '#213C51' } }}>
         {drawerContent}
       </Drawer>

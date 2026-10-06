@@ -44,11 +44,12 @@ const AdminManageAccount = () => {
     "BS-Information Technology",
     "BS-Business Administration",
     "BS-Accounting Information Systems",
-    "BS-English",
-    "BEED-Elementary Education",
+    "BS-Elementary Education",
+    "BS-Psychology",
     "BS-Mathematics",
     "BS-Science",
-    "BS-Psychology"
+    "BS-English",
+    "N/A"
   ];
   
   // Year Levels List
@@ -119,22 +120,51 @@ const AdminManageAccount = () => {
     checkUser();
   }, [navigate]);
 
-  // --- ACTIVE/DEACTIVE STATUS HELPER (adapted from ManageAccount.jsx's processInactivityAndStatus) ---
-  // Computes a computed_is_active flag per user so the status dropdown has a
-  // consistent value to control, mirroring the Super Admin Manage Account page.
+  // --- ACTIVE/DEACTIVE STATUS HELPER ---
+  // The UI trusts the stored is_active value, so an admin can still
+  // manually re-activate an account. Inactivity itself is handled by
+  // deactivateInactiveAccounts() below.
   const processInactivityAndStatus = (fetchedProfiles) => {
+    return (fetchedProfiles || []).map(user => ({
+      ...user,
+      computed_is_active: user.is_active ?? true
+    }));
+  };
+
+  // --- INACTIVITY CHECK (runs in the app, no database job needed) ---
+  // Any account (except superadmin) with no login for over 1 year is set to
+  // Deactive, and its Department / Year Level become 'N/A'.
+  // Uses last_active_at, or created_at if the account has never logged in.
+  const deactivateInactiveAccounts = async (profiles) => {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-    return (fetchedProfiles || []).map(user => {
-      const lastActivityDate = new Date(user.created_at);
-      const isInactiveOverAYear = lastActivityDate < oneYearAgo;
+    const inactive = (profiles || []).filter((u) =>
+      u.is_active !== false &&
+      u.role?.toLowerCase() !== 'superadmin' &&
+      new Date(u.last_active_at || u.created_at) < oneYearAgo
+    );
+    if (inactive.length === 0) return profiles;
 
-      return {
-        ...user,
-        computed_is_active: isInactiveOverAYear ? false : (user.is_active ?? true)
-      };
-    });
+    const ids = inactive.map((u) => u.id);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_active: false, department: 'N/A', year_level: 'N/A' })
+      .in('id', ids);
+
+    if (error) {
+      console.error('Inactivity update failed:', error);
+      return profiles;
+    }
+
+    await createAuditLog(
+      'Status Change',
+      `Auto-deactivated ${ids.length} account(s) inactive for over 1 year: ${inactive.map((u) => u.full_name).join(', ')}`
+    );
+
+    return profiles.map((u) =>
+      ids.includes(u.id) ? { ...u, is_active: false, department: 'N/A', year_level: 'N/A' } : u
+    );
   };
 
   const fetchClients = async () => {
@@ -146,7 +176,10 @@ const AdminManageAccount = () => {
       .order('created_at', { ascending: false });
     
     if (error) console.error("Error fetching users:", error);
-    else setUsers(processInactivityAndStatus(data));
+    else {
+      const checked = await deactivateInactiveAccounts(data);
+      setUsers(processInactivityAndStatus(checked));
+    }
     setLoading(false);
   };
 
@@ -164,13 +197,15 @@ const AdminManageAccount = () => {
     }
   };
 
-  // --- ACTIVE/DEACTIVE STATUS CHANGE HANDLER (adapted from ManageAccount.jsx's handleStatusChange) ---
+  // --- ACTIVE/DEACTIVE STATUS CHANGE HANDLER ---
+  // Re-activating also resets last_active_at so the nightly inactivity job
+  // does not deactivate the account again right away.
   const handleStatusChange = async (targetUser, newActiveState) => {
     setLoading(true);
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ is_active: newActiveState })
+        .update(newActiveState ? { is_active: true, last_active_at: new Date().toISOString() } : { is_active: false })
         .eq('id', targetUser.id);
 
       if (error) throw error;

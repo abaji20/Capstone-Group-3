@@ -5,7 +5,8 @@ import {
   DialogTitle, DialogContent, DialogContentText, DialogActions,
   Select, Chip, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, List, ListItem, 
-  ListItemAvatar, ListItemText, CardMedia, Divider, IconButton
+  ListItemAvatar, ListItemText, CardMedia, Divider, IconButton,
+  TextField
 } from '@mui/material';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { supabase } from '../../supabaseClient';
@@ -32,7 +33,8 @@ import BookIcon from '@mui/icons-material/Book';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import CloseIcon from '@mui/icons-material/Close';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 // Icons for the metadata fields (mirrors pdfCard.jsx)
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import SchoolIcon from '@mui/icons-material/School';
@@ -40,8 +42,6 @@ import BusinessIcon from '@mui/icons-material/Business';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import LayersIcon from '@mui/icons-material/Layers';
 import LanguageIcon from '@mui/icons-material/Language';
-// NEW: icons for Genre and Type (Category), matching pdfCard.jsx's
-// InfoRow treatment so every field in the "See More" dialog has an icon.
 import CategoryIcon from '@mui/icons-material/Category';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import DateRangeIcon from '@mui/icons-material/DateRange';
@@ -58,11 +58,15 @@ const getStorageImageUrl = (imageUrl) => {
 // duplicated in SuperAdminDashboard.jsx so both dashboards' PDF reports
 // share one palette, one type scale and one set of table dimensions
 // instead of each drifting into its own look. The summary section itself
-// (headline numbers + bar charts) lives in utils/reportSummary.js.
+// (headline numbers + bar charts) lives in utils/Reportsummary.js.
 // ---------------------------------------------------------------------
 const REPORT_NAVY = [33, 60, 81];
 const REPORT_BLUE = [37, 99, 235];
 const REPORT_PAGE = { width: 297, height: 210, margin: 14 };
+
+const MATERIAL_COLUMNS = 'id, title, author, category, genre, published_date, published_month, published_day, section, program_course, publisher, isbn, edition, language, created_at, is_archived';
+
+const formatReportDate = (value) => value ? new Date(value).toLocaleString() : 'N/A';
 
 // Page header banner + accent stripe. Returns the Y position
 // content can safely start at.
@@ -109,6 +113,85 @@ const drawReportFooters = (doc, generatedAt) => {
   }
 };
 
+// Academic papers and books already show their category in the section
+// pill above the table, so the "Type" column is redundant for them.
+const hidesTypeColumn = (category) => {
+  const c = String(category || '').toLowerCase();
+  return c.includes('book') || c.includes('academic');
+};
+
+// Draws one titled table per category. Returns the next free Y position.
+const drawMaterialTables = (doc, materials, startY) => {
+  let nextY = startY;
+  const categories = [...new Set((materials || []).map(m => m.category || 'Uncategorized'))];
+
+  categories.forEach((category) => {
+    if (nextY > 155) { doc.addPage(); nextY = 20; }
+    const rows = materials.filter(m => (m.category || 'Uncategorized') === category);
+    const hideType = hidesTypeColumn(category);
+
+    const head = hideType
+      ? ['Title', 'Author', 'Genre', 'Published', 'Publisher', 'Edition', 'Language', 'ISBN', 'Date Added', 'Status']
+      : ['Title', 'Author', 'Type', 'Genre', 'Published', 'Publisher', 'Edition', 'Language', 'ISBN', 'Date Added', 'Status'];
+
+    const body = rows.map(m => {
+      const row = [
+        m.title || 'Untitled',
+        m.author || 'N/A',
+        m.category || 'N/A',
+        m.genre || 'General',
+        formatPublishedDate(m) || 'N/A',
+        m.publisher || 'N/A',
+        m.edition || 'N/A',
+        m.language || 'N/A',
+        m.isbn || 'N/A',
+        formatReportDate(m.created_at),
+        m.is_archived ? 'Archived' : 'Active'
+      ];
+      if (hideType) row.splice(2, 1); // drop Type
+      return row;
+    });
+
+    // Widths add up to the 269mm usable landscape width in both cases.
+    const widths = hideType
+      ? [52, 34, 24, 24, 30, 16, 18, 28, 28, 15]
+      : [44, 30, 20, 22, 22, 28, 15, 17, 28, 27, 16];
+    const columnStyles = {};
+    widths.forEach((w, i) => { columnStyles[i] = { cellWidth: w }; });
+
+    drawReportSectionLabel(doc, category, REPORT_PAGE.margin, nextY, REPORT_BLUE);
+    autoTable(doc, {
+      startY: nextY + 4,
+      head: [head],
+      body,
+      styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+      columnStyles,
+      headStyles: { fillColor: REPORT_BLUE, textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [244, 247, 250] },
+      theme: 'grid',
+      margin: { top: 20, left: REPORT_PAGE.margin, right: REPORT_PAGE.margin, bottom: 16 }
+    });
+    nextY = doc.lastAutoTable.finalY + 12;
+  });
+
+  return nextY;
+};
+
+// ---- Week helpers (weeks run Monday to Sunday) ----
+const startOfWeek = (d) => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+};
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const pad = (n) => String(n).padStart(2, '0');
+const toInputDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const formatWeekRange = (start) => {
+  const end = addDays(start, 6);
+  return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+};
+
 // ---------------------------------------------------------------------
 // Excel export helpers. Auto-sizes columns based on header + content
 // length so nothing gets cut off, overlaps, or looks crowded, and applies
@@ -134,7 +217,7 @@ const autoSizeColumns = (ws, rows, headers) => {
   ws['!views'] = [{ state: 'frozen', ySplit: 1 }];
 };
 
-// NEW: one label/value line for the Book Details dialog, copied from
+// One label/value line for the Book Details dialog, copied from
 // pdfCard.jsx's InfoRow so both "document info" surfaces look and behave
 // the same way (icon + bold label + value, wraps instead of truncating).
 const InfoRow = ({ icon, label, value }) => (
@@ -168,9 +251,8 @@ const AdminDashboard = () => {
   });
   const [recentAccounts, setRecentAccounts] = useState([]);
   const [recentBooks, setRecentBooks] = useState([]);
-  // Replaces the old "Recent Activities" (audit log) panel — this now holds
-  // ONLY this admin's own pending delete requests. No SuperAdmin logs/activity
-  // are fetched anywhere in this component.
+  // Holds ONLY this admin's own pending delete requests. No SuperAdmin
+  // logs/activity are fetched anywhere in this component.
   const [recentPendingRequests, setRecentPendingRequests] = useState([]);
   const [topPdfs, setTopPdfs] = useState([]);
   const [downloadYear, setDownloadYear] = useState(currentYear);
@@ -183,12 +265,24 @@ const AdminDashboard = () => {
   const [exportType, setExportType] = useState(null);
   const [fileSizeEst, setFileSizeEst] = useState('~120 KB');
 
+  // Weekly report state
+  const [weeklyOpen, setWeeklyOpen] = useState(false);
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+
   // Book Detail Modal State ("See More")
   const [selectedBook, setSelectedBook] = useState(null);
   const [bookDialogOpen, setBookDialogOpen] = useState(false);
 
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
+
+  // Week navigation limits: nothing after the current week, nothing before
+  // the week containing Jan 1 of firstDownloadYear.
+  const currentWeekStart = startOfWeek(new Date());
+  const minWeekStart = startOfWeek(new Date(firstDownloadYear, 0, 1));
+  const canGoNext = addDays(weekStart, 7) <= currentWeekStart;
+  const canGoPrev = addDays(weekStart, -7) >= minWeekStart;
+  const isCurrentWeek = weekStart.getTime() === currentWeekStart.getTime();
 
   // Same status→color mapping used on the Admin "Pending Actions" page, so
   // the chips read consistently across both screens.
@@ -219,10 +313,6 @@ const AdminDashboard = () => {
       if (accountsData) setRecentAccounts(accountsData);
 
       // 2. Fetch Recent Books
-      // Explicit column list also includes the digital-library metadata
-      // fields (section, program_course, publisher, isbn, edition,
-      // language, published_month, published_day) so the "See More" dialog
-      // below can display them.
       const { data: booksData } = await supabase
         .from('pdfs')
         .select('id, created_at, title, author, genre, published_date, description, image_url, file_url, category, is_archived, section, program_course, publisher, isbn, edition, language, published_month, published_day')
@@ -246,8 +336,8 @@ const AdminDashboard = () => {
       const { count: clientReqs } = await supabase.from('upload_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
       const { count: totalDownloads } = await supabase.from('downloads').select('*', { count: 'exact', head: true });
 
-      // "Pending Request" metric — replaces "Delete Request". Counts ONLY
-      // this admin's own pending delete requests (requested_by = this admin).
+      // "Pending Request" metric — counts ONLY this admin's own pending
+      // delete requests (requested_by = this admin).
       let pendingReqCount = 0;
       if (user) {
         const { count: pendingReqs } = await supabase
@@ -324,8 +414,7 @@ const AdminDashboard = () => {
       }
 
       // 5. Fetch this admin's recent Pending Requests (delete_requests they
-      // submitted). This is the ONLY "activity" data this dashboard reads —
-      // no audit_logs, no SuperAdmin data, at all.
+      // submitted). No audit_logs, no SuperAdmin data, at all.
       if (user) {
         const { data: pendingReqData } = await supabase
           .from('delete_requests')
@@ -363,14 +452,32 @@ const AdminDashboard = () => {
     else if (exportType === 'pdf') executePdfExport();
   };
 
-  const formatReportDate = (value) => value ? new Date(value).toLocaleString() : 'N/A';
+  // Weekly report handlers
+  const handleOpenWeekly = () => {
+    handleMenuClose();
+    setWeekStart(startOfWeek(new Date()));
+    setWeeklyOpen(true);
+  };
+
+  const shiftWeek = (dir) => {
+    const next = addDays(weekStart, dir * 7);
+    if (next > currentWeekStart || next < minWeekStart) return; // no future weeks
+    setWeekStart(next);
+  };
+
+  const handleJumpDate = (e) => {
+    if (!e.target.value) return;
+    const picked = new Date(`${e.target.value}T00:00:00`);
+    if (picked > new Date() || picked < new Date(firstDownloadYear, 0, 1)) return;
+    setWeekStart(startOfWeek(picked));
+  };
 
   const executeExcelExport = async () => {
     const now = new Date();
     const dateString = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     const [{ data: accounts }, { data: materials }, { data: requests }, { data: downloads }] = await Promise.all([
       supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_archived').eq('role', 'client').order('created_at', { ascending: false }),
-      supabase.from('pdfs').select('id, title, author, category, genre, published_date, published_month, published_day, section, program_course, publisher, isbn, edition, language, created_at, is_archived').order('created_at', { ascending: false }),
+      supabase.from('pdfs').select(MATERIAL_COLUMNS).order('created_at', { ascending: false }),
       supabase.from('upload_requests').select('id, status, created_at, user_id').order('created_at', { ascending: false }),
       supabase.from('downloads').select('id, user_id, pdf_id, downloaded_at').order('downloaded_at', { ascending: false })
     ]);
@@ -453,7 +560,7 @@ const AdminDashboard = () => {
     const now = new Date();
     const generatedDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
-      supabase.from('pdfs').select('id, title, author, category, genre, published_date, published_month, published_day, section, program_course, publisher, isbn, edition, language, created_at, is_archived').order('category').order('created_at', { ascending: false }),
+      supabase.from('pdfs').select(MATERIAL_COLUMNS).order('category').order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, role'),
       supabase.from('upload_requests').select('id').eq('status', 'pending'),
       supabase.from('downloads').select('id')
@@ -465,16 +572,12 @@ const AdminDashboard = () => {
       if (account.role === 'superadmin') totals.superAdmins += 1;
       return totals;
     }, { totalAccounts: 0, users: 0, admins: 0, superAdmins: 0 });
-    // Landscape, not portrait: the materials table below now carries the
-    // full metadata set (type, published date, publisher, edition,
-    // language...) and needs the extra width to stay readable.
+    // Landscape, not portrait: the materials table carries the full
+    // metadata set and needs the extra width to stay readable.
     const doc = new jsPDF({ orientation: 'landscape' });
     const generatedAt = now.toLocaleString();
     let nextY = drawReportHeader(doc, 'ADMIN DASHBOARD REPORT', generatedAt);
 
-    // Summary is now NUMERICAL: headline numbers + bar charts (accounts by
-    // role, library activity) instead of nine colored KPI rectangles. Same
-    // nine metrics as before. Shared with the SuperAdmin report.
     nextY = drawReportSummary(doc, nextY, {
       registeredUsers: accountTotals.users,
       totalAccounts: accountTotals.totalAccounts,
@@ -487,44 +590,92 @@ const AdminDashboard = () => {
       userRequests: requests?.length || 0,
     });
 
-    const categories = [...new Set((materials || []).map(material => material.category || 'Uncategorized'))];
-    categories.forEach((category, catIdx) => {
-      if (nextY > 155) { doc.addPage(); nextY = 20; }
-      const categoryRows = (materials || []).filter(material => (material.category || 'Uncategorized') === category);
-      const sectionColor = REPORT_BLUE;
-      drawReportSectionLabel(doc, category, REPORT_PAGE.margin, nextY, sectionColor);
+    nextY = drawMaterialTables(doc, materials || [], nextY);
+
+    drawReportFooters(doc, generatedAt);
+    doc.save(`Admin_Dashboard_Report_${generatedDate}.pdf`);
+  };
+
+  const executeWeeklyPdfExport = async () => {
+    setWeeklyOpen(false);
+    const now = new Date();
+    const startISO = weekStart.toISOString();
+    const endISO = addDays(weekStart, 7).toISOString();
+    const rangeLabel = formatWeekRange(weekStart);
+
+    // Every query is scoped to the selected Monday-Sunday window.
+    const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
+      supabase.from('pdfs').select(MATERIAL_COLUMNS).gte('created_at', startISO).lt('created_at', endISO).order('category').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at').gte('created_at', startISO).lt('created_at', endISO).order('created_at', { ascending: false }),
+      supabase.from('upload_requests').select('id').eq('status', 'pending').gte('created_at', startISO).lt('created_at', endISO),
+      supabase.from('downloads').select('id').gte('downloaded_at', startISO).lt('downloaded_at', endISO)
+    ]);
+
+    const totals = (accounts || []).reduce((t, a) => {
+      t.totalAccounts += 1;
+      if (a.role === 'client') t.users += 1;
+      if (a.role === 'admin') t.admins += 1;
+      if (a.role === 'superadmin') t.superAdmins += 1;
+      return t;
+    }, { totalAccounts: 0, users: 0, admins: 0, superAdmins: 0 });
+
+    // Admins only see User (client) accounts in their dashboard, so the
+    // detail table lists clients only; the summary counts still cover all roles.
+    const newClients = (accounts || []).filter(a => a.role === 'client');
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const generatedAt = now.toLocaleString();
+    let nextY = drawReportHeader(doc, `WEEKLY ADMIN REPORT  |  ${rangeLabel}`, generatedAt);
+
+    nextY = drawReportSummary(doc, nextY, {
+      registeredUsers: totals.users,
+      totalAccounts: totals.totalAccounts,
+      users: totals.users,
+      admins: totals.admins,
+      superAdmins: totals.superAdmins,
+      totalPdfs: materials?.length || 0,
+      pendingRequests: requests?.length || 0,
+      totalDownloads: downloads?.length || 0,
+      userRequests: requests?.length || 0,
+    });
+
+    // New user accounts this week
+    if (nextY > 155) { doc.addPage(); nextY = 20; }
+    drawReportSectionLabel(doc, 'New User Accounts This Week', REPORT_PAGE.margin, nextY, REPORT_NAVY);
+    if (newClients.length > 0) {
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Title', 'Author', 'Type', 'Genre', 'Published', 'Publisher', 'Edition', 'Language', 'ISBN', 'Date Added', 'Status']],
-        body: categoryRows.map(material => [
-          material.title || 'Untitled',
-          material.author || 'N/A',
-          material.category || 'N/A',
-          material.genre || 'General',
-          formatPublishedDate(material) || 'N/A',
-          material.publisher || 'N/A',
-          material.edition || 'N/A',
-          material.language || 'N/A',
-          material.isbn || 'N/A',
-          formatReportDate(material.created_at),
-          material.is_archived ? 'Archived' : 'Active'
+        head: [['Name', 'Email', 'ID Number', 'Department', 'Year Level', 'Date Joined']],
+        body: newClients.map(a => [
+          a.full_name || 'N/A', a.email || 'N/A',
+          a.id_number || 'N/A', a.department || 'N/A', a.year_level || 'N/A',
+          formatReportDate(a.created_at)
         ]),
         styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
-        columnStyles: {
-          0: { cellWidth: 42 }, 1: { cellWidth: 28 }, 2: { cellWidth: 18 }, 3: { cellWidth: 20 },
-          4: { cellWidth: 20 }, 5: { cellWidth: 26 }, 6: { cellWidth: 14 }, 7: { cellWidth: 16 },
-          8: { cellWidth: 27 }, 9: { cellWidth: 26 }, 10: { cellWidth: 17 }
-        },
-        headStyles: { fillColor: sectionColor, textColor: [255, 255, 255] },
+        headStyles: { fillColor: REPORT_NAVY, textColor: [255, 255, 255] },
         alternateRowStyles: { fillColor: [244, 247, 250] },
         theme: 'grid',
         margin: { top: 20, left: REPORT_PAGE.margin, right: REPORT_PAGE.margin, bottom: 16 }
       });
       nextY = doc.lastAutoTable.finalY + 12;
-    });
+    } else {
+      doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+      doc.text('No new user accounts registered this week.', REPORT_PAGE.margin, nextY + 9);
+      nextY += 20;
+    }
+
+    // Materials added this week (same tables as the full report)
+    if ((materials || []).length > 0) {
+      nextY = drawMaterialTables(doc, materials, nextY);
+    } else {
+      if (nextY > 155) { doc.addPage(); nextY = 20; }
+      drawReportSectionLabel(doc, 'Materials Added This Week', REPORT_PAGE.margin, nextY, REPORT_BLUE);
+      doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+      doc.text('No materials were added this week.', REPORT_PAGE.margin, nextY + 9);
+    }
 
     drawReportFooters(doc, generatedAt);
-    doc.save(`Admin_Dashboard_Report_${generatedDate}.pdf`);
+    doc.save(`Admin_Weekly_Report_${toInputDate(weekStart)}_to_${toInputDate(addDays(weekStart, 6))}.pdf`);
   };
 
   // Book detail dialog handlers
@@ -555,7 +706,7 @@ const AdminDashboard = () => {
     { label: 'Super Admin', value: stats.superAdmin, color: '#d8b4fe', bg: 'linear-gradient(135deg, #e9d5ff 0%, #f3e8ff 100%)', darkBg: 'linear-gradient(135deg, #4c1d95 0%, #6b21a8 100%)', icon: <SecurityIcon sx={{ color: '#9333ea', fontSize: 28, opacity: 1 }} /> },
     { label: 'Admins', value: stats.totalAdmins, color: '#818cf8', bg: 'linear-gradient(135deg, #e0e7ff 0%, #eef2ff 100%)', darkBg: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', icon: <AdminPanelSettingsIcon sx={{ color: '#4f46e5', fontSize: 28, opacity: 1 }} /> },
     { label: 'Downloads', value: stats.downloads, color: '#fbbf24', bg: 'linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%)', darkBg: 'linear-gradient(135deg, #78350f 0%, #92400e 100%)', icon: <FileDownloadIcon sx={{ color: '#d97706', fontSize: 28, opacity: 1 }} /> },
-    // Replaces the old "Delete Request" card — now shows THIS admin's own pending requests.
+    // Shows THIS admin's own pending requests.
     { label: 'Pending Request', value: stats.pendingRequest, color: '#f87171', bg: 'linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%)', darkBg: 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%)', icon: <PendingActionsIcon sx={{ color: '#dc2626', fontSize: 28, opacity: 1 }} /> },
     { label: 'Users Request', value: stats.usersRequest, color: '#2dd4bf', bg: 'linear-gradient(135deg, #ccfbf1 0%, #f0fdfa 100%)', darkBg: 'linear-gradient(135deg, #134e4a 0%, #115e59 100%)', icon: <UploadFileIcon sx={{ color: '#0f9f91', fontSize: 28, opacity: 1 }} /> },
   ];
@@ -594,6 +745,7 @@ const AdminDashboard = () => {
           </Button>
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
             <MenuItem onClick={() => handleSelectExportType('pdf')}>Generate PDF Report</MenuItem>
+            <MenuItem onClick={handleOpenWeekly}>Generate Weekly PDF Report</MenuItem>
             <MenuItem onClick={() => handleSelectExportType('excel')}>Generate Excel Workbook</MenuItem>
           </Menu>
         </Box>
@@ -611,6 +763,42 @@ const AdminDashboard = () => {
           <DialogActions sx={{ p: 2 }}>
             <Button onClick={() => setConfirmOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>Cancel</Button>
             <Button onClick={handleConfirmExport} variant="contained" sx={{ color: '#ffffff', bgcolor: '#213C51', fontWeight: 700 }}>Proceed</Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Weekly Report Dialog — week picker, future weeks are blocked */}
+        <Dialog open={weeklyOpen} onClose={() => setWeeklyOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontWeight: 800 }}>Weekly PDF Report</DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ mb: 2 }}>
+              Select a week (Monday to Sunday). Future weeks can't be selected.
+            </DialogContentText>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <IconButton onClick={() => shiftWeek(-1)} disabled={!canGoPrev}><ChevronLeftIcon /></IconButton>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography fontWeight={800}>{formatWeekRange(weekStart)}</Typography>
+                {isCurrentWeek && (
+                  <Typography variant="caption" color="text.secondary">Current week (up to today)</Typography>
+                )}
+              </Box>
+              <IconButton onClick={() => shiftWeek(1)} disabled={!canGoNext}><ChevronRightIcon /></IconButton>
+            </Stack>
+            <TextField
+              type="date"
+              size="small"
+              fullWidth
+              label="Jump to date"
+              InputLabelProps={{ shrink: true }}
+              value={toInputDate(weekStart)}
+              onChange={handleJumpDate}
+              inputProps={{ min: `${firstDownloadYear}-01-01`, max: toInputDate(new Date()) }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setWeeklyOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>Cancel</Button>
+            <Button onClick={executeWeeklyPdfExport} variant="contained" sx={{ color: '#ffffff', bgcolor: '#213C51', fontWeight: 700 }}>
+              Generate
+            </Button>
           </DialogActions>
         </Dialog>
 
@@ -707,9 +895,8 @@ const AdminDashboard = () => {
                 <Chip label={`${recentAccounts.length} Total Registered`} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff', fontWeight: 800 }} />
               </Box>
               
-              {/* Fixed-width table layout: columns are given explicit % widths and
-                  tableLayout:'fixed' so the row content spreads across the full
-                  container instead of leaving a dead gap after "Year Level". */}
+              {/* Fixed-width table layout so the row content spreads across the
+                  full container instead of leaving a dead gap after "Year Level". */}
               <TableContainer sx={{ width: '100%', overflowX: 'auto' }}>
                 <Table sx={{ width: '100%', minWidth: 800, tableLayout: 'fixed' }}>
                   <TableHead>
@@ -805,8 +992,6 @@ const AdminDashboard = () => {
                 <Chip label="Click row to view details" size="small" sx={{ bgcolor: 'rgba(255,255,255,0.1)', color: '#ffffff', fontWeight: 700 }} />
               </Box>
 
-              {/* Same fixed-width treatment as the accounts table above, so this
-                  table also fills the full container width evenly. */}
               <TableContainer sx={{ width: '100%', overflowX: 'auto' }}>
                 <Table sx={{ width: '100%', minWidth: 700, tableLayout: 'fixed' }}>
                   <TableHead>
@@ -882,10 +1067,8 @@ const AdminDashboard = () => {
 
         {/* Bottom Section: this admin's Pending Requests & Dynamic Top Performing PDFs */}
         <Grid container spacing={3}>
-          {/* Recent Pending Requests Panel — replaces "Recent System Activity".
-              Scoped strictly to delete_requests THIS admin submitted.
-              Rendered as a table (Document / Reason / Remarks / Status / Date),
-              matching the Delete Request Logs page layout minus the Actions column. */}
+          {/* Recent Pending Requests Panel — scoped strictly to delete_requests
+              THIS admin submitted. */}
           <Grid size={{ xs: 12, md: 6 }}>
             <Paper sx={{ ...commonPaperStyle, overflow: 'hidden', height: '100%' }}>
               <Box sx={{ background: 'linear-gradient(90deg, #1e293b 0%, #0f172a 100%)', px: 3, py: 2 }}>
@@ -1019,10 +1202,8 @@ const AdminDashboard = () => {
 
       </Container>
 
-      {/* "SEE MORE" BOOK DETAILS DIALOG — now mirrors pdfCard.jsx's Document
-          Info layout: an icon + label + value grid instead of a wall of
-          chips, so it reads consistently with the client-side "See More"
-          dialog. Every field (including Genre and Type) now has an icon. */}
+      {/* "SEE MORE" BOOK DETAILS DIALOG — mirrors pdfCard.jsx's Document
+          Info layout: an icon + label + value grid. */}
       <Dialog 
         open={bookDialogOpen} 
         onClose={handleCloseBookDetail}
@@ -1085,11 +1266,6 @@ const AdminDashboard = () => {
                     Author: {selectedBook.author || 'Unknown'}
                   </Typography>
 
-                  {/* Metadata rows in a responsive 2-column grid, same
-                      pattern as pdfCard.jsx's InfoRow grid. Falls back to a
-                      single column on mobile. Each row only renders when the
-                      field actually has a value (except Type/Genre, which
-                      always show with a sensible default). */}
                   <Box
                     sx={{
                       display: 'grid',

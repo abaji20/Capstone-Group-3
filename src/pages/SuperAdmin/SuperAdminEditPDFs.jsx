@@ -267,30 +267,47 @@ const SuperAdminEditPDFs = () => {
             <Typography align="center" sx={{ py: 10, color: 'text.secondary', fontWeight: 600 }}>No documents found.</Typography>
           ) : !isMobile ? (
             <TableContainer component={Paper} sx={{ borderRadius: 1, bgcolor: cardBg, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
-              <Table>
+              {/* Fixed layout + set column widths so long titles wrap instead of stretching the table */}
+              <Table sx={{ tableLayout: 'fixed', minWidth: 900 }}>
                 <TableHead sx={{ bgcolor: headerBg }}>
                   <TableRow>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }}>DOCUMENT</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }}>AUTHOR</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">GENRE</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">DATE UPLOADED</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTIONS</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 800, width: '38%' }}>DOCUMENT</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 800, width: '20%' }}>AUTHOR</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 800, width: '15%' }} align="center">GENRE</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 800, width: '14%' }} align="center">DATE UPLOADED</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 800, width: '13%' }} align="center">ACTIONS</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {paginatedPdfs.map((pdf) => (
                     <TableRow key={pdf.id} hover>
                       <TableCell>
-                        <Stack direction="row" alignItems="center" spacing={2}>
-                          <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 45, height: 55, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
+                        <Stack direction="row" alignItems="center" spacing={2} sx={{ minWidth: 0 }}>
+                          <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 45, height: 55, flexShrink: 0, border: `1px solid ${borderCol}`, bgcolor: 'transparent' }}>
                             {!pdf.image_url && <Box component="img" src={glclogo} sx={{ width: '80%', opacity: 0.8 }} />}
                           </Avatar>
-                          <Typography sx={{ fontWeight: 700 }}>{pdf.title}</Typography>
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <Typography
+                              title={pdf.title}
+                              sx={{
+                                fontWeight: 700,
+                                fontSize: '0.9rem',
+                                lineHeight: 1.3,
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                wordBreak: 'break-word',
+                              }}
+                            >
+                              {pdf.title}
+                            </Typography>
+                          </Box>
                         </Stack>
                       </TableCell>
-                      <TableCell sx={{ fontWeight: 500 }}>{pdf.author || 'N/A'}</TableCell>
+                      <TableCell sx={{ fontWeight: 500, wordBreak: 'break-word' }}>{pdf.author || 'N/A'}</TableCell>
                       <TableCell align="center">
-                        <Chip label={pdf.genre || 'Academic'} variant="outlined" sx={{ color: '#3b82f6', borderColor: '#3b82f6', fontWeight: 600, borderRadius: '16px', minWidth: '110px' }} />
+                        <Chip label={pdf.genre || 'Academic'} variant="outlined" sx={{ color: '#3b82f6', borderColor: '#3b82f6', fontWeight: 600, borderRadius: '16px', minWidth: '110px', maxWidth: '100%' }} />
                       </TableCell>
                       <TableCell align="center" sx={{ fontWeight: 500, color: 'text.secondary' }}>
                         {pdf.created_at ? new Date(pdf.created_at).toLocaleDateString() : 'N/A'}
@@ -318,7 +335,7 @@ const SuperAdminEditPDFs = () => {
                   <Avatar variant="rounded" src={getImageUrl(pdf.image_url)} sx={{ width: 90, height: 120, mx: 'auto', mb: 2, bgcolor: 'transparent' }}>
                     {!pdf.image_url && <Box component="img" src={glclogo} sx={{ width: '70%', opacity: 0.8 }} />}
                   </Avatar> 
-                  <Typography variant="h6" sx={{ fontWeight: 800 }}>{pdf.title}</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 800, wordBreak: 'break-word', lineHeight: 1.3 }}>{pdf.title}</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{pdf.author || 'Unknown Author'}</Typography>
                   <Typography variant="caption" sx={{ display: 'block', mb: 2, color: 'text.secondary' }}>
                     Uploaded: {pdf.created_at ? new Date(pdf.created_at).toLocaleDateString() : 'N/A'}

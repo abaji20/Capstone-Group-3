@@ -72,23 +72,84 @@ const clearDraft = () => {
   try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
 };
 
-// ── Duplicate detection ────────────────────────────────────────────────────
+// ── Duplicate detection (same rules as the admin PDF Uploads page) ──────────
 // Trim, collapse repeated spaces, ignore upper/lower case.
 const norm = (v) => (v ?? '').toString().trim().replace(/\s+/g, ' ').toLowerCase();
+
+// ISBN compare that ignores dashes and spaces.
+const normIsbn = (s) => (s || '').toString().replace(/[-\s]/g, '').toUpperCase();
 
 // Escape % and _ so they're matched literally by ilike.
 const escapeLike = (v) => v.replace(/[\\%_]/g, '\\$&');
 
-// Same title + same author = duplicate. Edition is optional: it only tells two
-// documents apart when BOTH have one and they differ (e.g. "2nd" vs "3rd").
-// If either side has no edition (most books), title + author is enough.
-const isSameDocument = (a, b) =>
-  norm(a.title) === norm(b.title) &&
-  norm(a.author) === norm(b.author) &&
-  !(norm(a.edition) && norm(b.edition) && norm(a.edition) !== norm(b.edition));
+// SHA-256 of a File/Blob, as a hex string.
+const hashBlob = async (blob) => {
+  const buf = await blob.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+};
+
+// Is the selected PDF the same file as the one stored at `path`?
+// 1) compare byte size (cheap) — if different, it's a different file
+// 2) if the size is equal, download the stored PDF and compare SHA-256
+//    (only happens for records that already match title + author)
+const isSameFile = async (file, path) => {
+  if (!file || !path) return false;
+  try {
+    const { data } = supabase.storage.from('pdfs').getPublicUrl(path);
+    const url = data?.publicUrl;
+    if (!url) return false;
+
+    const head = await fetch(url, { method: 'HEAD' });
+    const storedSize = parseInt(head.headers.get('content-length'), 10);
+    if (!Number.isFinite(storedSize) || storedSize !== file.size) return false;
+
+    // Same size -> confirm with a hash. If the download fails, trust the size match.
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const [storedHash, newHash] = await Promise.all([hashBlob(blob), hashBlob(file)]);
+      return storedHash === newHash;
+    } catch (e) {
+      return true;
+    }
+  } catch (e) {
+    console.error('Same-file check failed:', e);
+    return false;
+  }
+};
+
+// Given the records that already match title + author, pick the most specific
+// match (same order as the admin page):
+//   title + author + ISBN + edition -> 'title_author_isbn_edition'
+//   title + author + ISBN           -> 'title_author_isbn'
+//   title + author + same PDF file  -> 'title_author_file'
+//   title + author                  -> 'title_author'
+// Returns { type, record } or null.
+const classifyDuplicate = async (matches, form, file, filePathKey) => {
+  if (matches.length === 0) return null;
+
+  const isbn = normIsbn(form.isbn);
+  const edition = norm(form.edition);
+
+  if (isbn) {
+    const isbnMatches = matches.filter((r) => normIsbn(r.isbn) === isbn);
+
+    const full = isbnMatches.find((r) => edition && norm(r.edition) === edition);
+    if (full) return { type: 'title_author_isbn_edition', record: full };
+
+    if (isbnMatches.length > 0) return { type: 'title_author_isbn', record: isbnMatches[0] };
+  }
+
+  for (const r of matches) {
+    if (await isSameFile(file, r[filePathKey])) return { type: 'title_author_file', record: r };
+  }
+
+  return { type: 'title_author', record: matches[0] };
+};
 
 // Is this already in the library? (archived documents don't count)
-const findLibraryDuplicate = async (form) => {
+const findLibraryDuplicate = async (form, file) => {
   const { data, error } = await supabase
     .from('pdfs')
     .select('*')
@@ -96,12 +157,16 @@ const findLibraryDuplicate = async (form) => {
     .ilike('title', escapeLike(form.title.trim()))
     .ilike('author', escapeLike(form.author.trim()));
   if (error) throw error;
-  return (data || []).find((row) => isSameDocument(row, form)) || null;
+
+  const matches = (data || []).filter(
+    (r) => norm(r.title) === norm(form.title) && norm(r.author) === norm(form.author)
+  );
+  return classifyDuplicate(matches, form, file, 'file_url');
 };
 
 // Is there already a PENDING upload request for it? When editing, the request
 // being edited is left out so it doesn't clash with itself.
-const findRequestDuplicate = async (form, excludeId = null) => {
+const findRequestDuplicate = async (form, file, excludeId = null) => {
   let query = supabase
     .from('upload_requests')
     .select('*')
@@ -112,7 +177,27 @@ const findRequestDuplicate = async (form, excludeId = null) => {
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data || []).find((row) => isSameDocument(row, form)) || null;
+
+  const matches = (data || []).filter(
+    (r) => norm(r.title) === norm(form.title) && norm(r.author) === norm(form.author)
+  );
+  return classifyDuplicate(matches, form, file, 'pdf_url');
+};
+
+// Messages shown in the duplicate dialog, by where the match was found and
+// which rule matched.
+const getDuplicateMessage = (source, type) => {
+  const where = source === 'request' ? 'in a pending upload request' : 'in the library';
+  switch (type) {
+    case 'title_author_isbn_edition':
+      return `A document with the same title, author, ISBN and edition is already ${where}.`;
+    case 'title_author_isbn':
+      return `A document with the same title, author and ISBN is already ${where}.`;
+    case 'title_author_file':
+      return `A document with the same title, author and PDF file is already ${where}.`;
+    default:
+      return `A document with the same title and author is already ${where}.`;
+  }
 };
 
 const RequestUpload = () => {
@@ -138,8 +223,12 @@ const RequestUpload = () => {
   const [draftRestored, setDraftRestored] = useState(false);
   const draftUserId = useRef(null);
   const [status, setStatus] = useState({ open: false, type: 'success', message: '' });
-  // type: 'library' (already a live PDF) or 'request' (already a pending request)
-  const [confirmData, setConfirmData] = useState({ open: false, record: null, type: 'library' });
+  // source: 'library' (already a live PDF) or 'request' (already a pending request)
+  // type:   which duplicate rule matched (see getDuplicateMessage)
+  const [confirmData, setConfirmData] = useState({ open: false, record: null, source: 'library', type: null });
+  // Remembers which plain "same title + author" warnings the user already
+  // accepted with "Submit Anyway", so they aren't asked about them twice.
+  const [dupAck, setDupAck] = useState({});
 
   // Dialog states
   const [cancelDialog, setCancelDialog] = useState({ open: false, record: null, processing: false });
@@ -456,6 +545,38 @@ const RequestUpload = () => {
     } finally { setUploading(false); }
   };
 
+  // Duplicate checks: (1) already in the library? (2) already a pending
+  // request? Both use the same rules as the admin PDF Uploads page.
+  // `ack` = which plain "same title + author" warnings were already accepted.
+  // If nothing blocks the submission, the confirm dialog opens.
+  const runDuplicateChecks = async (ack) => {
+    setChecking(true);
+    try {
+      if (!ack.library) {
+        const libraryDup = await findLibraryDuplicate(formData, pdfFile);
+        if (libraryDup) {
+          setConfirmData({ open: true, source: 'library', ...libraryDup });
+          return;
+        }
+      }
+
+      if (!ack.request) {
+        const requestDup = await findRequestDuplicate(formData, pdfFile, isEditing ? editingId : null);
+        if (requestDup) {
+          setConfirmData({ open: true, source: 'request', ...requestDup });
+          return;
+        }
+      }
+    } catch (error) {
+      showStatus('error', `Could not check for duplicates: ${error.message}`);
+      return;
+    } finally {
+      setChecking(false);
+    }
+    
+    setSubmitConfirmDialog(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -480,29 +601,9 @@ const RequestUpload = () => {
         return;
     }
 
-    // Duplicate checks: (1) already in the library? (2) already a pending
-    // request? Both use title + author (edition only if both have one).
-    setChecking(true);
-    try {
-      const libraryDup = await findLibraryDuplicate(formData);
-      if (libraryDup) {
-        setConfirmData({ open: true, type: 'library', record: libraryDup });
-        return;
-      }
-
-      const requestDup = await findRequestDuplicate(formData, isEditing ? editingId : null);
-      if (requestDup) {
-        setConfirmData({ open: true, type: 'request', record: requestDup });
-        return;
-      }
-    } catch (error) {
-      showStatus('error', `Could not check for duplicates: ${error.message}`);
-      return;
-    } finally {
-      setChecking(false);
-    }
-    
-    setSubmitConfirmDialog(true);
+    // A fresh submit starts with no accepted duplicate warnings.
+    setDupAck({});
+    await runDuplicateChecks({});
   };
 
   // --- STYLES ---
@@ -620,9 +721,19 @@ const RequestUpload = () => {
   };
 
   // --- Duplicate dialog helpers ---
-  const dupIsRequest = confirmData.type === 'request';
+  const dupIsRequest = confirmData.source === 'request';
   const dupImagePath = dupIsRequest ? confirmData.record?.cover_url : confirmData.record?.image_url;
   const closeDupDialog = () => setConfirmData((prev) => ({ ...prev, open: false }));
+
+  // "Submit Anyway" (only offered for a plain title + author match, e.g. a
+  // different edition or a different work with the same name). Remember that
+  // this warning was accepted, then carry on with the remaining checks.
+  const handleKeepBoth = () => {
+    const nextAck = { ...dupAck, [confirmData.source]: true };
+    setDupAck(nextAck);
+    closeDupDialog();
+    runDuplicateChecks(nextAck);
+  };
 
   return (
     <Box sx={{ minHeight: '100vh', p: { xs: 2, md: 4 }, bgcolor: 'background.default' }}>
@@ -1023,18 +1134,20 @@ const RequestUpload = () => {
         </Dialog>
 
         {/* --- DUPLICATE DIALOG ---
-            Shown when the title + author already exists, either as a live PDF
-            in the library or as another pending upload request. */}
+            Shown when the document matches one already in the library or a
+            pending upload request. The message depends on which rule matched
+            (title + author, + ISBN, + ISBN & edition, or + same PDF file).
+            A plain title + author match can still be submitted ("Submit
+            Anyway"); stronger matches cannot. */}
         <Dialog open={confirmData.open} onClose={closeDupDialog} PaperProps={{ sx: { borderRadius: 4, maxWidth: '550px', width: '100%', p: 1 } }}>
           <DialogTitle sx={{ fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1, pb: 1, color: 'warning.main' }}>
               <ErrorOutline color="warning" /> {dupIsRequest ? 'Request Already Submitted' : 'PDF Already Exists'}
           </DialogTitle>
           <DialogContent sx={{ px: 3, pt: 1 }}>
-              <Typography variant="body2" sx={{ mb: 2.5, color: 'text.secondary', fontWeight: 500 }}>
-                {dupIsRequest
-                  ? 'A pending upload request with the same title and author already exists. Please wait for it to be reviewed instead of submitting it again. Details below:'
-                  : 'A document with the same title and author already exists in the library. Please review the details below:'}
-              </Typography>
+              <Alert severity="warning" sx={{ mb: 2.5, borderRadius: '10px', fontWeight: 600 }}>
+                {getDuplicateMessage(confirmData.source, confirmData.type)}
+                {confirmData.type === 'title_author' && ' If yours is a different edition or a different document, you can still submit it.'}
+              </Alert>
               
               <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 2.5, mb: 2, alignItems: isMobile ? 'center' : 'flex-start' }}>
                 <Avatar 
@@ -1075,8 +1188,14 @@ const RequestUpload = () => {
               </Typography>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
+              {/* Submit Anyway is only offered for a plain title + author match */}
+              {confirmData.type === 'title_author' && (
+                <Button fullWidth onClick={handleKeepBoth} variant="outlined" sx={{ py: 1.2, fontWeight: 900, borderRadius: 2 }}>
+                  SUBMIT ANYWAY
+                </Button>
+              )}
               <Button fullWidth onClick={closeDupDialog} variant="contained" sx={{ color: '#ffffff', bgcolor: '#1e3a5f', py: 1.2, fontWeight: 900, borderRadius: 2 }}>
-                I UNDERSTAND
+                {confirmData.type === 'title_author' ? 'CANCEL' : 'I UNDERSTAND'}
               </Button>
           </DialogActions>
         </Dialog>

@@ -3,7 +3,8 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Typography, CircularProgress, Stack, IconButton, Avatar,
   useTheme, useMediaQuery, Container, TextField, InputAdornment, MenuItem, 
-  Divider, Button, Card, CardContent, Dialog, DialogTitle, DialogContent, DialogActions, Tooltip
+  Divider, Button, Card, CardContent, Dialog, DialogTitle, DialogContent, DialogActions, Tooltip,
+  Grid, CardMedia
 } from '@mui/material';
 import { 
   Check as CheckIcon, 
@@ -25,12 +26,41 @@ import {
   Business as BusinessIcon,
   ConfirmationNumber as ConfirmationNumberIcon,
   Layers as LayersIcon,
-  Language as LanguageIcon
+  Language as LanguageIcon,
+  WarningAmber as WarningAmberIcon,
+  Category as CategoryIcon,
+  LibraryBooks as LibraryBooksIcon,
+  DateRange as DateRangeIcon
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 import glclogo from '../../assets/glclogo.png';
 // NEW: shared date formatter (year / month / day -> "March 15, 2020")
 import { formatPublishedDate } from '../../utils/formatPublishedDate';
+
+// One label/value line for the Document Info dialog, copied from
+// AdminDashboard.jsx's InfoRow so both "document info" surfaces look and
+// behave the same way (icon + bold label + value, wraps instead of truncating).
+const InfoRow = ({ icon, label, value }) => (
+  <Typography
+    variant="body2"
+    component="div"
+    sx={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 1,
+      minWidth: 0,
+      '& > svg': { flexShrink: 0 },
+      '& > strong': { flexShrink: 0 },
+      '& > span': {
+        minWidth: 0,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+      },
+    }}
+  >
+    {icon} <strong>{label}:</strong> <span>{value || 'N/A'}</span>
+  </Typography>
+);
 
 const PendingUpload = () => {
   const theme = useTheme();
@@ -64,6 +94,11 @@ const PendingUpload = () => {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [remarks, setRemarks] = useState('');
+
+  // --- APPROVE CONFIRMATION MODAL STATE ---
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [requestToApprove, setRequestToApprove] = useState(null);
+  const [approving, setApproving] = useState(false);
 
   useEffect(() => { fetchPendingRequests(); }, []);
 
@@ -101,6 +136,31 @@ const PendingUpload = () => {
       .order('created_at', { ascending: false });
     setRequests(data || []);
     setLoading(false);
+  };
+
+  // Opens the confirmation modal (does NOT approve yet)
+  const openApproveConfirm = (req, e) => {
+    if (e) e.stopPropagation();
+    setRequestToApprove(req);
+    setApproveDialogOpen(true);
+  };
+
+  const closeApproveConfirm = () => {
+    if (approving) return;
+    setApproveDialogOpen(false);
+    setRequestToApprove(null);
+  };
+
+  const handleConfirmApprove = async () => {
+    if (!requestToApprove) return;
+    setApproving(true);
+    try {
+      await handleApprove(requestToApprove);
+    } finally {
+      setApproving(false);
+      setApproveDialogOpen(false);
+      setRequestToApprove(null);
+    }
   };
 
   const handleApprove = async (req, e) => {
@@ -271,7 +331,7 @@ const PendingUpload = () => {
               fullWidth
               variant="contained" 
               startIcon={<CheckIcon />} 
-              onClick={(e) => handleApprove(req, e)}
+              onClick={(e) => openApproveConfirm(req, e)}
               sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, textTransform: 'none', fontWeight: 700 }}
             >
               Accept
@@ -383,7 +443,7 @@ const PendingUpload = () => {
                             </Tooltip>
                             
                             <Tooltip title="Approve">
-                              <IconButton onClick={(e) => handleApprove(req, e)} sx={{ color: '#16a34a' }}>
+                              <IconButton onClick={(e) => openApproveConfirm(req, e)} sx={{ color: '#16a34a' }}>
                                 <CheckIcon sx={{ fontSize: 24 }} />
                               </IconButton>
                             </Tooltip>
@@ -437,142 +497,173 @@ const PendingUpload = () => {
         )}
       </Container>
 
-      {/* DOCUMENT DETAILS POPUP DIALOG */}
+      {/* DOCUMENT DETAILS POPUP DIALOG — layout mirrors AdminDashboard.jsx's
+          Book Details dialog: header with icon + close button, cover on the
+          left, title / author / two-column InfoRow grid / description on the
+          right. Pending-upload-only info (Submitted By, Upload Reason) is
+          added on top of that same layout. */}
       <Dialog 
         open={detailsDialogOpen} 
         onClose={() => setDetailsDialogOpen(false)} 
         maxWidth="md" 
         fullWidth
-        PaperProps={{ sx: { bgcolor: cardBg, borderRadius: 3, p: 1 } }}
+        PaperProps={{
+          sx: {
+            borderRadius: '20px',
+            bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
+            color: isDarkMode ? '#f8fafc' : '#1e293b',
+            p: 1
+          }
+        }}
+      >
+        {selectedDocDetails && (
+          <>
+            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <PdfIcon color="primary" />
+                <Typography variant="h6" fontWeight="800">
+                  Document Info
+                </Typography>
+              </Stack>
+              <IconButton onClick={() => setDetailsDialogOpen(false)} size="small">
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+            <Divider />
+            <DialogContent sx={{ mt: 2 }}>
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  {getImageUrl(selectedDocDetails.cover_url) ? (
+                    <CardMedia
+                      component="img"
+                      image={getImageUrl(selectedDocDetails.cover_url)}
+                      alt={selectedDocDetails.title}
+                      sx={{ borderRadius: '12px', height: 260, objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+                    />
+                  ) : (
+                    <Box sx={{ 
+                      height: 260, 
+                      borderRadius: '12px', 
+                      bgcolor: isDarkMode ? '#0f172a' : '#f1f5f9', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      color: 'text.secondary'
+                    }}>
+                      <BookIcon sx={{ fontSize: 60, mb: 1, color: '#94a3b8' }} />
+                      <Typography variant="caption" fontWeight="700">No Cover Available</Typography>
+                    </Box>
+                  )}
+                </Grid>
+                <Grid size={{ xs: 12, md: 8 }}>
+                  <Typography variant="h5" fontWeight="900" sx={{ mb: 1 }}>
+                    {selectedDocDetails.title || 'Untitled Material'}
+                  </Typography>
+                  <Typography variant="subtitle1" fontWeight="700" color="text.secondary" sx={{ mb: 2 }}>
+                    Author: {selectedDocDetails.author || 'Unknown'}
+                  </Typography>
+
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'auto auto' },
+                      justifyContent: 'start',
+                      columnGap: 3,
+                      rowGap: 1,
+                      mb: 2.5,
+                    }}
+                  >
+                    <InfoRow icon={<LibraryBooksIcon fontSize="small" color="primary" />} label="Type" value={selectedDocDetails.category || 'book'} />
+                    <InfoRow icon={<CategoryIcon fontSize="small" color="primary" />} label="Genre" value={selectedDocDetails.genre || 'N/A'} />
+
+                    {selectedDocDetails.section && (
+                      <InfoRow icon={<BookmarkIcon fontSize="small" color="primary" />} label="Section" value={selectedDocDetails.section} />
+                    )}
+                    {selectedDocDetails.program_course && (
+                      <InfoRow icon={<SchoolIcon fontSize="small" color="primary" />} label="Program" value={selectedDocDetails.program_course} />
+                    )}
+
+                    <InfoRow icon={<DateRangeIcon fontSize="small" color="primary" />} label="Published" value={formatPublishedDate(selectedDocDetails)} />
+
+                    {selectedDocDetails.publisher && (
+                      <InfoRow icon={<BusinessIcon fontSize="small" color="primary" />} label="Publisher" value={selectedDocDetails.publisher} />
+                    )}
+                    {selectedDocDetails.edition && (
+                      <InfoRow icon={<LayersIcon fontSize="small" color="primary" />} label="Edition" value={selectedDocDetails.edition} />
+                    )}
+                    {selectedDocDetails.isbn && (
+                      <InfoRow icon={<ConfirmationNumberIcon fontSize="small" color="primary" />} label="ISBN" value={selectedDocDetails.isbn} />
+                    )}
+                    {selectedDocDetails.language && (
+                      <InfoRow icon={<LanguageIcon fontSize="small" color="primary" />} label="Language" value={selectedDocDetails.language} />
+                    )}
+
+                    <InfoRow icon={<PersonIcon fontSize="small" color="secondary" />} label="Submitted By" value={selectedDocDetails.profiles?.full_name || 'Unknown'} />
+                  </Box>
+
+                  <Typography variant="subtitle2" fontWeight="800" sx={{ mb: 0.5, color: 'text.secondary' }}>
+                    DESCRIPTION / ABSTRACT
+                  </Typography>
+                  <Typography variant="body2" sx={{ lineHeight: 1.7, color: isDarkMode ? '#cbd5e1' : '#475569', mb: 2.5 }}>
+                    {selectedDocDetails.description || 'No description provided.'}
+                  </Typography>
+
+                  <Typography variant="subtitle2" fontWeight="800" sx={{ mb: 0.5, color: 'text.secondary' }}>
+                    UPLOAD REASON
+                  </Typography>
+                  <Typography variant="body2" sx={{ lineHeight: 1.7, fontStyle: 'italic', color: isDarkMode ? '#cbd5e1' : '#475569', mb: 1 }}>
+                    "{selectedDocDetails.upload_reason || 'None'}"
+                  </Typography>
+                </Grid>
+              </Grid>
+            </DialogContent>
+            <DialogActions sx={{ p: 2, pt: 0, justifyContent: 'space-between' }}>
+              <Button 
+                variant="contained" 
+                startIcon={<VisibilityIcon />}
+                onClick={(e) => handleViewPdf(selectedDocDetails.pdf_url, e)}
+                sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: '#2e1a47', '&:hover': { bgcolor: '#1e1130' }, textTransform: 'none', fontWeight: 700, borderRadius: '8px' }}
+              >
+                Read PDF
+              </Button>
+              <Button onClick={() => setDetailsDialogOpen(false)} variant="outlined" sx={{ fontWeight: 700, borderRadius: '8px' }}>
+                Close
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+
+      {/* APPROVE CONFIRMATION DIALOG */}
+      <Dialog
+        open={approveDialogOpen}
+        onClose={closeApproveConfirm}
+        PaperProps={{ sx: { borderRadius: 3, bgcolor: cardBg, p: 1, minWidth: { xs: '90%', sm: 400 } } }}
       >
         <DialogTitle sx={{ fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <InfoIcon color="primary" /> Document Info
+          <WarningAmberIcon color="warning" /> Confirm Approval
         </DialogTitle>
-        <DialogContent dividers sx={{ borderColor: borderCol, maxHeight: '70vh', overflowY: 'auto' }}>
-          {selectedDocDetails && (
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, alignItems: { xs: 'center', md: 'flex-start' } }}>
-              <Avatar 
-                variant="rounded" 
-                src={selectedDocDetails.cover_url ? getImageUrl(selectedDocDetails.cover_url) : glclogo} 
-                sx={{ 
-                  width: { xs: 160, md: 200 }, 
-                  height: { xs: 200, md: 200 }, 
-                  boxShadow: 3,
-                  border: `1px solid ${borderCol}`,
-                  bgcolor: 'transparent',
-                  objectFit: 'cover',
-                  flexShrink: 0
-                }}
-              >
-                {!selectedDocDetails.cover_url && <PdfIcon sx={{ color: 'red', fontSize: '3rem' }} />}
-              </Avatar>
-
-              <Box sx={{ flexGrow: 1, width: '100%' }}>
-                <Stack spacing={1.5}>
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <TitleIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Title:</strong> {selectedDocDetails.title || 'N/A'}</Typography>
-                  </Stack>
-
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <PersonIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Author:</strong> {selectedDocDetails.author || 'N/A'}</Typography>
-                  </Stack>
-
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <BookIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Type:</strong> {selectedDocDetails.category || 'book'}</Typography>
-                  </Stack>
-
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <GenreIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Genre:</strong> {selectedDocDetails.genre || 'N/A'}</Typography>
-                  </Stack>
-
-                  {/* NEW: digital-library metadata — only rendered when the
-                      request actually has a value, matching pdfCard.jsx's
-                      "hide if empty" behavior. */}
-                  {selectedDocDetails.section && (
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <BookmarkIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Section:</strong> {selectedDocDetails.section}</Typography>
-                    </Stack>
-                  )}
-                  {selectedDocDetails.program_course && (
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <SchoolIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Program:</strong> {selectedDocDetails.program_course}</Typography>
-                    </Stack>
-                  )}
-
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <CalendarIcon color="primary" fontSize="small" />
-                    <Typography variant="body2"><strong>Published:</strong> {formatPublishedDate(selectedDocDetails)}</Typography>
-                  </Stack>
-
-                  {selectedDocDetails.publisher && (
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <BusinessIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Publisher:</strong> {selectedDocDetails.publisher}</Typography>
-                    </Stack>
-                  )}
-                  {selectedDocDetails.isbn && (
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <ConfirmationNumberIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>ISBN:</strong> {selectedDocDetails.isbn}</Typography>
-                    </Stack>
-                  )}
-                  {selectedDocDetails.edition && (
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <LayersIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Edition:</strong> {selectedDocDetails.edition}</Typography>
-                    </Stack>
-                  )}
-                  {selectedDocDetails.language && (
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <LanguageIcon color="primary" fontSize="small" />
-                      <Typography variant="body2"><strong>Language:</strong> {selectedDocDetails.language}</Typography>
-                    </Stack>
-                  )}
-
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <PersonIcon color="secondary" fontSize="small" />
-                    <Typography variant="body2"><strong>Submitted By:</strong> {selectedDocDetails.profiles?.full_name || 'Unknown'}</Typography>
-                  </Stack>
-                </Stack>
-
-                <Divider sx={{ my: 2, opacity: 0.2 }} />
-
-                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Description</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
-                  {selectedDocDetails.description || 'No description provided.'}
-                </Typography>
-              </Box>
-            </Box>
-          )}
-
-          {selectedDocDetails && (
-            <Box sx={{ mt: 3 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.5 }}>Upload Reason</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                "{selectedDocDetails.upload_reason || 'None'}"
-              </Typography>
-            </Box>
-          )}
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 1, fontWeight: 700, overflowWrap: 'anywhere' }}>
+            Approve "{requestToApprove?.title}"?
+          </Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600, opacity: 0.8 }}>
+            This document will be added to the library and will become available to users.
+          </Typography>
         </DialogContent>
-        <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
-          {selectedDocDetails && (
-            <Button 
-              variant="contained" 
-              startIcon={<VisibilityIcon />}
-              onClick={(e) => handleViewPdf(selectedDocDetails.pdf_url, e)}
-              sx={{color: isDarkMode ? '#ffffff' : '#ffffff', bgcolor: '#2e1a47', '&:hover': { bgcolor: '#1e1130' }, textTransform: 'none', fontWeight: 700 }}
-            >
-              Read PDF
-            </Button>
-          )}
-          <Button onClick={() => setDetailsDialogOpen(false)} sx={{ fontWeight: 700, color: 'text.secondary' }}>
-            Close
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={closeApproveConfirm} disabled={approving} sx={{ color: 'text.secondary', fontWeight: 600 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmApprove}
+            disabled={approving}
+            startIcon={approving ? <CircularProgress size={16} color="inherit" /> : <CheckIcon />}
+            sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, borderRadius: '20px', px: 4, fontWeight: 700, textTransform: 'none' }}
+          >
+            Confirm Approve
           </Button>
         </DialogActions>
       </Dialog>

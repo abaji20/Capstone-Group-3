@@ -32,6 +32,8 @@ import BusinessIcon from '@mui/icons-material/Business';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import LayersIcon from '@mui/icons-material/Layers';
 import LanguageIcon from '@mui/icons-material/Language';
+// NEW: icon for the approve confirmation modal
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 // One label/value line for the Document Info modal, matching
 // AdminDashboard.jsx / pdfCard.jsx's InfoRow so every "document info"
@@ -87,6 +89,10 @@ const DeleteRequests = () => {
   const [remarkModal, setRemarkModal] = useState({ open: false, requestId: null });
   const [remarks, setRemarks] = useState('');
 
+  // --- APPROVE CONFIRMATION MODAL STATE ---
+  const [approveModal, setApproveModal] = useState({ open: false, requestId: null, pdfId: null, title: '' });
+  const [approving, setApproving] = useState(false);
+
   // --- INFO MODAL STATE ---
   const [infoModalOpen, setInfoModalOpen] = useState(false);
   const [selectedPdfInfo, setSelectedPdfInfo] = useState(null);
@@ -141,6 +147,34 @@ const DeleteRequests = () => {
   const requestYears = [...new Set(requests
     .filter(request => request.created_at)
     .map(request => new Date(request.created_at).getFullYear()))].sort((a, b) => b - a);
+
+  // Opens the confirmation modal (does NOT approve yet)
+  const openApproveConfirm = (requestId, pdfId, e) => {
+    if (e) e.stopPropagation();
+    const requestData = requests.find(r => r.id === requestId);
+    setApproveModal({
+      open: true,
+      requestId,
+      pdfId,
+      title: requestData?.pdfs?.title || 'Unknown File'
+    });
+  };
+
+  const closeApproveConfirm = () => {
+    if (approving) return;
+    setApproveModal({ open: false, requestId: null, pdfId: null, title: '' });
+  };
+
+  const handleConfirmApprove = async () => {
+    const { requestId, pdfId } = approveModal;
+    setApproving(true);
+    try {
+      await handleApprove(requestId, pdfId);
+    } finally {
+      setApproving(false);
+      setApproveModal({ open: false, requestId: null, pdfId: null, title: '' });
+    }
+  };
 
   const handleApprove = async (requestId, pdfId, e) => {
     if (e) e.stopPropagation();
@@ -408,7 +442,7 @@ const DeleteRequests = () => {
                         fullWidth
                         variant="contained" 
                         startIcon={<CheckIcon />} 
-                        onClick={(e) => handleApprove(req.id, req.pdfs?.id, e)}
+                        onClick={(e) => openApproveConfirm(req.id, req.pdfs?.id, e)}
                         sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, textTransform: 'none', fontWeight: 700 }}
                       >
                         Accept
@@ -509,7 +543,7 @@ const DeleteRequests = () => {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Approve">
-                          <IconButton onClick={(e) => handleApprove(req.id, req.pdfs?.id, e)} sx={{ color: '#16a34a' }}>
+                          <IconButton onClick={(e) => openApproveConfirm(req.id, req.pdfs?.id, e)} sx={{ color: '#16a34a' }}>
                             <CheckIcon sx={{ fontSize: 24 }} />
                           </IconButton>
                         </Tooltip>
@@ -670,6 +704,39 @@ const DeleteRequests = () => {
           </Button>
           <Button onClick={() => setInfoModalOpen(false)} sx={{ fontWeight: 700, color: 'text.secondary' }}>
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* APPROVE CONFIRMATION MODAL */}
+      <Dialog
+        open={approveModal.open}
+        onClose={closeApproveConfirm}
+        PaperProps={{ sx: { bgcolor: cardBg, borderRadius: 3, p: 1 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1 }}>
+         Confirm Approval
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 1, fontWeight: 700, overflowWrap: 'anywhere' }}>
+            Approve the delete request for "{approveModal.title}"?
+          </Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600, opacity: 0.8 }}>
+            The document will be removed from the library and moved to Archives.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={closeApproveConfirm} disabled={approving} sx={{ color: 'text.secondary', fontWeight: 600 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmApprove}
+            disabled={approving}
+            startIcon={approving ? <CircularProgress size={16} color="inherit" /> : <CheckIcon />}
+            sx={{ bgcolor: '#ac1b22', '&:hover': { bgcolor: '#15803d' }, borderRadius: '20px', px: 4, fontWeight: 700, textTransform: 'none' }}
+          >
+            Confirm Approve
           </Button>
         </DialogActions>
       </Dialog>

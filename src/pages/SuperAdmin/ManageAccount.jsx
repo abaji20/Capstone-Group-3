@@ -80,6 +80,13 @@ const ManageAccount = () => {
   const [requestDayFilter, setRequestDayFilter] = useState('');
   const [requestYearFilter, setRequestYearFilter] = useState('');
   const [requestPage, setRequestPage] = useState(1);
+
+  // Archived tab: search + filters
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const [archiveRoleFilter, setArchiveRoleFilter] = useState('All Roles');
+  const [archiveMonthFilter, setArchiveMonthFilter] = useState('');
+  const [archiveDayFilter, setArchiveDayFilter] = useState('');
+  const [archiveYearFilter, setArchiveYearFilter] = useState('');
   
   // Modal/Dialog States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -141,18 +148,49 @@ const ManageAccount = () => {
   }, [navigate]);
 
   const processInactivityAndStatus = (fetchedProfiles) => {
+    // The UI trusts the stored is_active value, so an admin can still
+    // manually re-activate an account. Inactivity itself is handled by
+    // deactivateInactiveAccounts() below.
+    return (fetchedProfiles || []).map(user => ({
+      ...user,
+      computed_is_active: user.is_active ?? true
+    }));
+  };
+
+  // --- INACTIVITY CHECK (runs in the app, no database job needed) ---
+  // Any account (except superadmin) with no login for over 1 year is set to
+  // Deactive, and its Department / Year Level become 'N/A'.
+  // Uses last_active_at, or created_at if the account has never logged in.
+  const deactivateInactiveAccounts = async (profiles) => {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-    return (fetchedProfiles || []).map(user => {
-      const lastActivityDate = new Date(user.created_at); 
-      const isInactiveOverAYear = lastActivityDate < oneYearAgo;
-      
-      return {
-        ...user,
-        computed_is_active: isInactiveOverAYear ? false : (user.is_active ?? true)
-      };
-    });
+    const inactive = (profiles || []).filter((u) =>
+      u.is_active !== false &&
+      u.role?.toLowerCase() !== 'superadmin' &&
+      new Date(u.last_active_at || u.created_at) < oneYearAgo
+    );
+    if (inactive.length === 0) return profiles;
+
+    const ids = inactive.map((u) => u.id);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_active: false, department: 'N/A', year_level: 'N/A' })
+      .in('id', ids);
+
+    if (error) {
+      console.error('Inactivity update failed:', error);
+      return profiles;
+    }
+
+    await createAuditLog(
+      'Status Change',
+      `Auto-deactivated ${ids.length} account(s) inactive for over 1 year: ${inactive.map((u) => u.full_name).join(', ')}`
+    );
+
+    return profiles.map((u) =>
+      ids.includes(u.id) ? { ...u, is_active: false, department: 'N/A', year_level: 'N/A' } : u
+    );
   };
 
   const fetchUsers = async () => {
@@ -165,7 +203,8 @@ const ManageAccount = () => {
     if (error) {
       console.error("Error fetching users:", error);
     } else {
-      setUsers(processInactivityAndStatus(data));
+      const checked = await deactivateInactiveAccounts(data);
+      setUsers(processInactivityAndStatus(checked));
     }
 
     const { data: archData, error: archErr } = await supabase
@@ -213,6 +252,14 @@ const ManageAccount = () => {
     return `${raw.slice(0, 2)}-${raw.slice(2, 4)}-${raw.slice(4)}`;
   };
 
+  // --- SUPERADMIN ID NUMBER (no format) ---
+  // Superadmin accounts are NOT students, so their ID Number is free-form:
+  // no 00-00-000000 formatting and no 10-digit validation.
+  const isSuperadminRole = (role) => role?.toLowerCase() === 'superadmin';
+
+  // Applies the ID format only when the selected role is NOT superadmin.
+  const handleIdNumberInput = (value, role) => (isSuperadminRole(role) ? value : formatIdNumber(value));
+
   const getAvatarColors = (role) => {
     switch (role?.toLowerCase()) {
       case 'superadmin': return { bg: '#7b1fa2', text: '#ffffff' }; 
@@ -227,7 +274,7 @@ const ManageAccount = () => {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ is_active: newActiveState })
+        .update(newActiveState ? { is_active: true, last_active_at: new Date().toISOString() } : { is_active: false })
         .eq('id', targetUser.id);
 
       if (error) throw error;
@@ -312,7 +359,8 @@ const ManageAccount = () => {
     // --- STUDENT ID VALIDATION (adapted from reference AdminManageAccount.handleCreateAccount) ---
     // If an ID Number was entered, it must resolve to exactly 10 digits (00-00-000000 format),
     // matching the reference implementation's validation rule and error message.
-    if (formData.idNumber) {
+    // SUPERADMIN is exempt: their ID Number has no format requirement.
+    if (formData.idNumber && !isSuperadminRole(formData.role)) {
       const cleanId = formData.idNumber.replace(/-/g, '');
       if (cleanId.length !== 10) {
         setNotify({ open: true, message: 'ID Number must be exactly 10 digits in XX-XX-XXXXXX format!', severity: 'error' });
@@ -420,7 +468,8 @@ const ManageAccount = () => {
   const handleUpdateAccount = async () => {
     // --- STUDENT ID VALIDATION (adapted from reference AdminManageAccount.handleUpdateAccount) ---
     // Same rule as create: if provided, the ID Number must be exactly 10 digits.
-    if (editData.idNumber) {
+    // SUPERADMIN is exempt: their ID Number has no format requirement.
+    if (editData.idNumber && !isSuperadminRole(editData.role)) {
       const cleanId = editData.idNumber.replace(/-/g, '');
       if (cleanId.length !== 10) {
         setNotify({ open: true, message: 'ID Number must be exactly 10 digits in XX-XX-XXXXXX format!', severity: 'error' });
@@ -560,12 +609,40 @@ const ManageAccount = () => {
     if (activeTab !== 2) setSelectedArchivedIds([]);
   }, [activeTab]);
 
+  // --- ARCHIVED SEARCH + FILTERS ---
+  const filteredArchivedUsers = archivedUsers.filter((u) => {
+    const term = archiveSearch.toLowerCase().trim();
+    const matchesSearch = (u.full_name?.toLowerCase() || '').includes(term) ||
+                          (u.email?.toLowerCase() || '').includes(term) ||
+                          (u.id_number?.toLowerCase() || '').includes(term);
+    const matchesRole = archiveRoleFilter === 'All Roles' || u.role?.toLowerCase() === archiveRoleFilter.toLowerCase();
+    const joined = u.created_at ? new Date(u.created_at) : null;
+    const matchesMonth = !archiveMonthFilter || joined?.getMonth() + 1 === Number(archiveMonthFilter);
+    const matchesDay = !archiveDayFilter || joined?.getDate() === Number(archiveDayFilter);
+    const matchesYear = !archiveYearFilter || joined?.getFullYear() === Number(archiveYearFilter);
+    return matchesSearch && matchesRole && matchesMonth && matchesDay && matchesYear;
+  });
+
+  const archiveYears = [...new Set(archivedUsers
+    .filter((u) => u.created_at)
+    .map((u) => new Date(u.created_at).getFullYear()))].sort((a, b) => b - a);
+
+  // When the filters change, drop selected accounts that are no longer visible,
+  // so bulk Restore / Delete never touches accounts hidden by a filter.
+  useEffect(() => {
+    setSelectedArchivedIds((prev) => {
+      const next = prev.filter((id) => filteredArchivedUsers.some((u) => u.id === id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [archiveSearch, archiveRoleFilter, archiveMonthFilter, archiveDayFilter, archiveYearFilter]);
+
   const selectedArchivedCount = selectedArchivedIds.length;
-  const allArchivedSelected = archivedUsers.length > 0 && selectedArchivedCount === archivedUsers.length;
+  const allArchivedSelected = filteredArchivedUsers.length > 0 && filteredArchivedUsers.every((u) => selectedArchivedIds.includes(u.id));
   const someArchivedSelected = selectedArchivedCount > 0 && !allArchivedSelected;
 
+  // "Select All" selects everything matching the current search/filters.
   const toggleArchivedSelectAll = () => {
-    setSelectedArchivedIds(allArchivedSelected ? [] : archivedUsers.map((u) => u.id));
+    setSelectedArchivedIds(allArchivedSelected ? [] : filteredArchivedUsers.map((u) => u.id));
   };
 
   const toggleArchivedUser = (id) => {
@@ -1187,9 +1264,35 @@ const ManageAccount = () => {
         </>
       ) : (
         <>
+          {/* Archived search + filters (same style as User List / Role Requests) */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
+            <TextField placeholder="Search archived accounts, ID, or email..." size="medium" fullWidth={isMobile} value={archiveSearch} onChange={(e) => setArchiveSearch(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
+            <TextField select size="medium" label="Month" value={archiveMonthFilter} onChange={(e) => setArchiveMonthFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="">All Months</MenuItem>
+              {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
+            </TextField>
+            <TextField select size="medium" label="Date" value={archiveDayFilter} onChange={(e) => setArchiveDayFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="">All Dates</MenuItem>
+              {dayOptions.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+            </TextField>
+            <TextField select size="medium" label="Year" value={archiveYearFilter} onChange={(e) => setArchiveYearFilter(e.target.value)} sx={{ minWidth: 125, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="">All Years</MenuItem>
+              {archiveYears.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+            </TextField>
+            <TextField select size="medium" label="Filter Role" value={archiveRoleFilter} onChange={(e) => setArchiveRoleFilter(e.target.value)} sx={{ minWidth: 180, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="All Roles">All Roles</MenuItem>
+              <MenuItem value="superadmin">Superadmin</MenuItem>
+              <MenuItem value="admin">Admin</MenuItem>
+              <MenuItem value="client">User</MenuItem>
+            </TextField>
+            {(archiveSearch || archiveMonthFilter || archiveDayFilter || archiveYearFilter || archiveRoleFilter !== 'All Roles') && (
+              <Button variant="text" onClick={() => { setArchiveSearch(''); setArchiveMonthFilter(''); setArchiveDayFilter(''); setArchiveYearFilter(''); setArchiveRoleFilter('All Roles'); }} sx={{ fontWeight: 700 }}> RESET </Button>
+            )}
+          </Stack>
+
           {/* Archived bulk-selection bar — only appears once something is selected
               (on mobile it stays so the "Select All" checkbox is reachable) */}
-          {archivedUsers.length > 0 && (isMobile || selectedArchivedCount > 0) && (
+          {filteredArchivedUsers.length > 0 && (isMobile || selectedArchivedCount > 0) && (
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
               spacing={1.5}
@@ -1206,11 +1309,11 @@ const ManageAccount = () => {
                       onChange={toggleArchivedSelectAll}
                     />
                   }
-                  label={<Typography variant="body2" fontWeight={700}>Select All ({selectedArchivedCount} of {archivedUsers.length} selected)</Typography>}
+                  label={<Typography variant="body2" fontWeight={700}>Select All ({selectedArchivedCount} of {filteredArchivedUsers.length} selected)</Typography>}
                 />
               ) : (
                 <Typography variant="body2" fontWeight={700} color="text.secondary">
-                  {selectedArchivedCount} of {archivedUsers.length} selected
+                  {selectedArchivedCount} of {filteredArchivedUsers.length} selected
                 </Typography>
               )}
               {selectedArchivedCount > 0 && (
@@ -1242,10 +1345,10 @@ const ManageAccount = () => {
 
           {isMobile ? (
             <Stack spacing={2} alignItems="center">
-              {archivedUsers.length === 0 ? (
+              {filteredArchivedUsers.length === 0 ? (
                 <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600, py: 8 }}> No archived accounts found. </Typography>
               ) : (
-                archivedUsers.map((user) => (
+                filteredArchivedUsers.map((user) => (
                   <Paper key={user.id} sx={{ p: 3, width: '100%', borderRadius: 2, textAlign: 'center', bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}` }}>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: -1 }}>
                       <Checkbox
@@ -1299,7 +1402,7 @@ const ManageAccount = () => {
                       checked={allArchivedSelected}
                       indeterminate={someArchivedSelected}
                       onChange={toggleArchivedSelectAll}
-                      disabled={archivedUsers.length === 0}
+                      disabled={filteredArchivedUsers.length === 0}
                       inputProps={{ 'aria-label': 'Select all archived accounts' }}
                       sx={{
                         color: 'white',
@@ -1316,10 +1419,10 @@ const ManageAccount = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {archivedUsers.length === 0 ? (
+                {filteredArchivedUsers.length === 0 ? (
                   <TableRow><TableCell colSpan={6} align="center" sx={{ py: 8 }}><Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}> No archived accounts found. </Typography></TableCell></TableRow>
                 ) : (
-                  archivedUsers.map((user) => (
+                  filteredArchivedUsers.map((user) => (
                     <TableRow key={user.id} hover selected={selectedArchivedIds.includes(user.id)}>
                       <TableCell padding="checkbox">
                         <Checkbox
@@ -1534,11 +1637,12 @@ const ManageAccount = () => {
             InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
           />
           
+          {/* ID Number: formatted (00-00-000000) for User/Admin, free-form for Superadmin */}
           <FormInput 
             label="ID Number" 
-            placeholder="23-02-000104" 
+            placeholder={isSuperadminRole(formData.role) ? 'Enter ID Number' : '23-02-000104'} 
             value={formData.idNumber} 
-            onChange={(e) => setFormData({ ...formData, idNumber: formatIdNumber(e.target.value) })} 
+            onChange={(e) => setFormData({ ...formData, idNumber: handleIdNumberInput(e.target.value, formData.role) })} 
             InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
           />
           
@@ -1596,7 +1700,15 @@ const ManageAccount = () => {
             label="Role" 
             fullWidth 
             value={formData.role} 
-            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+            onChange={(e) => {
+              const newRole = e.target.value;
+              // When switching back to a non-superadmin role, re-apply the ID format.
+              setFormData({
+                ...formData,
+                role: newRole,
+                idNumber: isSuperadminRole(newRole) ? formData.idNumber : formatIdNumber(formData.idNumber)
+              });
+            }}
             InputProps={{ startAdornment: <AdminPanelSettingsIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
           >
             <MenuItem value="client">User</MenuItem>
@@ -1605,7 +1717,9 @@ const ManageAccount = () => {
           </FormInput>
 
           <Typography variant="caption" color="text.secondary">
-            Requirement: Must use <b>@goldenlink.ph</b> domain and at least 8 characters with uppercase, lowercase, a number, and a special character (e.g. !@#$%^&*). ID Number, if provided, must follow the <b>00-00-000000</b> format.
+            Requirement: Must use <b>@goldenlink.ph</b> domain and at least 8 characters with uppercase, lowercase, a number, and a special character (e.g. !@#$%^&*). {isSuperadminRole(formData.role)
+              ? <>ID Number for <b>Superadmin</b> has no required format.</>
+              : <>ID Number, if provided, must follow the <b>00-00-000000</b> format.</>}
           </Typography>
         </Stack>
       </ActionModal>
@@ -1626,11 +1740,12 @@ const ManageAccount = () => {
             InputProps={{ startAdornment: <BadgeIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
           />
           
+          {/* ID Number: formatted (00-00-000000) for User/Admin, free-form for Superadmin */}
           <FormInput 
             label="ID Number" 
-            placeholder="23-02-000104" 
+            placeholder={isSuperadminRole(editData.role) ? 'Enter ID Number' : '23-02-000104'} 
             value={editData.idNumber} 
-            onChange={(e) => setEditData({ ...editData, idNumber: formatIdNumber(e.target.value) })} 
+            onChange={(e) => setEditData({ ...editData, idNumber: handleIdNumberInput(e.target.value, editData.role) })} 
             InputProps={{ startAdornment: <FingerprintIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
           />
           
@@ -1663,7 +1778,15 @@ const ManageAccount = () => {
             label="Role" 
             fullWidth 
             value={editData.role} 
-            onChange={(e) => setEditData({ ...editData, role: e.target.value })}
+            onChange={(e) => {
+              const newRole = e.target.value;
+              // When switching back to a non-superadmin role, re-apply the ID format.
+              setEditData({
+                ...editData,
+                role: newRole,
+                idNumber: isSuperadminRole(newRole) ? editData.idNumber : formatIdNumber(editData.idNumber)
+              });
+            }}
             InputProps={{ startAdornment: <AdminPanelSettingsIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
           >
             <MenuItem value="client">User</MenuItem>
