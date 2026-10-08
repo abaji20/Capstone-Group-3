@@ -24,6 +24,21 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
   
   const displayRank = rank || doc.rank || 1;
 
+  // Smaller font as the title gets longer, so the full title always fits
+  const getTitleFontSize = (title = '') => {
+    const len = title.length;
+    if (len <= 40) {
+      return { xs: '1.4rem', sm: '1.8rem', md: '2.25rem', lg: '2.75rem', xl: '3rem' };
+    }
+    if (len <= 80) {
+      return { xs: '1.15rem', sm: '1.4rem', md: '1.75rem', lg: '2.1rem', xl: '2.3rem' };
+    }
+    if (len <= 130) {
+      return { xs: '1rem', sm: '1.2rem', md: '1.45rem', lg: '1.75rem', xl: '1.9rem' };
+    }
+    return { xs: '0.9rem', sm: '1.05rem', md: '1.25rem', lg: '1.5rem', xl: '1.6rem' };
+  };
+
   const getImageUrl = (url) => {
     if (!url) return null;
     if (url.startsWith('http')) return url;
@@ -113,16 +128,19 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
 
           {/* Content Overlay */}
           <Box sx={{ 
-            p: { xs: 2.5, md: 8 }, 
-            width: { xs: '100%', md: '65%' },
+            p: { xs: 2.5, sm: 4, md: 6, lg: 8 }, 
+            pr: { lg: 2 },
+            width: { xs: '100%', md: '70%', lg: '58%' },
             zIndex: 2,
             color: '#fff',
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            minWidth: 0,
+            boxSizing: 'border-box',
           }}>
-            
+
             <Box sx={{ 
               bgcolor: '#1976d2', 
               color: '#fff', 
@@ -131,36 +149,51 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
               fontWeight: '600', 
               fontSize: '0.65rem', 
               width: 'fit-content', 
-              height: 'fit-content',
+              flexShrink: 0,
               mb: 1.5,
               textTransform: 'uppercase',
               letterSpacing: 1
             }}>
               #{displayRank} Spotlight
             </Box>
-            
+
+            {/* TITLE - font size shrinks based on title length, never cut off */}
             <Typography 
               variant="h2" 
+              title={doc.title}
               fontWeight="900" 
               sx={{ 
-                fontSize: { xs: '1.5rem', md: '3.5rem' },
-                lineHeight: 1.1,
-                mb: 0.5,
-                textShadow: '0 2px 10px rgba(0,0,0,0.8)'
+                fontSize: getTitleFontSize(doc.title),
+                lineHeight: 1.15,
+                mb: 1,
+                textShadow: '0 2px 10px rgba(0,0,0,0.8)',
+                wordBreak: 'break-word',
+                flexShrink: 0,
               }}
             >
               {doc.title}
             </Typography>
-            
-            {/* Metadata Section: Author, Genre, and Category */}
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, flexWrap: 'wrap' }}>
-              <Typography variant="subtitle1" sx={{ opacity: 0.9, fontWeight: 700, fontSize: { xs: '0.8rem', md: '1rem' } }}>
+
+            {/* Metadata: Author, Category, Genre */}
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, flexWrap: 'wrap', rowGap: 0.5, flexShrink: 0 }}>
+              <Typography 
+                variant="subtitle1" 
+                sx={{ 
+                  opacity: 0.9, 
+                  fontWeight: 700, 
+                  fontSize: { xs: '0.75rem', md: '0.9rem' },
+                  maxWidth: { xs: '100%', md: '280px' },
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 By <span style={{ color: '#1976d2' }}>{doc.author}</span>
               </Typography>
               <Typography sx={{ opacity: 0.5 }}>|</Typography>
-              
+
               <Typography sx={{ 
-                fontSize: { xs: '0.75rem', md: '0.9rem' }, 
+                fontSize: { xs: '0.7rem', md: '0.85rem' }, 
                 fontWeight: 600, 
                 color: '#fff',
                 textTransform: 'uppercase',
@@ -172,7 +205,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
               <Typography sx={{ opacity: 0.3 }}>•</Typography>
 
               <Typography sx={{ 
-                fontSize: { xs: '0.75rem', md: '0.9rem' }, 
+                fontSize: { xs: '0.7rem', md: '0.85rem' }, 
                 fontWeight: 600, 
                 color: '#1976d2',
                 textTransform: 'capitalize' 
@@ -180,26 +213,29 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
                 {doc.genre || 'General'}
               </Typography>
             </Stack>
-            
-            <Box sx={{ 
-              mb: 3, 
-              maxWidth: '500px',
-              maxHeight: { xs: '80px', md: '120px' },
-              overflowY: 'auto',
-              scrollbarWidth: 'none',
-              '&::-webkit-scrollbar': { display: 'none' },
-            }}>
-              <Typography variant="body1" sx={{ 
-                fontSize: { xs: '0.85rem', md: '1rem' },
+
+            {/* Description - max 3 lines (2 on mobile) */}
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                fontSize: { xs: '0.8rem', md: '0.9rem', lg: '0.95rem' },
                 lineHeight: 1.6,
                 opacity: 0.85,
-                textAlign: 'justify'
-              }}>
-                {doc.description}
-              </Typography>
-            </Box>
-            
-            <Stack direction="row" spacing={2}>
+                textAlign: 'justify',
+                maxWidth: '500px',
+                mb: { xs: 2, md: 3 },
+                display: '-webkit-box',
+                WebkitBoxOrient: 'vertical',
+                WebkitLineClamp: { xs: 2, md: 3 },
+                overflow: 'hidden',
+                wordBreak: 'break-word',
+                flexShrink: 0,
+              }}
+            >
+              {doc.description}
+            </Typography>
+
+            <Stack direction="row" spacing={2} sx={{ flexShrink: 0 }}>
               <Button 
                 variant="contained" 
                 onClick={handleRead}  
@@ -212,6 +248,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
                   textTransform: 'none',
                   borderRadius: '6px',
                   fontSize: { xs: '0.8rem', md: '0.9rem' },
+                  whiteSpace: 'nowrap',
                   '&:hover': { bgcolor: '#110835' }
                 }}
               >
@@ -230,6 +267,7 @@ const FeaturedBanner = ({ doc, rank, onNext, onPrev }) => {
                   textTransform: 'none',
                   borderRadius: '6px',
                   fontSize: { xs: '0.8rem', md: '0.9rem' },
+                  whiteSpace: 'nowrap',
                   bgcolor: 'rgba(0,0,0,0.3)',
                   backdropFilter: 'blur(4px)',
                   '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.1)' }

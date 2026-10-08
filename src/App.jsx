@@ -44,7 +44,7 @@ export const ColorModeContext = createContext({ toggleColorMode: () => {} });
 
 function App() {
   const [role, setRole] = useState(() => sessionStorage.getItem('current_tab_role') || null);
-  const [loading, setLoading] = useState(() => !sessionStorage.getItem('current_tab_role'));
+  const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState(localStorage.getItem('themeMode') || 'light');
   const modeRef = useRef(mode);
   const transitionSnapshotRef = useRef(null);
@@ -165,13 +165,10 @@ function App() {
   useEffect(() => {
     const isResetting = window.location.pathname === '/forgot-password';
 
-    // 1. Initial check scoped strictly to this tab's sessionStorage
+    // 1. Restore a session only when this tab has previously authenticated.
     supabase.auth.getSession().then(({ data: { session } }) => {
       const activeRole = sessionStorage.getItem('current_tab_role');
       if (session && activeRole && !isResetting) {
-        fetchUserRole(session.user.id);
-      } else if (session && !activeRole && !isResetting && window.location.pathname === '/login') {
-        // If session exists but no tab role, check status anyway
         fetchUserRole(session.user.id);
       } else {
         setRole(null);
@@ -198,16 +195,10 @@ function App() {
         return;
       }
 
-      // ONLY process login if this tab was explicitly on the login page or already logged in
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        const storedRole = sessionStorage.getItem('current_tab_role');
-        const isLoginPage = window.location.pathname === '/login';
-
-        if (session && (storedRole || isLoginPage)) {
-          fetchUserRole(session.user.id);
-        } else {
-          setLoading(false);
-        }
+      if (event === 'INITIAL_SESSION' && sessionStorage.getItem('current_tab_role')) {
+        fetchUserRole(session.user.id);
+      } else if (event === 'SIGNED_IN' && sessionStorage.getItem('tab_login_in_progress') === 'true') {
+        fetchUserRole(session.user.id);
       }
     });
 

@@ -32,11 +32,11 @@ export const navLinks = {
   client: [
     // MAIN group — reachable via the topbar hamburger drawer (no longer shown
     // inline in the toolbar row, now that Search covers browsing there).
+    { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, group: 'profile' },
     { name: 'Library', path: '/browse', icon: <LibraryBooksIcon />, group: 'main' },
     { name: 'Request Upload', path: '/request-upload', icon: <PublishIcon />, group: 'main' },
 
     // PROFILE group — Dashboard moved here per earlier grouping requirement
-    { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, group: 'profile' },
     { name: 'Downloads', path: '/my-downloads', icon: <HistoryIcon />, group: 'profile' },
   ]
 };

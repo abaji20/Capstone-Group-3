@@ -95,6 +95,7 @@ const Login = () => {
     setLoading(true);
     
     try {
+      sessionStorage.setItem('tab_login_in_progress', 'true');
       const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
       
       if (authError) {
@@ -173,6 +174,7 @@ const Login = () => {
       console.error("Unexpected login error:", err);
       setError("An unexpected error occurred. Please try again.");
     } finally {
+      sessionStorage.removeItem('tab_login_in_progress');
       setLoading(false);
     }
   };

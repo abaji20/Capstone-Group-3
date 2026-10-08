@@ -746,7 +746,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
                   >
                     <MenuItem value="">None</MenuItem>
                     <MenuItem value="superadmin">Superadmin</MenuItem>
-                    <MenuItem value="client">Client</MenuItem>
+                    <MenuItem value="client">User</MenuItem>
                   </Select>
                 </FormControl>
 
