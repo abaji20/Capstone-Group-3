@@ -7,10 +7,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("Missing Supabase environment variables!");
 }
 
-// 1. Standard Client (Uses sessionStorage — wipes auth state when tab closes)
+// 1. Standard Client (Keep auth sessions scoped to the current tab)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: window.sessionStorage, // <-- this line prevents the cross-tab bug
+    storage: window.sessionStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
