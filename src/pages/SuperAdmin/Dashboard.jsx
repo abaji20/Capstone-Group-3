@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Box, Typography, Grid, Paper, Avatar, useTheme,
+  Box, Typography, Grid, Paper, Avatar, useTheme, useMediaQuery,
   Container, Stack, Button, Menu, MenuItem, Dialog, 
   DialogTitle, DialogContent, DialogContentText, DialogActions,
   Select, Chip, Table, TableBody, TableCell, 
@@ -278,6 +278,8 @@ const Dashboard = () => {
 
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
+  // Phones (< 600px). Used only to tune the chart for narrow screens.
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Week navigation limits: nothing after the current week, nothing before
   // the week containing Jan 1 of firstDownloadYear.
@@ -773,13 +775,13 @@ const Dashboard = () => {
           </DialogActions>
         </Dialog>
 
-        {/* 8 Metric Cards Grid - Fully Responsive */}
+        {/* 8 Metric Cards Grid - Fully Responsive (2 per row on phones) */}
         <Grid container spacing={{ xs: 2, md: 2.5 }} sx={{ mb: 4 }}>
           {statCardsData.map((item, idx) => (
-            <Grid key={idx} size={{ xs: 12, sm: 6, md: 3, lg: 1.5 }}>
+            <Grid key={idx} size={{ xs: 6, sm: 3, md: 3, lg: 1.5 }}>
               <Paper sx={{ 
                 ...commonPaperStyle, 
-                p: 2, 
+                p: { xs: 1.5, sm: 2 }, 
                 display: 'flex', 
                 flexDirection: 'column', 
                 alignItems: 'center', 
@@ -792,7 +794,7 @@ const Dashboard = () => {
                   borderColor: item.color
                 }
               }}>
-                <Box sx={{ background: isDarkMode ? 'rgba(255,255,255,0.14)' : item.bg, p: 1.5, borderRadius: '12px', mb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Box sx={{ background: isDarkMode ? 'rgba(255,255,255,0.14)' : item.bg, p: { xs: 1, sm: 1.5 }, borderRadius: '12px', mb: { xs: 1, sm: 1.5 }, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {item.icon}
                 </Box>
                 <Typography variant="caption" sx={{ color: isDarkMode ? 'rgba(255,255,255,0.78)' : 'text.secondary', fontWeight: 700, mb: 0.5 }}>
@@ -843,12 +845,20 @@ const Dashboard = () => {
                   ))}
                 </Select>
               </Box>
-              <Box sx={{ width: '100%', height: 300, p: { xs: 1, sm: 2 } }}>
+              <Box sx={{ width: '100%', height: { xs: 260, sm: 300 }, p: { xs: 0.5, sm: 2 } }}>
                 <LineChart
-                  xAxis={[{ scaleType: 'point', data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] }]}
-                  series={[{ data: monthlyDownloads, color: '#3b82f6', area: true, showMark: true, label: 'Downloads' }]}
-                  height={280}
-                  margin={{ top: 20, bottom: 25, left: 45, right: 25 }}
+                  xAxis={[{
+                    scaleType: 'point',
+                    data: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    // On phones show every other month, plus December as the year-end label.
+                    tickLabelInterval: (value, index) => !isMobile || index % 2 === 0 || index === 11,
+                    tickLabelStyle: { fontSize: isMobile ? 10 : 12 },
+                  }]}
+                  series={[{ data: monthlyDownloads, color: '#3b82f6', area: true, showMark: !isMobile, label: 'Downloads' }]}
+                  height={isMobile ? 240 : 280}
+                  margin={isMobile
+                    ? { top: 20, bottom: 25, left: 30, right: 15 }
+                    : { top: 20, bottom: 25, left: 45, right: 25 }}
                 />
               </Box>
             </Paper>

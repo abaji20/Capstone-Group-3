@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Box, Typography, CircularProgress, Stack, TextField, 
-  MenuItem, Container, Divider, useTheme, Grid, useMediaQuery 
+import {
+  Box, Typography, CircularProgress, Stack, TextField,
+  MenuItem, Container, Divider, useTheme, useMediaQuery,
+  InputAdornment, IconButton, Badge, Button
 } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
+import TuneIcon from '@mui/icons-material/Tune';
 import { PdfCard } from '../../shared';
 import { supabase } from '../../supabaseClient';
 // Month names for the Month filter (1 = January ... 12 = December)
@@ -26,9 +29,13 @@ const buildNumericOptionList = (docs, field, order = 'asc') => {
   return ['All', ...unique];
 };
 
+const MONTH_OPTIONS = ['All', ...MONTH_NAMES.map((_, i) => i + 1)];
+const DAY_OPTIONS = ['All', ...Array.from({ length: 31 }, (_, i) => i + 1)];
+
 const MyDownloads = () => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [downloads, setDownloads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,15 +43,15 @@ const MyDownloads = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [genreFilter, setGenreFilter] = useState('All');
   const [sectionFilter, setSectionFilter] = useState('All');
+  const [showFilters, setShowFilters] = useState(true); // toggled by the tune icon on mobile
 
   // Publication date filters
   const [yearFilter, setYearFilter] = useState('All');
   const [monthFilter, setMonthFilter] = useState('All');
   const [dayFilter, setDayFilter] = useState('All');
 
-  // Colors based on your provided typography and shading preferences
   const dynamicStyles = {
-    inputBg: isDarkMode ? '#1e293b' : '#f1f5f9', 
+    inputBg: isDarkMode ? '#1e293b' : '#f1f5f9',
     textPrimary: isDarkMode ? '#ffffff' : '#213C51',
     accent: '#1976d2',
     borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
@@ -57,7 +64,7 @@ const MyDownloads = () => {
   const handleDownload = async (pdf) => {
     try {
       const { data, error } = await supabase.storage
-        .from('pdfs') 
+        .from('pdfs')
         .createSignedUrl(pdf.file_url, 60);
 
       if (error) throw error;
@@ -82,9 +89,9 @@ const MyDownloads = () => {
         if (user) {
           const { data, error } = await supabase
             .from('downloads')
-            .select('pdfs(*)') 
+            .select('pdfs(*)')
             .eq('user_id', user.id);
-          
+
           if (error) throw error;
 
           const uniquePdfsMap = new Map();
@@ -95,24 +102,20 @@ const MyDownloads = () => {
           });
           setDownloads(Array.from(uniquePdfsMap.values()));
         }
-      } catch (error) { 
-        console.error(error); 
-      } finally { 
-        setLoading(false); 
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
       }
     };
     fetchMyDownloads();
   }, []);
 
-  /**
-   * Updated Genre Logic:
-   * Splits genres by comma, trims whitespace, and creates a unique list
-   */
+  // Genres are comma-separated: split, trim, de-duplicate
   const availableGenres = useMemo(() => {
     const allGenres = new Set();
     downloads.forEach(doc => {
       if (doc.genre) {
-        // Split by comma, trim spaces, and add each to the Set
         doc.genre.split(',').forEach(g => {
           const trimmed = g.trim();
           if (trimmed) allGenres.add(trimmed);
@@ -122,11 +125,6 @@ const MyDownloads = () => {
     return ['All', ...Array.from(allGenres).sort()];
   }, [downloads]);
 
-  // Month (Jan-Dec) and Day (1-31) always show the full range.
-  const MONTH_OPTIONS = ['All', ...MONTH_NAMES.map((_, i) => i + 1)];
-  const DAY_OPTIONS = ['All', ...Array.from({ length: 31 }, (_, i) => i + 1)];
-
-  // Section and Year lists come from this user's own download history only.
   const availableSections = useMemo(() => buildOptionList(downloads, 'section'), [downloads]);
   // published_date holds the publication YEAR; most recent year first.
   const availableYears = useMemo(() => buildNumericOptionList(downloads, 'published_date', 'desc'), [downloads]);
@@ -138,49 +136,82 @@ const MyDownloads = () => {
                           (doc.author && doc.author.toLowerCase().includes(q)) ||
                           (doc.isbn && doc.isbn.toLowerCase().includes(q)) ||
                           (doc.edition && doc.edition.toLowerCase().includes(q));
-      
-      // Check if the selected genre exists within the comma-separated string
-      const matchGenre = genreFilter === 'All' || 
+
+      const matchGenre = genreFilter === 'All' ||
                          (doc.genre && doc.genre.split(',').map(g => g.trim()).includes(genreFilter));
 
       const matchSection = sectionFilter === 'All' || doc.section === sectionFilter;
-
       const matchYear = yearFilter === 'All' || Number(doc.published_date) === Number(yearFilter);
       const matchMonth = monthFilter === 'All' || Number(doc.published_month) === Number(monthFilter);
       const matchDay = dayFilter === 'All' || Number(doc.published_day) === Number(dayFilter);
-      
-      const matchTab = activeTab === 'LIBRARY' || 
+
+      const matchTab = activeTab === 'LIBRARY' ||
                        (activeTab === 'BOOKS' && doc.category?.toLowerCase() === 'book') ||
                        (activeTab === 'ACADEMIC PAPERS' && doc.category?.toLowerCase() === 'academic paper');
-      
+
       return matchSearch && matchGenre && matchSection && matchYear && matchMonth && matchDay && matchTab;
     });
   }, [downloads, searchQuery, genreFilter, sectionFilter, yearFilter, monthFilter, dayFilter, activeTab]);
 
-  // Shared look for every filter dropdown
-  const filterSx = { 
-    minWidth: { xs: '100%', sm: 180 }, 
-    flex: { sm: 1 }, 
-    bgcolor: dynamicStyles.inputBg, 
-    borderRadius: 1 
+  const activeFilterCount = [genreFilter, sectionFilter, yearFilter, monthFilter, dayFilter]
+    .filter(v => v !== 'All').length;
+
+  const clearFilters = () => {
+    setGenreFilter('All');
+    setSectionFilter('All');
+    setYearFilter('All');
+    setMonthFilter('All');
+    setDayFilter('All');
   };
-  const filterInputProps = { sx: { '& fieldset': { border: 'none' } } };
+
+  // Shared look for every filter dropdown (outlined, like the search modal)
+  const filterSx = {
+    width: '100%',
+    '& .MuiOutlinedInput-root': {
+      bgcolor: isDarkMode ? '#1e293b' : '#fafafa',
+      borderRadius: 1,
+      '& fieldset': { borderColor: dynamicStyles.borderColor }
+    }
+  };
+
+  const filters = [
+    { label: 'Genre', value: genreFilter, set: setGenreFilter, options: availableGenres },
+    { label: 'Section', value: sectionFilter, set: setSectionFilter, options: availableSections },
+    { label: 'Year', value: yearFilter, set: setYearFilter, options: availableYears },
+    {
+      label: 'Month', value: monthFilter, set: setMonthFilter, options: MONTH_OPTIONS,
+      render: (o) => (o === 'All' ? 'All' : MONTH_NAMES[o - 1])
+    },
+    { label: 'Day', value: dayFilter, set: setDayFilter, options: DAY_OPTIONS },
+  ];
 
   return (
-    <Box sx={{ p: { xs: 2, md: 4 }, pt: 12, bgcolor: 'background.default', minHeight: '100vh' }}>
-      <Container maxWidth="xl">
-        
+    <Box
+      sx={{
+        px: { xs: 1.5, sm: 2, md: 4 },
+        pb: 4,
+        pt: { xs: 10, md: 12 },
+        bgcolor: 'background.default',
+        minHeight: '100vh',
+        width: '100%',
+        boxSizing: 'border-box',
+        overflowX: 'hidden'
+      }}
+    >
+      <Container maxWidth="xl" disableGutters>
+
         {/* HEADER SECTION */}
-        <Box sx={{ mb: 4 }}>
-          <Typography 
-            variant="h3" 
-            sx={{ 
-              fontStyle: 'italic', fontWeight: 900, 
-              color: dynamicStyles.textPrimary, 
+        <Box sx={{ mb: { xs: 3, md: 4 } }}>
+          <Typography
+            variant="h3"
+            sx={{
+              fontStyle: 'italic', fontWeight: 900,
+              color: dynamicStyles.textPrimary,
               fontFamily: "'Montserrat', sans-serif",
-              fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' },
+              fontSize: { xs: '1.6rem', sm: '2.5rem', md: '3rem' },
               letterSpacing: '1px',
-              textTransform: 'uppercase'
+              textTransform: 'uppercase',
+              wordBreak: 'break-word'
             }}
           >
             Download History
@@ -190,71 +221,84 @@ const MyDownloads = () => {
           </Typography>
         </Box>
 
-        {/* SEARCH */}
-        <TextField 
-          fullWidth size="medium" placeholder="Search history..." value={searchQuery} 
-          onChange={(e) => setSearchQuery(e.target.value)} 
-          InputProps={{ sx: { bgcolor: dynamicStyles.inputBg, borderRadius: 1 } }}
-          sx={{ mb: 2, '& fieldset': { border: 'none' } }}
+        {/* SEARCH (with filter toggle icon on mobile) */}
+        <TextField
+          fullWidth
+          placeholder="Search titles, authors, ISBN..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: 'text.secondary' }} />
+              </InputAdornment>
+            ),
+            endAdornment: isMobile ? (
+              <InputAdornment position="end">
+                <IconButton
+                  onClick={() => setShowFilters(s => !s)}
+                  aria-label="Toggle filters"
+                  edge="end"
+                  color={showFilters ? 'primary' : 'default'}
+                >
+                  <Badge color="primary" badgeContent={activeFilterCount} invisible={activeFilterCount === 0}>
+                    <TuneIcon />
+                  </Badge>
+                </IconButton>
+              </InputAdornment>
+            ) : null
+          }}
+          sx={{
+            mb: 2,
+            '& .MuiOutlinedInput-root': {
+              bgcolor: isDarkMode ? '#1e293b' : '#fafafa',
+              borderRadius: 1,
+              '& fieldset': { borderColor: dynamicStyles.borderColor }
+            }
+          }}
         />
 
-        {/* FILTERS SECTION — wraps on smaller screens */}
-        <Stack direction="row" flexWrap="wrap" gap={2} sx={{ mb: 6 }}>
-          <TextField
-            select size="medium" label="Genre" value={genreFilter}
-            onChange={(e) => setGenreFilter(e.target.value)}
-            sx={filterSx} InputProps={filterInputProps}
+        {/* FILTERS — 2 columns on mobile, 3 on tablet, 5 on desktop */}
+        {(!isMobile || showFilters) && (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: 'repeat(2, minmax(0, 1fr))',
+                sm: 'repeat(3, minmax(0, 1fr))',
+                md: 'repeat(5, minmax(0, 1fr))'
+              },
+              gap: { xs: 1.5, md: 2 },
+              mb: { xs: 2, md: 4 }
+            }}
           >
-            {availableGenres.map((option) => (
-              <MenuItem key={option} value={option}>{option}</MenuItem>
+            {filters.map((f) => (
+              <TextField
+                key={f.label}
+                select
+                size="small"
+                label={f.label}
+                value={f.value}
+                onChange={(e) => f.set(e.target.value)}
+                sx={filterSx}
+              >
+                {f.options.map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {f.render ? f.render(option) : option}
+                  </MenuItem>
+                ))}
+              </TextField>
             ))}
-          </TextField>
-
-          <TextField
-            select size="medium" label="Section" value={sectionFilter}
-            onChange={(e) => setSectionFilter(e.target.value)}
-            sx={filterSx} InputProps={filterInputProps}
-          >
-            {availableSections.map((option) => (
-              <MenuItem key={option} value={option}>{option}</MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select size="medium" label="Year" value={yearFilter}
-            onChange={(e) => setYearFilter(e.target.value)}
-            sx={filterSx} InputProps={filterInputProps}
-          >
-            {availableYears.map((option) => (
-              <MenuItem key={option} value={option}>{option}</MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select size="medium" label="Month" value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-            sx={filterSx} InputProps={filterInputProps}
-          >
-            {MONTH_OPTIONS.map((option) => (
-              <MenuItem key={option} value={option}>
-                {option === 'All' ? 'All' : MONTH_NAMES[option - 1]}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select size="medium" label="Day" value={dayFilter}
-            onChange={(e) => setDayFilter(e.target.value)}
-            sx={filterSx} InputProps={filterInputProps}
-          >
-            {DAY_OPTIONS.map((option) => (
-              <MenuItem key={option} value={option}>{option}</MenuItem>
-            ))}
-          </TextField>
-        </Stack>
+            {activeFilterCount > 0 && (
+              <Box sx={{ gridColumn: '1 / -1' }}>
+                <Button size="small" onClick={clearFilters}>Clear filters</Button>
+              </Box>
+            )}
+          </Box>
+        )}
 
         {/* TAB NAVIGATION */}
-        <Stack direction="row" spacing={4} sx={{ mb: 2, overflowX: 'auto', pb: 1, '&::-webkit-scrollbar': { display: 'none' } }}>
+        <Stack direction="row" spacing={{ xs: 3, sm: 4 }} sx={{ mb: 2, overflowX: 'auto', pb: 1, '&::-webkit-scrollbar': { display: 'none' } }}>
           {['LIBRARY', 'BOOKS', 'ACADEMIC PAPERS'].map((tab) => (
             <Typography
               key={tab}
@@ -275,23 +319,51 @@ const MyDownloads = () => {
           ))}
         </Stack>
 
-        <Divider sx={{ mb: 6, borderColor: dynamicStyles.borderColor }} />
+        <Divider sx={{ mb: { xs: 3, md: 6 }, borderColor: dynamicStyles.borderColor }} />
 
-        {/* GRID LAYOUT */}
+        {/* Keep cards packed at their natural desktop width; use wider columns only on small screens. */}
         {loading ? (
           <Box sx={{ textAlign: 'center', py: 10 }}><CircularProgress /></Box>
         ) : filteredDocs.length > 0 ? (
-          <Grid container spacing={3}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: 'repeat(2, minmax(0, 1fr))',
+                sm: 'repeat(3, minmax(0, 1fr))',
+                md: 'repeat(auto-fill, minmax(175px, 175px))'
+              },
+              gap: { xs: 1.5, sm: 2.5, md: '24px' },
+              alignItems: { xs: 'stretch', md: 'start' },
+              width: '100%'
+            }}
+          >
             {filteredDocs.map((doc) => (
-              <Grid item xs={6} sm={4} md={3} lg={2.4} key={doc.id}>
-                <PdfCard 
-                  pdf={doc} 
-                  downloadLabel="DOWNLOAD" 
-                  onDownload={() => handleDownload(doc)} 
+              <Box
+                key={doc.id}
+                sx={{
+                  minWidth: 0,
+                  display: { xs: 'flex', md: 'block' },
+                  // Only below md: force the card to fill its grid cell so phones/tablets
+                  // get even 2/3-column cards. On desktop the card keeps its original size.
+                  [theme.breakpoints.down('md')]: {
+                    '& > *': {
+                      width: '100% !important',
+                      maxWidth: '100% !important',
+                      minWidth: 0,
+                      margin: '0 !important'
+                    }
+                  }
+                }}
+              >
+                <PdfCard
+                  pdf={doc}
+                  downloadLabel="DOWNLOAD"
+                  onDownload={() => handleDownload(doc)}
                 />
-              </Grid>
+              </Box>
             ))}
-          </Grid>
+          </Box>
         ) : (
           <Box sx={{ textAlign: 'center', py: 10 }}>
             <Typography color="text.secondary">No documents found matching your filters.</Typography>

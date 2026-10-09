@@ -39,13 +39,7 @@ import {
 } from '../../utils/formatPublishedDate';
 // NEW: tidy sectioned layout + autofill colour fix
 import FormSection, { span, autofillFix } from '../../shared/FormLayout';
-
-// Preset options for the Section dropdown — same list used on the user-side
-// request form, kept free-text-friendly via "Other" since it isn't a DB enum.
-const SECTION_OPTIONS = [
-  'Fiction', 'Nonfiction', 'High School', 'Bibliography', 'Reference',
-  'Thesis', 'Capstone Project', 'Research Paper', 'Other'
-];
+import SECTION_OPTIONS from '../../shared/sectionOptions';
 
 const EMPTY_FORM = { 
   title: '', author: '', genre: '', category: 'book', published_date: '', description: '',

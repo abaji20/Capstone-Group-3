@@ -11,13 +11,7 @@ import { MONTH_NAMES, getDaysInMonth, isFutureDate, normalizePubDate } from '../
 // NEW: same sectioned, responsive grid layout used on the Upload form
 // (PdfUploads.jsx) instead of the old ad-hoc Stack rows.
 import FormSection, { span, autofillFix } from '../shared/FormLayout';
-
-// Same preset list used on the upload form — kept free-text-friendly via
-// "Other" since it isn't a DB enum.
-const SECTION_OPTIONS = [
-  'Fiction', 'Nonfiction', 'High School', 'Bibliography', 'Reference',
-  'Thesis', 'Capstone Project', 'Research Paper', 'Other'
-];
+import SECTION_OPTIONS from './sectionOptions';
 
 const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
   const theme = useTheme();

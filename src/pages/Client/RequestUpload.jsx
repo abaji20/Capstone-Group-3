@@ -22,14 +22,7 @@ import {
 } from '../../utils/formatPublishedDate';
 // NEW: tidy sectioned layout + autofill colour fix
 import FormSection, { span } from '../../shared/FormLayout';
-
-// Preset options for the Section dropdown. Kept as a plain array (not an
-// enum in the DB) so admins/users aren't blocked by values not on this list —
-// "Other" falls back to free text.
-const SECTION_OPTIONS = [
-  'Fiction', 'Nonfiction', 'High School', 'Bibliography', 'Reference',
-  'Thesis', 'Capstone Project', 'Research Paper', 'Other'
-];
+import SECTION_OPTIONS from '../../shared/sectionOptions';
 
 const EMPTY_FORM = { 
   title: '', author: '', description: '', genre: '', 

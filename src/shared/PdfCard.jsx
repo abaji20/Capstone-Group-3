@@ -93,7 +93,7 @@ const useFitText = (text, { max, min, step = 0.5 } = {}) => {
   return ref;
 };
 
-const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
+const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal", fluid = false }) => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
 
@@ -222,8 +222,9 @@ const PdfCard = ({ pdf, downloadLabel = "Download", variant = "normal" }) => {
         ...poppinsFont,
         height: '100%', display: 'flex', flexDirection: 'column',
         borderRadius: 2, 
-        maxWidth: isSmall ? { xs: 130, sm: 145 } : 175, 
-        minWidth: isSmall ? { xs: 130, sm: 145 } : 175, 
+        width: fluid ? '100%' : undefined,
+        maxWidth: fluid ? 'none' : isSmall ? { xs: 130, sm: 145 } : 175,
+        minWidth: fluid ? 0 : isSmall ? { xs: 130, sm: 145 } : 175,
         flexShrink: 0,
         bgcolor: isDarkMode ? '#1e293b' : '#ffffff',
         transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',

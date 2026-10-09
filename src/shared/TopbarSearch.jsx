@@ -7,6 +7,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import CloseIcon from '@mui/icons-material/Close';
 import TuneIcon from '@mui/icons-material/Tune';
 import PdfCard from './PdfCard';
+import SECTION_OPTIONS from './sectionOptions';
 import { fetchPdfs } from '../services/pdfService';
 
 const CATEGORY_TABS = [
@@ -27,32 +28,6 @@ const MONTH_OPTIONS = [
 
 // Always show days 1-31.
 const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => i + 1);
-
-// Default library sections. Edit this list to match the real sections of the
-// Goldenlink College library. Any extra section found in the database is
-// automatically added on top of these.
-const DEFAULT_SECTIONS = [
-  'Circulation',
-  'Filipiana',
-  'General Reference',
-  'General Collection',
-  'Fiction',
-  'Non-Fiction',
-  'Reserve',
-  'Periodicals',
-  'Journals & Magazines',
-  'Newspapers',
-  'Thesis & Dissertations',
-  'Research & Special Projects',
-  'Graduate Studies',
-  'Electronic Resources',
-  'Audio-Visual',
-  'Special Collection',
-  'Vertical Files',
-  'Textbooks',
-  'Children’s Section',
-  'Young Adult Section',
-];
 
 // Default programs/courses. Same idea: edit to match your school.
 const DEFAULT_PROGRAMS = [
@@ -164,7 +139,7 @@ const TopbarSearch = ({ open, onClose }) => {
 
   // Section & Program: defaults + real data.
   const sectionsList = useMemo(
-    () => buildMergedOptionList(documents, 'section', DEFAULT_SECTIONS),
+    () => buildMergedOptionList(documents, 'section', SECTION_OPTIONS),
     [documents]
   );
   const programsList = useMemo(
@@ -372,16 +347,16 @@ const TopbarSearch = ({ open, onClose }) => {
                 display: 'grid',
                 gap: { xs: 1, sm: 1.25, md: 1.5 },
                 gridTemplateColumns: {
-                  xs: 'repeat(auto-fill, minmax(130px, 130px))',
+                  xs: 'repeat(2, minmax(0, 1fr))',
                   sm: 'repeat(auto-fill, minmax(145px, 145px))',
                   md: 'repeat(auto-fill, minmax(150px, 150px))',
                 },
-                justifyContent: 'start',
+                justifyContent: { xs: 'stretch', sm: 'start' },
               }}
             >
               {visibleResults.map((doc) => (
                 <Box key={doc.id} sx={{ display: 'flex', minWidth: 0 }}>
-                  <PdfCard pdf={doc} variant="small" />
+                  <PdfCard pdf={doc} variant="small" fluid={isMobile} />
                 </Box>
               ))}
             </Box>
