@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, CircularProgress, Typography, Stack, Chip, useTheme, useMediaQuery, 
-  Container, Button, Modal, Fade, Backdrop, Checkbox, FormControlLabel
+  Container, Button, Modal, Fade, Backdrop, Checkbox, FormControlLabel,
+  TextField, MenuItem, InputAdornment
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
 
@@ -12,6 +13,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import SpeakerNotesOffIcon from '@mui/icons-material/SpeakerNotesOff';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import SearchIcon from '@mui/icons-material/Search';
 
 const PendingActions = () => {
   const theme = useTheme();
@@ -20,6 +22,11 @@ const PendingActions = () => {
 
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All Statuses');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [dayFilter, setDayFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
 
   // --- SELECTION STATE (Select All + individual checkboxes -> bulk delete) ---
   // Only finished requests (APPROVED / REJECTED / CANCELLED) can be selected.
@@ -84,6 +91,33 @@ const PendingActions = () => {
 
   // --- SELECTION LOGIC ---
   const deletableRequests = requests.filter((req) => req.status !== 'PENDING');
+  const monthOptions = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' }
+  ];
+  const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+  const requestYears = [...new Set(requests
+    .filter((request) => request.created_at)
+    .map((request) => new Date(request.created_at).getFullYear())
+    .filter(Number.isFinite))].sort((a, b) => b - a);
+  const filteredRequests = requests.filter((request) => {
+    const query = searchTerm.trim().toLowerCase();
+    const matchesSearch = [
+      request.pdfs?.title,
+      request.reason,
+      request.remarks,
+      request.status
+    ].some((value) => value?.toLowerCase().includes(query));
+    const matchesStatus = statusFilter === 'All Statuses' || request.status === statusFilter;
+    const createdAt = request.created_at ? new Date(request.created_at) : null;
+    const matchesMonth = !monthFilter || createdAt?.getMonth() + 1 === Number(monthFilter);
+    const matchesDay = !dayFilter || createdAt?.getDate() === Number(dayFilter);
+    const matchesYear = !yearFilter || createdAt?.getFullYear() === Number(yearFilter);
+
+    return matchesSearch && matchesStatus && matchesMonth && matchesDay && matchesYear;
+  });
 
   // Drop selections that are gone or became PENDING again.
   useEffect(() => {
@@ -186,6 +220,73 @@ const PendingActions = () => {
           </Box>
         ) : (
           <>
+            <Stack
+              direction={{ xs: 'column', md: 'row' }}
+              spacing={2}
+              useFlexGap
+              flexWrap="wrap"
+              sx={{ mb: 3 }}
+            >
+              <TextField
+                placeholder="Search by document, reason, remarks..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                sx={{ flex: '1 1 260px', bgcolor: isDarkMode ? '#28334e' : '#ffffff' }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon color="primary" />
+                    </InputAdornment>
+                  )
+                }}
+              />
+              <TextField
+                select
+                label="Status"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                sx={{ minWidth: 155, bgcolor: isDarkMode ? '#28334e' : '#ffffff' }}
+              >
+                {['All Statuses', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'].map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {status === 'All Statuses' ? status : status.charAt(0) + status.slice(1).toLowerCase()}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                select
+                label="Month"
+                value={monthFilter}
+                onChange={(event) => setMonthFilter(event.target.value)}
+                sx={{ minWidth: 145, bgcolor: isDarkMode ? '#28334e' : '#ffffff' }}
+              >
+                <MenuItem value="">All Months</MenuItem>
+                {monthOptions.map((month) => (
+                  <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                select
+                label="Date"
+                value={dayFilter}
+                onChange={(event) => setDayFilter(event.target.value)}
+                sx={{ minWidth: 125, bgcolor: isDarkMode ? '#28334e' : '#ffffff' }}
+              >
+                <MenuItem value="">All Dates</MenuItem>
+                {dayOptions.map((day) => <MenuItem key={day} value={day}>{day}</MenuItem>)}
+              </TextField>
+              <TextField
+                select
+                label="Year"
+                value={yearFilter}
+                onChange={(event) => setYearFilter(event.target.value)}
+                sx={{ minWidth: 125, bgcolor: isDarkMode ? '#28334e' : '#ffffff' }}
+              >
+                <MenuItem value="">All Years</MenuItem>
+                {requestYears.map((year) => <MenuItem key={year} value={year}>{year}</MenuItem>)}
+              </TextField>
+            </Stack>
+
             {/* Bulk-selection bar — only appears once something is selected
                 (on mobile it stays so the "Select All" checkbox is reachable,
                 as long as at least one log is deletable) */}
@@ -228,9 +329,21 @@ const PendingActions = () => {
               </Stack>
             )}
 
-            {isMobile ? (
+            {filteredRequests.length === 0 ? (
+              <Box sx={{
+                textAlign: 'center', py: 8, bgcolor: cardBg, borderRadius: 2,
+                border: `1px dashed ${borderCol}`
+              }}>
+                <Typography variant="h6" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                  No matching requests
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.disabled' }}>
+                  Try changing or clearing your search and filters.
+                </Typography>
+              </Box>
+            ) : isMobile ? (
               <Stack spacing={2}>
-                {requests.map((req) => (
+                {filteredRequests.map((req) => (
                   <Paper key={req.id} sx={{ 
                     p: 2, borderRadius: 1, bgcolor: cardBg, 
                     borderLeft: `6px solid ${theme.palette[getStatusColor(req.status)].main}`,
@@ -326,7 +439,7 @@ const PendingActions = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {requests.map((req) => (
+                    {filteredRequests.map((req) => (
                       <TableRow key={req.id} hover selected={selectedIds.includes(req.id)}>
                         <TableCell padding="checkbox">
                           <Checkbox
