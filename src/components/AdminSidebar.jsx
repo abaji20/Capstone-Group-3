@@ -59,6 +59,7 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
   // MODAL STATES
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isConfirmUpdateOpen, setIsConfirmUpdateOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   
@@ -75,6 +76,8 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
   // Password state & Validation
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
   const validatePassword = (password) => {
     if (!password) {
@@ -111,6 +114,13 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     const value = e.target.value;
     setNewPassword(value);
     validatePassword(value);
+    setConfirmPasswordError(confirmPassword && value !== confirmPassword ? 'Passwords do not match' : '');
+  };
+
+  const handleConfirmPasswordChange = (e) => {
+    const value = e.target.value;
+    setConfirmPassword(value);
+    setConfirmPasswordError(value && value !== newPassword ? 'Passwords do not match' : '');
   };
   
   const [requestData, setRequestData] = useState({ role: '', reason: '' });
@@ -152,9 +162,28 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     fetchProfile();
   }, []);
 
+  const handleRequestProfileUpdate = () => {
+    if (newPassword.trim() !== '' && !validatePassword(newPassword)) {
+      setNotify({ open: true, message: 'Please fulfill all password requirements!', severity: 'error' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setConfirmPasswordError('Passwords do not match');
+      setNotify({ open: true, message: 'Please make sure both password fields match.', severity: 'error' });
+      return;
+    }
+    setIsConfirmUpdateOpen(true);
+  };
+
   const handleUpdateProfile = async () => {
     if (newPassword.trim() !== '' && !validatePassword(newPassword)) {
       setNotify({ open: true, message: 'Please fulfill all password requirements!', severity: 'error' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setConfirmPasswordError('Passwords do not match');
+      setNotify({ open: true, message: 'Please make sure both password fields match.', severity: 'error' });
+      setIsConfirmUpdateOpen(false);
       return;
     }
 
@@ -245,6 +274,9 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
     }
     setNewPassword('');
     setPasswordError('');
+    setConfirmPassword('');
+    setConfirmPasswordError('');
+    setIsConfirmUpdateOpen(false);
     setIsProfileModalOpen(false);
     setRequestData({ role: '', reason: '' }); 
     setLoading(false);
@@ -640,11 +672,11 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
 
       {/* PROFILE SETTINGS MODAL */}
       <ActionModal 
-        open={isProfileModalOpen} 
+        open={isProfileModalOpen && !isConfirmUpdateOpen}
         onClose={() => setIsProfileModalOpen(false)} 
         title="Edit Administrator Profile" 
-        onConfirm={handleUpdateProfile} 
-        confirmText={loading ? "Saving..." : "Save Changes"}
+        onConfirm={handleRequestProfileUpdate}
+        confirmText="Save Changes"
       >
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name || ''} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
@@ -690,6 +722,17 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
             error={Boolean(passwordError)}
             helperText={passwordError || "Must be at least 8 characters with uppercase, lowercase, and numbers."}
             InputProps={{ startAdornment: <LockIcon sx={{ mr: 1, opacity: 0.7 }} /> }} 
+          />
+
+          <FormInput
+            type="password"
+            label="Confirm New Password"
+            placeholder="Re-enter your new password"
+            value={confirmPassword}
+            onChange={handleConfirmPasswordChange}
+            error={Boolean(confirmPasswordError)}
+            helperText={confirmPasswordError || "Enter the same password as above."}
+            InputProps={{ startAdornment: <LockIcon sx={{ mr: 1, opacity: 0.7 }} /> }}
           />
 
           {latestRequest?.status === 'rejected' && (
@@ -760,6 +803,18 @@ const AdminSidebar = ({ mobileOpen, handleDrawerToggle }) => {
             </>
           ) : null}
         </Stack>
+      </ActionModal>
+
+      <ActionModal
+        open={isConfirmUpdateOpen}
+        onClose={() => setIsConfirmUpdateOpen(false)}
+        title="Confirm Profile Update"
+        onConfirm={handleUpdateProfile}
+        confirmText={loading ? "Updating..." : "Yes, Update"}
+      >
+        <Typography sx={{ mt: 1 }}>
+          Are you sure you want to update your administrator profile with these changes?
+        </Typography>
       </ActionModal>
     </Box>
   );

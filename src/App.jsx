@@ -164,6 +164,11 @@ function App() {
 
   useEffect(() => {
     const isResetting = window.location.pathname === '/forgot-password';
+    const clearTabRole = () => {
+      setRole(null);
+      sessionStorage.removeItem('current_tab_role');
+      setLoading(false);
+    };
 
     // 1. Restore a session only when this tab has previously authenticated.
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -188,10 +193,22 @@ function App() {
         return;
       }
 
-      if (event === 'SIGNED_OUT' || !session) {
-        setRole(null);
-        sessionStorage.removeItem('current_tab_role');
-        setLoading(false);
+      if (event === 'SIGNED_OUT') {
+        // Supabase broadcasts auth events between tabs. Only clear this tab's
+        // role if its own sessionStorage-backed session was actually removed.
+        setTimeout(async () => {
+          const { data: { session: tabSession }, error } = await supabase.auth.getSession();
+          if (error) {
+            console.error("Error checking tab session after sign-out:", error);
+            return;
+          }
+          if (!tabSession) clearTabRole();
+        }, 0);
+        return;
+      }
+
+      if (!session) {
+        clearTabRole();
         return;
       }
 

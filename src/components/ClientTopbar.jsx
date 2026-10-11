@@ -60,6 +60,7 @@ const ClientTopbar = () => {
   const [initialUserData, setInitialUserData] = useState({ full_name: '', year_level: '' });
   const [requestData, setRequestData] = useState({ role: '', reason: '' });
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isConfirmUpdateOpen, setIsConfirmUpdateOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notify, setNotify] = useState({ open: false, message: '', severity: 'success' });
 
@@ -136,6 +137,8 @@ const ClientTopbar = () => {
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
+  const handleRequestProfileUpdate = () => setIsConfirmUpdateOpen(true);
+
   const handleUpdateProfile = async () => {
     setLoading(true);
 
@@ -199,6 +202,7 @@ const ClientTopbar = () => {
 
     setInitialUserData({ full_name: userData.full_name, year_level: userData.year_level });
     setIsProfileModalOpen(false);
+    setIsConfirmUpdateOpen(false);
     setRequestData({ role: '', reason: '' });
     setLoading(false);
   };
@@ -393,7 +397,7 @@ const ClientTopbar = () => {
         </Toolbar>
       </AppBar>
 
-      <ActionModal open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} title="Edit User Information" onConfirm={handleUpdateProfile} confirmText={loading ? "Saving..." : "Save Changes"}>
+      <ActionModal open={isProfileModalOpen && !isConfirmUpdateOpen} onClose={() => setIsProfileModalOpen(false)} title="Edit User Information" onConfirm={handleRequestProfileUpdate} confirmText="Save Changes">
         <Stack spacing={2.5} sx={{ mt: 2 }}>
           <FormInput label="Full Name" value={userData.full_name} onChange={(e) => setUserData({...userData, full_name: e.target.value})} InputProps={{ startAdornment: <PersonIcon sx={{ mr: 1, opacity: 0.7 }} /> }} />
 
@@ -478,6 +482,18 @@ const ClientTopbar = () => {
             </>
           ) : null}
         </Stack>
+      </ActionModal>
+
+      <ActionModal
+        open={isConfirmUpdateOpen}
+        onClose={() => setIsConfirmUpdateOpen(false)}
+        title="Confirm Profile Update"
+        onConfirm={handleUpdateProfile}
+        confirmText={loading ? "Updating..." : "Yes, Update"}
+      >
+        <Typography sx={{ mt: 1 }}>
+          Are you sure you want to update your profile with these changes?
+        </Typography>
       </ActionModal>
 
       {/* Hamburger drawer: Dashboard, Library, Request Upload, Downloads */}
