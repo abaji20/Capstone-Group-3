@@ -789,6 +789,7 @@ const AdminDashboard = () => {
               type="date"
               size="small"
               fullWidth
+              sx={{ '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' } }}
               label="Jump to date"
               InputLabelProps={{ shrink: true }}
               value={toInputDate(weekStart)}

@@ -754,12 +754,13 @@ const Dashboard = () => {
                   <Typography variant="caption" color="text.secondary">Current week (up to today)</Typography>
                 )}
               </Box>
-              <IconButton onClick={() => shiftWeek(1)} disabled={!canGoNext}><ChevronRightIcon /></IconButton>
+              <IconButton sx={{ color: isDarkMode ? '#ffffff' : '#000000' }} onClick={() => shiftWeek(1)} disabled={!canGoNext}><ChevronRightIcon /></IconButton>
             </Stack>
             <TextField
               type="date"
               size="small"
               fullWidth
+              sx={{ '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' } }}
               label="Jump to date"
               InputLabelProps={{ shrink: true }}
               value={toInputDate(weekStart)}
