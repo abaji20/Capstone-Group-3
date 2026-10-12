@@ -63,7 +63,8 @@ app.post('/api/create-user', async (req, res) => {
       id: authData.user.id,
       email: email,
       full_name: fullName,
-      role: role
+      role: role,
+      is_confirm: Boolean(authData.user.email_confirmed_at)
     }]);
 
     if (profileError) {

@@ -14,7 +14,8 @@ export const exportAccountsToExcel = (accounts, { includeRole = true, filename =
     'Year Level': u.year_level || '',
     Email: u.email || '',
     ...(includeRole ? { Role: roleLabel(u.role) } : {}),
-    Status: u.computed_is_active ? 'Active' : 'Deactive',
+    Status: u.is_confirm === false ? 'Pending Confirmation' : (u.computed_is_active ? 'Active' : 'Deactive'),
+    'Email Confirmation': u.is_confirm === false ? 'Pending' : 'Confirmed',
     'Joined Date': u.created_at ? new Date(u.created_at).toLocaleDateString() : '',
   }));
 
@@ -22,7 +23,7 @@ export const exportAccountsToExcel = (accounts, { includeRole = true, filename =
   ws['!cols'] = [
     { wch: 28 }, { wch: 16 }, { wch: 32 }, { wch: 12 }, { wch: 32 },
     ...(includeRole ? [{ wch: 12 }] : []),
-    { wch: 10 }, { wch: 14 },
+    { wch: 10 }, { wch: 20 }, { wch: 14 },
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Accounts');

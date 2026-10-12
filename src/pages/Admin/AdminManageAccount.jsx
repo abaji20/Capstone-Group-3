@@ -3,7 +3,7 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Stack, Typography, MenuItem, TextField, InputAdornment, Avatar,
   IconButton, Chip, useTheme, useMediaQuery, Divider, Snackbar, Alert,
-  CircularProgress, Button, Menu
+  CircularProgress, Button, Menu, Tooltip
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { PrimaryButton, ActionModal, FormInput } from '../../shared';
@@ -141,6 +141,7 @@ const AdminManageAccount = () => {
 
     const inactive = (profiles || []).filter((u) =>
       u.is_active !== false &&
+      u.is_confirm !== false &&
       u.role?.toLowerCase() !== 'superadmin' &&
       new Date(u.last_active_at || u.created_at) < oneYearAgo
     );
@@ -201,14 +202,23 @@ const AdminManageAccount = () => {
   // Re-activating also resets last_active_at so the nightly inactivity job
   // does not deactivate the account again right away.
   const handleStatusChange = async (targetUser, newActiveState) => {
+    if (targetUser.is_confirm === false) return;
+
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { data: updatedProfiles, error } = await supabase
         .from('profiles')
         .update(newActiveState ? { is_active: true, last_active_at: new Date().toISOString() } : { is_active: false })
-        .eq('id', targetUser.id);
+        .eq('id', targetUser.id)
+        .eq('is_confirm', true)
+        .select('id');
 
       if (error) throw error;
+      if (!updatedProfiles?.length) {
+        setNotify({ open: true, message: 'Confirm the email before changing account status.', severity: 'warning' });
+        fetchClients();
+        return;
+      }
 
       await createAuditLog(
         'Status Change',
@@ -328,7 +338,8 @@ const AdminManageAccount = () => {
           id_number: formData.idNumber,
           department: formData.department,
           year_level: formData.yearLevel,
-          role: 'client'
+          role: 'client',
+          is_confirm: Boolean(authData.user.email_confirmed_at)
         }]);
       
       if (profileError) throw profileError;
@@ -436,6 +447,7 @@ const AdminManageAccount = () => {
         (u.id_number || "").toLowerCase().includes(term) ||
         (u.department || "").toLowerCase().includes(term) ||
         (u.year_level || "").toLowerCase().includes(term) ||
+        (term.length > 0 && u.is_confirm === false && 'pending'.startsWith(term)) ||
         (term.length > 0 && statusText.startsWith(term));
 
       const createdDate = u.created_at ? new Date(u.created_at) : null;
@@ -469,6 +481,49 @@ const AdminManageAccount = () => {
   // --- STATUS CONTROL DROPDOWN (adapted from ManageAccount.jsx's StatusControlDropdown) ---
   const StatusControlDropdown = ({ user }) => {
     const isActive = user.computed_is_active;
+    if (user.is_confirm === false) {
+      return (
+        <Tooltip title="Waiting for email confirmation" arrow placement="top" enterTouchDelay={0}>
+          <Box component="span" sx={{ display: 'inline-flex' }}>
+            <TextField
+              select
+              size="small"
+              value="pending"
+              disabled
+              SelectProps={{ IconComponent: () => null }}
+              sx={{
+                minWidth: 135,
+                '& .MuiSelect-select': {
+                  py: 0.75,
+                  paddingLeft: '20px !important',
+                  paddingRight: '32px !important',
+                  textAlign: 'center !important',
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  color: '#ed6c02 !important',
+                  WebkitTextFillColor: '#ed6c02 !important',
+                  opacity: 1,
+                },
+                '& .MuiOutlinedInput-root.Mui-disabled .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDarkMode ? 'rgba(255,255,255,0.23)' : 'rgba(0,0,0,0.23)',
+                },
+                '& .MuiOutlinedInput-root.Mui-disabled': {
+                  opacity: 1,
+                  cursor: 'help',
+                },
+                '& .MuiSelect-icon': {
+                  right: 14,
+                  color: theme.palette.warning.dark,
+                },
+              }}
+            >
+              <MenuItem value="pending">Pending</MenuItem>
+            </TextField>
+          </Box>
+        </Tooltip>
+      );
+    }
+
     return (
       <TextField
         select
@@ -523,7 +578,7 @@ const AdminManageAccount = () => {
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
         <TextField 
           fullWidth 
-          placeholder="Search by name, email, ID, dept, year, or status..." 
+          placeholder="Search by name, email, ID, dept, year, or status..."
           value={searchTerm} 
           onChange={(e) => setSearchTerm(e.target.value)} 
           sx={{ bgcolor: inputBg, borderRadius: 0.5, ...removeAutofillBg }} 

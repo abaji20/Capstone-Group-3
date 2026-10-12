@@ -478,7 +478,7 @@ const AdminDashboard = () => {
     const now = new Date();
     const dateString = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     const [{ data: accounts }, { data: materials }, { data: requests }, { data: downloads }] = await Promise.all([
-      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_archived').eq('role', 'client').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_archived, is_confirm').eq('role', 'client').order('created_at', { ascending: false }),
       supabase.from('pdfs').select(MATERIAL_COLUMNS).order('created_at', { ascending: false }),
       supabase.from('upload_requests').select('id, status, created_at, user_id').order('created_at', { ascending: false }),
       supabase.from('downloads').select('id, user_id, pdf_id, downloaded_at').order('downloaded_at', { ascending: false })
@@ -512,11 +512,12 @@ const AdminDashboard = () => {
       Name: account.full_name || 'N/A', Email: account.email || 'N/A', Role: account.role || 'N/A',
       'ID Number': account.id_number || 'N/A', Department: account.department || 'N/A',
       'Year Level': account.year_level || 'N/A',
-      'Account Status': account.is_active === false ? 'Deactivated' : 'Active',
+      'Account Status': account.is_confirm === false ? 'Pending Confirmation' : (account.is_active === false ? 'Deactivated' : 'Active'),
+      'Email Confirmation': account.is_confirm === false ? 'Pending' : 'Confirmed',
       'Archived': account.is_archived ? 'Yes' : 'No',
       'Date Joined': formatReportDate(account.created_at)
     }));
-    const accountHeaders = ['Name', 'Email', 'Role', 'ID Number', 'Department', 'Year Level', 'Account Status', 'Archived', 'Date Joined'];
+    const accountHeaders = ['Name', 'Email', 'Role', 'ID Number', 'Department', 'Year Level', 'Account Status', 'Email Confirmation', 'Archived', 'Date Joined'];
     const accountSheet = XLSX.utils.json_to_sheet(accountRows, { header: accountHeaders });
     autoSizeColumns(accountSheet, accountRows, accountHeaders);
     XLSX.utils.book_append_sheet(wb, accountSheet, 'Account Information');
@@ -561,9 +562,10 @@ const AdminDashboard = () => {
   const executePdfExport = async () => {
     const now = new Date();
     const generatedDate = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
+    const [{ data: materials }, { data: accounts }, { data: accountDetails }, { data: requests }, { data: downloads }] = await Promise.all([
       supabase.from('pdfs').select(MATERIAL_COLUMNS).order('category').order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, role'),
+      supabase.from('profiles').select('id, email, full_name, department, id_number, year_level, created_at, is_active, is_confirm').eq('role', 'client').order('created_at', { ascending: false }),
       supabase.from('upload_requests').select('id').eq('status', 'pending'),
       supabase.from('downloads').select('id')
     ]);
@@ -592,6 +594,32 @@ const AdminDashboard = () => {
       userRequests: requests?.length || 0,
     });
 
+    if (nextY > 155) { doc.addPage(); nextY = 20; }
+    drawReportSectionLabel(doc, 'Registered User Accounts', REPORT_PAGE.margin, nextY, REPORT_NAVY);
+    if ((accountDetails || []).length > 0) {
+      autoTable(doc, {
+        startY: nextY + 4,
+        head: [['Name', 'Email', 'ID Number', 'Department', 'Year Level', 'Account Status', 'Email Confirmation', 'Date Joined']],
+        body: accountDetails.map(account => [
+          account.full_name || 'N/A', account.email || 'N/A', account.id_number || 'N/A',
+          account.department || 'N/A', account.year_level || 'N/A',
+          account.is_confirm === false ? 'Pending Confirmation' : (account.is_active === false ? 'Deactivated' : 'Active'),
+          account.is_confirm === false ? 'Pending' : 'Confirmed',
+          formatReportDate(account.created_at)
+        ]),
+        styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: REPORT_NAVY, textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [244, 247, 250] },
+        theme: 'grid',
+        margin: { top: 20, left: REPORT_PAGE.margin, right: REPORT_PAGE.margin, bottom: 16 }
+      });
+      nextY = doc.lastAutoTable.finalY + 12;
+    } else {
+      doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+      doc.text('No user accounts found.', REPORT_PAGE.margin, nextY + 9);
+      nextY += 20;
+    }
+
     nextY = drawMaterialTables(doc, materials || [], nextY);
 
     drawReportFooters(doc, generatedAt);
@@ -608,7 +636,7 @@ const AdminDashboard = () => {
     // Every query is scoped to the selected Monday-Sunday window.
     const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
       supabase.from('pdfs').select(MATERIAL_COLUMNS).gte('created_at', startISO).lt('created_at', endISO).order('category').order('created_at', { ascending: false }),
-      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at').gte('created_at', startISO).lt('created_at', endISO).order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_confirm').gte('created_at', startISO).lt('created_at', endISO).order('created_at', { ascending: false }),
       supabase.from('upload_requests').select('id').eq('status', 'pending').gte('created_at', startISO).lt('created_at', endISO),
       supabase.from('downloads').select('id').gte('downloaded_at', startISO).lt('downloaded_at', endISO)
     ]);
@@ -647,10 +675,12 @@ const AdminDashboard = () => {
     if (newClients.length > 0) {
       autoTable(doc, {
         startY: nextY + 4,
-        head: [['Name', 'Email', 'ID Number', 'Department', 'Year Level', 'Date Joined']],
+        head: [['Name', 'Email', 'ID Number', 'Department', 'Year Level', 'Account Status', 'Email Confirmation', 'Date Joined']],
         body: newClients.map(a => [
           a.full_name || 'N/A', a.email || 'N/A',
           a.id_number || 'N/A', a.department || 'N/A', a.year_level || 'N/A',
+          a.is_confirm === false ? 'Pending Confirmation' : (a.is_active === false ? 'Deactivated' : 'Active'),
+          a.is_confirm === false ? 'Pending' : 'Confirmed',
           formatReportDate(a.created_at)
         ]),
         styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },

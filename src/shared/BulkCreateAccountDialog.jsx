@@ -259,6 +259,7 @@ const BulkCreateAccountDialog = ({
       const { error } = await supabase.from('profiles').insert([{
         id: authData.user.id, email: d.email, full_name: d.fullName,
         id_number: d.idNumber, department: d.department, year_level: d.yearLevel, role: 'client',
+        is_confirm: Boolean(authData.user.email_confirmed_at),
       }]);
       if (error) throw error;
       return 'ok';
@@ -267,6 +268,7 @@ const BulkCreateAccountDialog = ({
       id: authData.user.id, email: d.email, full_name: d.fullName, role: d.role,
       department: d.department, id_number: d.idNumber, year_level: d.yearLevel,
       is_archived: false, is_active: true,
+      is_confirm: Boolean(authData.user.email_confirmed_at),
     }]);
     // Mirrors the single flow: the auth account exists, only the profile sync lagged.
     return error ? 'partial' : 'ok';
