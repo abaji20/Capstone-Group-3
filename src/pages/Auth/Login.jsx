@@ -301,7 +301,7 @@ const Login = () => {
                 src={glclogo}
                 alt="GLC Logo"
                 sx={{
-                  width: { xs: 50, md: 65, lg: 75 },
+                  width: { xs: 60, md: 100, lg: 120 },
                   height: 'auto',
                   mb: 0.5,
                   filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))',
