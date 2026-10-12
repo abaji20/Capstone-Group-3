@@ -187,12 +187,16 @@ const startOfWeek = (d) => {
   return x;
 };
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+const addMonths = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
 const pad = (n) => String(n).padStart(2, '0');
 const toInputDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const toInputMonth = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 const formatWeekRange = (start) => {
   const end = addDays(start, 6);
   return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 };
+const formatMonth = (month) => month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
 // ---------------------------------------------------------------------
 // Excel export helpers. Auto-sizes columns based on header + content
@@ -271,6 +275,8 @@ const Dashboard = () => {
   // Weekly report state
   const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [monthlyOpen, setMonthlyOpen] = useState(false);
+  const [monthStart, setMonthStart] = useState(() => startOfMonth(new Date()));
 
   // Book Detail Modal State ("See More")
   const [selectedBook, setSelectedBook] = useState(null);
@@ -288,6 +294,11 @@ const Dashboard = () => {
   const canGoNext = addDays(weekStart, 7) <= currentWeekStart;
   const canGoPrev = addDays(weekStart, -7) >= minWeekStart;
   const isCurrentWeek = weekStart.getTime() === currentWeekStart.getTime();
+  const currentMonthStart = startOfMonth(new Date());
+  const minMonthStart = startOfMonth(new Date(firstDownloadYear, 0, 1));
+  const canGoNextMonth = addMonths(monthStart, 1) <= currentMonthStart;
+  const canGoPrevMonth = addMonths(monthStart, -1) >= minMonthStart;
+  const isCurrentMonth = monthStart.getTime() === currentMonthStart.getTime();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -434,6 +445,26 @@ const Dashboard = () => {
     const picked = new Date(`${e.target.value}T00:00:00`);
     if (picked > new Date() || picked < new Date(firstDownloadYear, 0, 1)) return;
     setWeekStart(startOfWeek(picked));
+  };
+
+  const handleOpenMonthly = () => {
+    handleMenuClose();
+    setMonthStart(startOfMonth(new Date()));
+    setMonthlyOpen(true);
+  };
+
+  const shiftMonth = (dir) => {
+    const next = addMonths(monthStart, dir);
+    if (next > currentMonthStart || next < minMonthStart) return;
+    setMonthStart(next);
+  };
+
+  const handleJumpMonth = (e) => {
+    if (!e.target.value) return;
+    const [year, month] = e.target.value.split('-').map(Number);
+    const picked = new Date(year, month - 1, 1);
+    if (picked > currentMonthStart || picked < minMonthStart) return;
+    setMonthStart(picked);
   };
 
   const executeExcelExport = async () => {
@@ -682,6 +713,83 @@ const Dashboard = () => {
     doc.save(`Library_Weekly_Report_${toInputDate(weekStart)}_to_${toInputDate(addDays(weekStart, 6))}.pdf`);
   };
 
+  const executeMonthlyPdfExport = async () => {
+    setMonthlyOpen(false);
+    const now = new Date();
+    const startISO = monthStart.toISOString();
+    const endISO = addMonths(monthStart, 1).toISOString();
+    const monthLabel = formatMonth(monthStart);
+
+    const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
+      supabase.from('pdfs').select(MATERIAL_COLUMNS).gte('created_at', startISO).lt('created_at', endISO).order('category').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_confirm').gte('created_at', startISO).lt('created_at', endISO).order('created_at', { ascending: false }),
+      supabase.from('upload_requests').select('id').eq('status', 'pending').gte('created_at', startISO).lt('created_at', endISO),
+      supabase.from('downloads').select('id').gte('downloaded_at', startISO).lt('downloaded_at', endISO)
+    ]);
+
+    const totals = (accounts || []).reduce((result, account) => {
+      result.totalAccounts += 1;
+      if (account.role === 'client') result.users += 1;
+      if (account.role === 'admin') result.admins += 1;
+      if (account.role === 'superadmin') result.superAdmins += 1;
+      return result;
+    }, { totalAccounts: 0, users: 0, admins: 0, superAdmins: 0 });
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const generatedAt = now.toLocaleString();
+    let nextY = drawReportHeader(doc, `MONTHLY LIBRARY REPORT  |  ${monthLabel}`, generatedAt);
+    nextY = drawReportSummary(doc, nextY, {
+      registeredUsers: totals.users,
+      totalAccounts: totals.totalAccounts,
+      users: totals.users,
+      admins: totals.admins,
+      superAdmins: totals.superAdmins,
+      totalPdfs: materials?.length || 0,
+      pendingRequests: requests?.length || 0,
+      totalDownloads: downloads?.length || 0,
+      userRequests: requests?.length || 0,
+    });
+
+    if (nextY > 155) { doc.addPage(); nextY = 20; }
+    drawReportSectionLabel(doc, 'New Accounts This Month', REPORT_PAGE.margin, nextY, REPORT_NAVY);
+    if ((accounts || []).length > 0) {
+      autoTable(doc, {
+        startY: nextY + 4,
+        head: [['Name', 'Email', 'Role', 'ID Number', 'Department', 'Year Level', 'Account Status', 'Email Confirmation', 'Date Joined']],
+        body: accounts.map((account) => [
+          account.full_name || 'N/A', account.email || 'N/A',
+          account.role === 'client' ? 'User' : (account.role || 'N/A'),
+          account.id_number || 'N/A', account.department || 'N/A', account.year_level || 'N/A',
+          account.is_confirm === false ? 'Pending Confirmation' : (account.is_active === false ? 'Deactivated' : 'Active'),
+          account.is_confirm === false ? 'Pending' : 'Confirmed',
+          formatReportDate(account.created_at)
+        ]),
+        styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: REPORT_NAVY, textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [244, 247, 250] },
+        theme: 'grid',
+        margin: { top: 20, left: REPORT_PAGE.margin, right: REPORT_PAGE.margin, bottom: 16 }
+      });
+      nextY = doc.lastAutoTable.finalY + 12;
+    } else {
+      doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+      doc.text('No new accounts registered this month.', REPORT_PAGE.margin, nextY + 9);
+      nextY += 20;
+    }
+
+    if ((materials || []).length > 0) {
+      nextY = drawMaterialTables(doc, materials, nextY);
+    } else {
+      if (nextY > 155) { doc.addPage(); nextY = 20; }
+      drawReportSectionLabel(doc, 'Materials Added This Month', REPORT_PAGE.margin, nextY, REPORT_BLUE);
+      doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+      doc.text('No materials were added this month.', REPORT_PAGE.margin, nextY + 9);
+    }
+
+    drawReportFooters(doc, generatedAt);
+    doc.save(`Library_Monthly_Report_${toInputMonth(monthStart)}.pdf`);
+  };
+
   // Book detail dialog handlers
   const handleOpenBookDetail = (book) => {
     setSelectedBook(book);
@@ -749,6 +857,7 @@ const Dashboard = () => {
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
             <MenuItem onClick={() => handleSelectExportType('pdf')}>Generate PDF Report</MenuItem>
             <MenuItem onClick={handleOpenWeekly}>Generate Weekly PDF Report</MenuItem>
+            <MenuItem onClick={handleOpenMonthly}>Generate Monthly PDF Report</MenuItem>
             <MenuItem onClick={() => handleSelectExportType('excel')}>Generate Excel Workbook</MenuItem>
           </Menu>
         </Box>
@@ -801,6 +910,42 @@ const Dashboard = () => {
           <DialogActions sx={{ p: 2 }}>
             <Button onClick={() => setWeeklyOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>Cancel</Button>
             <Button onClick={executeWeeklyPdfExport} variant="contained" sx={{ color: '#ffffff', bgcolor: '#213C51', fontWeight: 700 }}>
+              Generate
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={monthlyOpen} onClose={() => setMonthlyOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontWeight: 800 }}>Monthly PDF Report</DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ mb: 2 }}>
+              Select a month. Future months can't be selected.
+            </DialogContentText>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <IconButton onClick={() => shiftMonth(-1)} disabled={!canGoPrevMonth}><ChevronLeftIcon /></IconButton>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography fontWeight={800}>{formatMonth(monthStart)}</Typography>
+                {isCurrentMonth && (
+                  <Typography variant="caption" color="text.secondary">Current month (up to today)</Typography>
+                )}
+              </Box>
+              <IconButton sx={{ color: isDarkMode ? '#ffffff' : '#000000' }} onClick={() => shiftMonth(1)} disabled={!canGoNextMonth}><ChevronRightIcon /></IconButton>
+            </Stack>
+            <TextField
+              type="month"
+              size="small"
+              fullWidth
+              sx={{ '& input::-webkit-calendar-picker-indicator': { filter: isDarkMode ? 'invert(1)' : 'none' } }}
+              label="Jump to month"
+              InputLabelProps={{ shrink: true }}
+              value={toInputMonth(monthStart)}
+              onChange={handleJumpMonth}
+              inputProps={{ min: toInputMonth(minMonthStart), max: toInputMonth(currentMonthStart) }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setMonthlyOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>Cancel</Button>
+            <Button onClick={executeMonthlyPdfExport} variant="contained" sx={{ color: '#ffffff', bgcolor: '#213C51', fontWeight: 700 }}>
               Generate
             </Button>
           </DialogActions>

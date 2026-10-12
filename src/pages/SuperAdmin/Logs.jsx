@@ -3,10 +3,13 @@ import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, 
   TableRow, Typography, CircularProgress, Stack, MenuItem, TextField, 
   InputAdornment, useTheme, useMediaQuery, Container, Card, CardContent,
-  Button, IconButton, Dialog, DialogActions, DialogContent, 
-  DialogContentText, DialogTitle, Tabs, Tab, Chip, Checkbox, FormControlLabel
+  Button, IconButton, Dialog, DialogActions, DialogContent, Menu,
+  DialogContentText, DialogTitle, Tabs, Tab, Chip, Checkbox, FormControlLabel,
+  Autocomplete, Alert
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // Icons
 import HistoryIcon from '@mui/icons-material/History';
@@ -15,6 +18,7 @@ import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import AssignmentLateIcon from '@mui/icons-material/AssignmentLate';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 
 // ---------------------------------------------------------------------
 // Category classification. Every audit_logs row is bucketed into one of
@@ -63,6 +67,28 @@ const getLogCategory = (log) => {
   return 'other';
 };
 
+const startOfWeek = (date) => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  return start;
+};
+const addDays = (date, amount) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+};
+const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+const addMonths = (date, amount) => new Date(date.getFullYear(), date.getMonth() + amount, 1);
+const pad = (value) => String(value).padStart(2, '0');
+const toInputDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+const toInputMonth = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
+const formatWeekRange = (start) => {
+  const end = addDays(start, 6);
+  return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+};
+const formatMonth = (date) => date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
 const Logs = () => {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
@@ -97,6 +123,21 @@ const Logs = () => {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteConfig, setDeleteConfig] = useState({ type: null, id: null }); // type: 'single' | 'bulk'
+  const [studentReportOpen, setStudentReportOpen] = useState(false);
+  const [verifiedAccounts, setVerifiedAccounts] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState(null);
+  const [reportError, setReportError] = useState('');
+  const [exportAnchor, setExportAnchor] = useState(null);
+  const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
+  const [weeklyStart, setWeeklyStart] = useState(() => startOfWeek(new Date()));
+  const [monthlyReportOpen, setMonthlyReportOpen] = useState(false);
+  const [monthlyStart, setMonthlyStart] = useState(() => startOfMonth(new Date()));
+  const firstLogYear = 2026;
+  const currentWeekStart = startOfWeek(new Date());
+  const minimumWeekStart = startOfWeek(new Date(firstLogYear, 0, 1));
+  const currentMonthStart = startOfMonth(new Date());
+  const minimumMonthStart = startOfMonth(new Date(firstLogYear, 0, 1));
 
   useEffect(() => { fetchLogs(); }, []);
   useEffect(() => { applyFilters(); }, [logs, searchTerm, roleFilter, monthFilter, dayFilter, yearFilter, activeCategory]);
@@ -107,7 +148,8 @@ const Logs = () => {
       const { data, error } = await supabase
         .from('audit_logs')
         .select(`
-          id, 
+          id,
+          user_id,
           action_type, 
           created_at, 
           description,
@@ -219,14 +261,179 @@ const Logs = () => {
 
   const getTargetName = (log) => {
     if (log.pdfs?.title) return log.pdfs.title;
-    if (log.description?.includes(': ')) return log.description.split(': ').pop();
-    const desc = log.description || "";
-    if (log.action_type?.toUpperCase().includes('ACCOUNT')) {
-      if (desc.includes('account for ')) return desc.split('account for ').pop();
-      if (desc.includes('for ')) return desc.split('for ').pop();
-      if (desc.includes('Updated ')) return desc.split('Updated ')[1].split(':')[0];
-    }
+    const desc = String(log.description || '').trim();
+    if (desc.includes(': ')) return desc.split(': ').pop().trim();
+    const accountTarget = desc.match(/(?:account|role request|profile)\s+for\s+(.+?)(?:\. Reason:.*)?$/i);
+    if (accountTarget) return accountTarget[1].trim().replace(/[.!]+$/, '');
+    const genericTarget = desc.match(/\bfor\s+(.+?)(?:\. Reason:.*)?$/i);
+    if (genericTarget) return genericTarget[1].trim().replace(/[.!]+$/, '');
     return "—";
+  };
+
+  const drawLogsPdf = (reportLogs, title, subtitle, fileName) => {
+    const sortedLogs = [...reportLogs].sort((a, b) => (
+      new Date(b.created_at || 0) - new Date(a.created_at || 0)
+    ));
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const generatedAt = new Date().toLocaleString();
+
+    doc.setFillColor(33, 60, 81);
+    doc.rect(0, 0, 297, 29, 'F');
+    doc.setFillColor(37, 99, 235);
+    doc.rect(0, 29, 297, 2.5, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(15);
+    doc.text(title, 14, 15);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(9);
+    if (subtitle) doc.text(subtitle, 14, 22);
+    doc.text(`Generated: ${generatedAt}`, 283, 22, { align: 'right' });
+
+    let nextY = subtitle ? 38 : 35;
+    const categories = LOG_CATEGORIES.filter((category) => category.key !== 'all');
+    categories.forEach((category) => {
+      const categoryLogs = sortedLogs.filter((log) => getLogCategory(log) === category.key);
+      if (!categoryLogs.length) return;
+      if (nextY > 175) {
+        doc.addPage();
+        nextY = 20;
+      }
+
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(33, 60, 81);
+      doc.text(`${category.label.toUpperCase()} (${categoryLogs.length})`, 14, nextY);
+      doc.setFont(undefined, 'normal');
+      autoTable(doc, {
+        startY: nextY + 3,
+        head: [['Date & Time', 'Performed By', 'Role', 'Action', 'Target', 'Details']],
+        body: categoryLogs.map((log) => [
+          log.created_at ? new Date(log.created_at).toLocaleString() : '—',
+          log.profiles?.full_name || log.profiles?.email || 'Unknown account',
+          log.profiles?.role === 'client' ? 'User' : (log.profiles?.role || 'N/A'),
+          (log.action_type || 'N/A').replace(/client/gi, 'user'),
+          getTargetName(log).replace(/client/gi, 'user'),
+          (log.description || '—').replace(/client/gi, 'user'),
+        ]),
+        styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: [33, 60, 81], textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [244, 247, 250] },
+        theme: 'grid',
+        margin: { top: 18, left: 14, right: 14, bottom: 16 },
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    });
+
+    if (!sortedLogs.length) {
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text('No activity logs match the selected account or current filters.', 14, nextY + 5);
+    }
+
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let page = 1; page <= totalPages; page += 1) {
+      doc.setPage(page);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(14, 198, 283, 198);
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text(`Generated ${generatedAt}`, 14, 203);
+      doc.text(`Page ${page} of ${totalPages}`, 283, 203, { align: 'right' });
+    }
+    doc.save(fileName);
+  };
+
+  const openIndividualReport = async () => {
+    setStudentReportOpen(true);
+    setSelectedAccount(null);
+    setVerifiedAccounts([]);
+    setReportError('');
+    setStudentsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, id_number, department, year_level, role')
+        .eq('is_confirm', true)
+        .eq('is_archived', false)
+        .order('full_name', { ascending: true });
+      if (error) throw error;
+      setVerifiedAccounts(data || []);
+    } catch (error) {
+      console.error('Error loading verified students for log report:', error);
+      setReportError('Unable to load verified student accounts. Please try again.');
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
+
+  const generateStudentLogsPdf = () => {
+    if (!selectedAccount) return;
+    setReportError('');
+
+    const accountName = selectedAccount.full_name || selectedAccount.email || 'Selected account';
+    const matchingLogs = logs.filter((log) => (
+      log.user_id === selectedAccount.id ||
+      String(log.description || '').toLocaleLowerCase().includes(accountName.toLocaleLowerCase())
+    ));
+    const fileName = accountName.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
+    drawLogsPdf(
+      matchingLogs,
+      'INDIVIDUAL ACCOUNT ACTIVITY LOG REPORT',
+      `Account: ${accountName}  |  ${selectedAccount.email || 'No email'}  |  Role: ${selectedAccount.role || 'N/A'}  |  ID: ${selectedAccount.id_number || 'N/A'}  |  Department: ${selectedAccount.department || 'N/A'}  |  Year Level: ${selectedAccount.year_level || 'N/A'}`,
+      `Individual_Activity_Logs_${fileName || 'account'}.pdf`
+    );
+    setStudentReportOpen(false);
+  };
+
+  const exportLogsForRange = (start, end, title, fileName) => {
+    const startTime = start.getTime();
+    const endTime = end.getTime();
+    const reportLogs = logs.filter((log) => {
+      const createdAt = log.created_at ? new Date(log.created_at).getTime() : NaN;
+      return Number.isFinite(createdAt) && createdAt >= startTime && createdAt < endTime;
+    });
+    drawLogsPdf(reportLogs, title, `Date range: ${start.toLocaleDateString()} – ${new Date(end.getTime() - 1).toLocaleDateString()}  |  Entries: ${reportLogs.length}`, fileName);
+  };
+
+  const handleJumpWeek = (event) => {
+    if (!event.target.value) return;
+    const selectedDate = new Date(`${event.target.value}T00:00:00`);
+    const selectedWeek = startOfWeek(selectedDate);
+    if (selectedWeek > currentWeekStart || selectedWeek < minimumWeekStart) return;
+    setWeeklyStart(selectedWeek);
+  };
+
+  const handleJumpMonth = (event) => {
+    if (!event.target.value) return;
+    const [year, month] = event.target.value.split('-').map(Number);
+    const selectedMonth = new Date(year, month - 1, 1);
+    if (selectedMonth > currentMonthStart || selectedMonth < minimumMonthStart) return;
+    setMonthlyStart(selectedMonth);
+  };
+
+  const canGoNextWeek = addDays(weeklyStart, 7) <= currentWeekStart;
+  const canGoPrevWeek = addDays(weeklyStart, -7) >= minimumWeekStart;
+  const canGoNextMonth = addMonths(monthlyStart, 1) <= currentMonthStart;
+  const canGoPrevMonth = addMonths(monthlyStart, -1) >= minimumMonthStart;
+  const shiftWeek = (direction) => {
+    const next = addDays(weeklyStart, direction * 7);
+    if (next <= currentWeekStart && next >= minimumWeekStart) setWeeklyStart(next);
+  };
+  const shiftMonth = (direction) => {
+    const next = addMonths(monthlyStart, direction);
+    if (next <= currentMonthStart && next >= minimumMonthStart) setMonthlyStart(next);
+  };
+
+  const handleOpenWeeklyExport = () => {
+    setExportAnchor(null);
+    setWeeklyStart(startOfWeek(new Date()));
+    setWeeklyReportOpen(true);
+  };
+  const handleOpenMonthlyExport = () => {
+    setExportAnchor(null);
+    setMonthlyStart(startOfMonth(new Date()));
+    setMonthlyReportOpen(true);
   };
 
   const openConfirm = (type, id = null) => {
@@ -379,6 +586,45 @@ const Logs = () => {
               </Typography>
             </Box>
           </Stack>
+          <Box>
+            <Button
+              variant="contained"
+              startIcon={<PictureAsPdfIcon />}
+              onClick={(event) => setExportAnchor(event.currentTarget)}
+              disabled={loading}
+              sx={{
+                bgcolor: '#213C51',
+                color: '#ffffff',
+                fontWeight: 700,
+                fontSize: '0.95rem',
+                borderRadius: '10px',
+                px: 3,
+                py: 1.25,
+                minHeight: 48,
+                boxShadow: '0 4px 14px rgba(33, 60, 81, 0.25)',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': { bgcolor: '#162836', transform: 'translateY(-2px)' },
+              }}
+            >
+              Export Logs
+            </Button>
+            <Menu anchorEl={exportAnchor} open={Boolean(exportAnchor)} onClose={() => setExportAnchor(null)}>
+              <MenuItem onClick={() => {
+                setExportAnchor(null);
+                drawLogsPdf(filteredLogs, 'ACTIVITY LOG REPORT', `Filtered log entries: ${filteredLogs.length}`, 'Activity_Logs_Report.pdf');
+              }}>
+                Export Logs PDF
+              </MenuItem>
+              <MenuItem onClick={handleOpenWeeklyExport}>Export Weekly Logs PDF</MenuItem>
+              <MenuItem onClick={handleOpenMonthlyExport}>Export Monthly Logs PDF</MenuItem>
+              <MenuItem onClick={() => {
+                setExportAnchor(null);
+                openIndividualReport();
+              }}>
+                Export Individual Logs PDF
+              </MenuItem>
+            </Menu>
+          </Box>
         </Stack>
 
         {/* CATEGORY TABS — groups the flat audit_logs stream into Accounts,
@@ -582,18 +828,9 @@ const Logs = () => {
                         <TableCell align="center">
                           <ActionButton action={log.action_type} />
                         </TableCell>
-                     <TableCell sx={{ fontWeight: 600 }}>
-  {log.pdfs?.title || 
-    /* Keeps database-matching string search intact, but replaces text displayed in UI if needed */
-    (log.description?.includes('Created client account for ') 
-      ? log.description.replace('client', 'user')
-      : (log.description?.includes('Created Client account for ')
-        ? log.description.replace('Client', 'User')
-        : (log.action_type?.toLowerCase().includes('delete') && log.description?.includes('for ') 
-          ? log.description.split('for ').pop() 
-          : (log.description?.includes(': ') ? log.description.split(': ').pop() : '—'))))
-  }
-</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>
+                        {getTargetName(log).replace(/client/gi, 'user')}
+                      </TableCell>
                         <TableCell sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
                           {/* Safely displays description with client-to-user terminology update in UI text */}
                           {log.description ? log.description.replace(/client/gi, 'user') : ''}
@@ -682,6 +919,150 @@ const Logs = () => {
             )}
           </>
         )}
+
+        <Dialog open={weeklyReportOpen} onClose={() => setWeeklyReportOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontWeight: 800 }}>Export Weekly Logs</DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ mb: 2 }}>
+              Choose a week (Monday to Sunday). Future weeks can't be selected.
+            </DialogContentText>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <IconButton onClick={() => shiftWeek(-1)} disabled={!canGoPrevWeek}><HistoryIcon /></IconButton>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography fontWeight={800}>{formatWeekRange(weeklyStart)}</Typography>
+                {weeklyStart.getTime() === currentWeekStart.getTime() && (
+                  <Typography variant="caption" color="text.secondary">Current week</Typography>
+                )}
+              </Box>
+              <IconButton onClick={() => shiftWeek(1)} disabled={!canGoNextWeek}><HistoryIcon /></IconButton>
+            </Stack>
+            <TextField
+              type="date"
+              size="small"
+              fullWidth
+              label="Jump to date"
+              InputLabelProps={{ shrink: true }}
+              value={toInputDate(weeklyStart)}
+              onChange={handleJumpWeek}
+              inputProps={{ min: `${firstLogYear}-01-01`, max: toInputDate(new Date()) }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setWeeklyReportOpen(false)} color="inherit">Cancel</Button>
+            <Button
+              onClick={() => {
+                setWeeklyReportOpen(false);
+                exportLogsForRange(
+                  weeklyStart,
+                  addDays(weeklyStart, 7),
+                  `WEEKLY ACTIVITY LOG REPORT - ${formatWeekRange(weeklyStart)}`,
+                  `Weekly_Activity_Logs_${toInputDate(weeklyStart)}.pdf`
+                );
+              }}
+              variant="contained"
+              sx={{ bgcolor: '#213C51', color: '#ffffff', fontWeight: 700 }}
+            >
+              Export PDF
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={monthlyReportOpen} onClose={() => setMonthlyReportOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontWeight: 800 }}>Export Monthly Logs</DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ mb: 2 }}>
+              Choose a month. Future months can't be selected.
+            </DialogContentText>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <IconButton onClick={() => shiftMonth(-1)} disabled={!canGoPrevMonth}><HistoryIcon /></IconButton>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography fontWeight={800}>{formatMonth(monthlyStart)}</Typography>
+                {monthlyStart.getTime() === currentMonthStart.getTime() && (
+                  <Typography variant="caption" color="text.secondary">Current month</Typography>
+                )}
+              </Box>
+              <IconButton onClick={() => shiftMonth(1)} disabled={!canGoNextMonth}><HistoryIcon /></IconButton>
+            </Stack>
+            <TextField
+              type="month"
+              size="small"
+              fullWidth
+              label="Jump to month"
+              InputLabelProps={{ shrink: true }}
+              value={toInputMonth(monthlyStart)}
+              onChange={handleJumpMonth}
+              inputProps={{ min: toInputMonth(minimumMonthStart), max: toInputMonth(currentMonthStart) }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setMonthlyReportOpen(false)} color="inherit">Cancel</Button>
+            <Button
+              onClick={() => {
+                setMonthlyReportOpen(false);
+                exportLogsForRange(
+                  monthlyStart,
+                  addMonths(monthlyStart, 1),
+                  `MONTHLY ACTIVITY LOG REPORT - ${formatMonth(monthlyStart)}`,
+                  `Monthly_Activity_Logs_${toInputMonth(monthlyStart)}.pdf`
+                );
+              }}
+              variant="contained"
+              sx={{ bgcolor: '#213C51', color: '#ffffff', fontWeight: 700 }}
+            >
+              Export PDF
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={studentReportOpen}
+          onClose={() => !studentsLoading && setStudentReportOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ fontWeight: 800 }}>Individual Account Logs Report</DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ mb: 2 }}>
+              Search for user, admin, or super admin. Their logs are grouped by category and sorted newest first.
+            </DialogContentText>
+            <Autocomplete
+              options={verifiedAccounts}
+              value={selectedAccount}
+              onChange={(_, account) => setSelectedAccount(account)}
+              loading={studentsLoading}
+              getOptionLabel={(account) => `${account.full_name || 'No name'} — ${account.email || account.id_number || account.id}`}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              noOptionsText={studentsLoading ? 'Loading accounts...' : 'No verified accounts found'}
+              renderOption={(props, account) => (
+                <li {...props} key={account.id}>
+                  <Box>
+                    <Typography variant="body2" fontWeight={700}>{account.full_name || 'No name provided'}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {account.email || 'No email'} · {(account.role || 'account').toUpperCase()}
+                      {account.id_number ? ` · ${account.id_number}` : ''}
+                    </Typography>
+                  </Box>
+                </li>
+              )}
+              renderInput={(params) => (
+                <TextField {...params} label="Search verified account" placeholder="Name, email, or ID number" />
+              )}
+            />
+            {reportError && <Alert severity="error" sx={{ mt: 2 }}>{reportError}</Alert>}
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setStudentReportOpen(false)} color="inherit">Cancel</Button>
+            <Button
+              onClick={generateStudentLogsPdf}
+              disabled={!selectedAccount || studentsLoading}
+              variant="contained"
+              startIcon={<PictureAsPdfIcon />}
+              sx={{ bgcolor: '#213C51', color: '#ffffff', fontWeight: 700 }}
+            >
+              Generate PDF
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} PaperProps={{ sx: { bgcolor: cardBg, borderRadius: 1, width: '400px' } }}>
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><WarningAmberIcon color="error" /> Confirm Deletion</DialogTitle>
