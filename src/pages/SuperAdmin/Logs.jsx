@@ -1038,7 +1038,7 @@ const Logs = () => {
                   <Box>
                     <Typography variant="body2" fontWeight={700}>{account.full_name || 'No name provided'}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {account.email || 'No email'} · {(account.role || 'account').toUpperCase()}
+                      {account.email || 'No email'} · {account.role?.toLowerCase() === 'client' ? 'USER' : (account.role || 'account').toUpperCase()}
                       {account.id_number ? ` · ${account.id_number}` : ''}
                     </Typography>
                   </Box>
