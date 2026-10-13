@@ -197,6 +197,15 @@ const formatWeekRange = (start) => {
   return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 };
 const formatMonth = (month) => month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+const formatWeekFileRange = (start) => {
+  const end = addDays(start, 6);
+  const formatFileDate = (date) => date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  }).replace(', ', '_').replace(' ', '_');
+  return `Week_of_${formatFileDate(start)}_to_${formatFileDate(end)}`;
+};
 
 // ---------------------------------------------------------------------
 // Excel export helpers. Auto-sizes columns based on header + content
@@ -277,6 +286,8 @@ const Dashboard = () => {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [monthlyOpen, setMonthlyOpen] = useState(false);
   const [monthStart, setMonthStart] = useState(() => startOfMonth(new Date()));
+  const [yearlyOpen, setYearlyOpen] = useState(false);
+  const [reportYear, setReportYear] = useState(currentYear);
 
   // Book Detail Modal State ("See More")
   const [selectedBook, setSelectedBook] = useState(null);
@@ -299,6 +310,9 @@ const Dashboard = () => {
   const canGoNextMonth = addMonths(monthStart, 1) <= currentMonthStart;
   const canGoPrevMonth = addMonths(monthStart, -1) >= minMonthStart;
   const isCurrentMonth = monthStart.getTime() === currentMonthStart.getTime();
+  const canGoNextYear = reportYear < currentYear;
+  const canGoPrevYear = reportYear > firstDownloadYear;
+  const isCurrentYear = reportYear === currentYear;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -467,13 +481,25 @@ const Dashboard = () => {
     setMonthStart(picked);
   };
 
+  const handleOpenYearly = () => {
+    handleMenuClose();
+    setReportYear(currentYear);
+    setYearlyOpen(true);
+  };
+
+  const shiftYear = (dir) => {
+    const next = reportYear + dir;
+    if (next > currentYear || next < firstDownloadYear) return;
+    setReportYear(next);
+  };
+
   const executeExcelExport = async () => {
     const now = new Date();
     const dateString = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     // NOTE: no .eq('role', ...) filter — SuperAdmin's report must include
     // Regular Users, Admin accounts and SuperAdmin accounts alike.
     const [{ data: accounts }, { data: materials }, { data: requests }, { data: downloads }, { data: logs }] = await Promise.all([
-      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_archived, is_confirm').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_archived, is_confirm').eq('is_confirm', true).order('created_at', { ascending: false }),
       supabase.from('pdfs').select(MATERIAL_COLUMNS).order('created_at', { ascending: false }),
       supabase.from('upload_requests').select('id, status, created_at, user_id').order('created_at', { ascending: false }),
       supabase.from('downloads').select('id, user_id, pdf_id, downloaded_at').order('downloaded_at', { ascending: false }),
@@ -570,7 +596,7 @@ const Dashboard = () => {
     // NOTE: no role filter on accounts — used only to compute totals here.
     const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
       supabase.from('pdfs').select(MATERIAL_COLUMNS).order('category').order('created_at', { ascending: false }),
-      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_confirm'),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_confirm').eq('is_confirm', true),
       supabase.from('upload_requests').select('id').eq('status', 'pending'),
       supabase.from('downloads').select('id')
     ]);
@@ -642,7 +668,7 @@ const Dashboard = () => {
     // Every query is scoped to the selected Monday-Sunday window.
     const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
       supabase.from('pdfs').select(MATERIAL_COLUMNS).gte('created_at', startISO).lt('created_at', endISO).order('category').order('created_at', { ascending: false }),
-      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_confirm').gte('created_at', startISO).lt('created_at', endISO).order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_confirm').eq('is_confirm', true).gte('created_at', startISO).lt('created_at', endISO).order('created_at', { ascending: false }),
       supabase.from('upload_requests').select('id').eq('status', 'pending').gte('created_at', startISO).lt('created_at', endISO),
       supabase.from('downloads').select('id').gte('downloaded_at', startISO).lt('downloaded_at', endISO)
     ]);
@@ -710,7 +736,7 @@ const Dashboard = () => {
     }
 
     drawReportFooters(doc, generatedAt);
-    doc.save(`Library_Weekly_Report_${toInputDate(weekStart)}_to_${toInputDate(addDays(weekStart, 6))}.pdf`);
+    doc.save(`Library_${formatWeekFileRange(weekStart)}_Report.pdf`);
   };
 
   const executeMonthlyPdfExport = async () => {
@@ -722,7 +748,7 @@ const Dashboard = () => {
 
     const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
       supabase.from('pdfs').select(MATERIAL_COLUMNS).gte('created_at', startISO).lt('created_at', endISO).order('category').order('created_at', { ascending: false }),
-      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_confirm').gte('created_at', startISO).lt('created_at', endISO).order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_confirm').eq('is_confirm', true).gte('created_at', startISO).lt('created_at', endISO).order('created_at', { ascending: false }),
       supabase.from('upload_requests').select('id').eq('status', 'pending').gte('created_at', startISO).lt('created_at', endISO),
       supabase.from('downloads').select('id').gte('downloaded_at', startISO).lt('downloaded_at', endISO)
     ]);
@@ -787,7 +813,85 @@ const Dashboard = () => {
     }
 
     drawReportFooters(doc, generatedAt);
-    doc.save(`Library_Monthly_Report_${toInputMonth(monthStart)}.pdf`);
+    doc.save(`Library_Monthly_Report_${monthLabel.replace(' ', '_')}.pdf`);
+  };
+
+  const executeYearlyPdfExport = async () => {
+    setYearlyOpen(false);
+    const now = new Date();
+    const yearStart = new Date(reportYear, 0, 1);
+    const startISO = yearStart.toISOString();
+    const endISO = new Date(reportYear + 1, 0, 1).toISOString();
+    const yearLabel = String(reportYear);
+
+    const [{ data: materials }, { data: accounts }, { data: requests }, { data: downloads }] = await Promise.all([
+      supabase.from('pdfs').select(MATERIAL_COLUMNS).gte('created_at', startISO).lt('created_at', endISO).order('category').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, email, full_name, role, department, id_number, year_level, created_at, is_active, is_confirm').eq('is_confirm', true).gte('created_at', startISO).lt('created_at', endISO).order('created_at', { ascending: false }),
+      supabase.from('upload_requests').select('id').eq('status', 'pending').gte('created_at', startISO).lt('created_at', endISO),
+      supabase.from('downloads').select('id').gte('downloaded_at', startISO).lt('downloaded_at', endISO)
+    ]);
+
+    const totals = (accounts || []).reduce((result, account) => {
+      result.totalAccounts += 1;
+      if (account.role === 'client') result.users += 1;
+      if (account.role === 'admin') result.admins += 1;
+      if (account.role === 'superadmin') result.superAdmins += 1;
+      return result;
+    }, { totalAccounts: 0, users: 0, admins: 0, superAdmins: 0 });
+
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const generatedAt = now.toLocaleString();
+    let nextY = drawReportHeader(doc, `YEARLY LIBRARY REPORT  |  ${yearLabel}`, generatedAt);
+    nextY = drawReportSummary(doc, nextY, {
+      registeredUsers: totals.users,
+      totalAccounts: totals.totalAccounts,
+      users: totals.users,
+      admins: totals.admins,
+      superAdmins: totals.superAdmins,
+      totalPdfs: materials?.length || 0,
+      pendingRequests: requests?.length || 0,
+      totalDownloads: downloads?.length || 0,
+      userRequests: requests?.length || 0,
+    });
+
+    if (nextY > 155) { doc.addPage(); nextY = 20; }
+    drawReportSectionLabel(doc, 'New Accounts This Year', REPORT_PAGE.margin, nextY, REPORT_NAVY);
+    if ((accounts || []).length > 0) {
+      autoTable(doc, {
+        startY: nextY + 4,
+        head: [['Name', 'Email', 'Role', 'ID Number', 'Department', 'Year Level', 'Account Status', 'Email Confirmation', 'Date Joined']],
+        body: accounts.map((account) => [
+          account.full_name || 'N/A', account.email || 'N/A',
+          account.role === 'client' ? 'User' : (account.role || 'N/A'),
+          account.id_number || 'N/A', account.department || 'N/A', account.year_level || 'N/A',
+          account.is_confirm === false ? 'Pending Confirmation' : (account.is_active === false ? 'Deactivated' : 'Active'),
+          account.is_confirm === false ? 'Pending' : 'Confirmed',
+          formatReportDate(account.created_at)
+        ]),
+        styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+        headStyles: { fillColor: REPORT_NAVY, textColor: [255, 255, 255] },
+        alternateRowStyles: { fillColor: [244, 247, 250] },
+        theme: 'grid',
+        margin: { top: 20, left: REPORT_PAGE.margin, right: REPORT_PAGE.margin, bottom: 16 }
+      });
+      nextY = doc.lastAutoTable.finalY + 12;
+    } else {
+      doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+      doc.text('No new accounts registered this year.', REPORT_PAGE.margin, nextY + 9);
+      nextY += 20;
+    }
+
+    if ((materials || []).length > 0) {
+      nextY = drawMaterialTables(doc, materials, nextY);
+    } else {
+      if (nextY > 155) { doc.addPage(); nextY = 20; }
+      drawReportSectionLabel(doc, 'Materials Added This Year', REPORT_PAGE.margin, nextY, REPORT_BLUE);
+      doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+      doc.text('No materials were added this year.', REPORT_PAGE.margin, nextY + 9);
+    }
+
+    drawReportFooters(doc, generatedAt);
+    doc.save(`Library_Yearly_Report_${yearLabel}.pdf`);
   };
 
   // Book detail dialog handlers
@@ -858,6 +962,7 @@ const Dashboard = () => {
             <MenuItem onClick={() => handleSelectExportType('pdf')}>Generate PDF Report</MenuItem>
             <MenuItem onClick={handleOpenWeekly}>Generate Weekly PDF Report</MenuItem>
             <MenuItem onClick={handleOpenMonthly}>Generate Monthly PDF Report</MenuItem>
+            <MenuItem onClick={handleOpenYearly}>Generate Yearly PDF Report</MenuItem>
             <MenuItem onClick={() => handleSelectExportType('excel')}>Generate Excel Workbook</MenuItem>
           </Menu>
         </Box>
@@ -946,6 +1051,43 @@ const Dashboard = () => {
           <DialogActions sx={{ p: 2 }}>
             <Button onClick={() => setMonthlyOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>Cancel</Button>
             <Button onClick={executeMonthlyPdfExport} variant="contained" sx={{ color: '#ffffff', bgcolor: '#213C51', fontWeight: 700 }}>
+              Generate
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={yearlyOpen} onClose={() => setYearlyOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontWeight: 800 }}>Yearly PDF Report</DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ mb: 2 }}>
+              Select a year. Future years can't be selected.
+            </DialogContentText>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <IconButton onClick={() => shiftYear(-1)} disabled={!canGoPrevYear}><ChevronLeftIcon /></IconButton>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography fontWeight={800}>{reportYear}</Typography>
+                {isCurrentYear && (
+                  <Typography variant="caption" color="text.secondary">Current year (up to today)</Typography>
+                )}
+              </Box>
+              <IconButton onClick={() => shiftYear(1)} disabled={!canGoNextYear}><ChevronRightIcon /></IconButton>
+            </Stack>
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="Jump to year"
+              value={reportYear}
+              onChange={(e) => setReportYear(Number(e.target.value))}
+            >
+              {Array.from({ length: currentYear - firstDownloadYear + 1 }, (_, index) => currentYear - index).map((year) => (
+                <MenuItem key={year} value={year}>{year}</MenuItem>
+              ))}
+            </TextField>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setYearlyOpen(false)} color="inherit" sx={{ fontWeight: 700 }}>Cancel</Button>
+            <Button onClick={executeYearlyPdfExport} variant="contained" sx={{ color: '#ffffff', bgcolor: '#213C51', fontWeight: 700 }}>
               Generate
             </Button>
           </DialogActions>
