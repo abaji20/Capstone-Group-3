@@ -19,6 +19,8 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import AssignmentLateIcon from '@mui/icons-material/AssignmentLate';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 // ---------------------------------------------------------------------
 // Category classification. Every audit_logs row is bucketed into one of
@@ -88,6 +90,15 @@ const formatWeekRange = (start) => {
   return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 };
 const formatMonth = (date) => date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+const formatWeekFileRange = (start) => {
+  const end = addDays(start, 6);
+  const formatFileDate = (date) => date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  }).replace(', ', '_').replace(' ', '_');
+  return `Week_of_${formatFileDate(start)}_to_${formatFileDate(end)}`;
+};
 
 const Logs = () => {
   const theme = useTheme();
@@ -133,7 +144,10 @@ const Logs = () => {
   const [weeklyStart, setWeeklyStart] = useState(() => startOfWeek(new Date()));
   const [monthlyReportOpen, setMonthlyReportOpen] = useState(false);
   const [monthlyStart, setMonthlyStart] = useState(() => startOfMonth(new Date()));
+  const [yearlyReportOpen, setYearlyReportOpen] = useState(false);
+  const [reportYear, setReportYear] = useState(() => new Date().getFullYear());
   const firstLogYear = 2026;
+  const currentYear = new Date().getFullYear();
   const currentWeekStart = startOfWeek(new Date());
   const minimumWeekStart = startOfWeek(new Date(firstLogYear, 0, 1));
   const currentMonthStart = startOfMonth(new Date());
@@ -416,6 +430,8 @@ const Logs = () => {
   const canGoPrevWeek = addDays(weeklyStart, -7) >= minimumWeekStart;
   const canGoNextMonth = addMonths(monthlyStart, 1) <= currentMonthStart;
   const canGoPrevMonth = addMonths(monthlyStart, -1) >= minimumMonthStart;
+  const canGoNextYear = reportYear < currentYear;
+  const canGoPrevYear = reportYear > firstLogYear;
   const shiftWeek = (direction) => {
     const next = addDays(weeklyStart, direction * 7);
     if (next <= currentWeekStart && next >= minimumWeekStart) setWeeklyStart(next);
@@ -423,6 +439,10 @@ const Logs = () => {
   const shiftMonth = (direction) => {
     const next = addMonths(monthlyStart, direction);
     if (next <= currentMonthStart && next >= minimumMonthStart) setMonthlyStart(next);
+  };
+  const shiftYear = (direction) => {
+    const next = reportYear + direction;
+    if (next >= firstLogYear && next <= currentYear) setReportYear(next);
   };
 
   const handleOpenWeeklyExport = () => {
@@ -434,6 +454,11 @@ const Logs = () => {
     setExportAnchor(null);
     setMonthlyStart(startOfMonth(new Date()));
     setMonthlyReportOpen(true);
+  };
+  const handleOpenYearlyExport = () => {
+    setExportAnchor(null);
+    setReportYear(currentYear);
+    setYearlyReportOpen(true);
   };
 
   const openConfirm = (type, id = null) => {
@@ -617,6 +642,7 @@ const Logs = () => {
               </MenuItem>
               <MenuItem onClick={handleOpenWeeklyExport}>Export Weekly Logs PDF</MenuItem>
               <MenuItem onClick={handleOpenMonthlyExport}>Export Monthly Logs PDF</MenuItem>
+              <MenuItem onClick={handleOpenYearlyExport}>Export Yearly Logs PDF</MenuItem>
               <MenuItem onClick={() => {
                 setExportAnchor(null);
                 openIndividualReport();
@@ -956,7 +982,7 @@ const Logs = () => {
                   weeklyStart,
                   addDays(weeklyStart, 7),
                   `WEEKLY ACTIVITY LOG REPORT - ${formatWeekRange(weeklyStart)}`,
-                  `Weekly_Activity_Logs_${toInputDate(weeklyStart)}.pdf`
+                  `${formatWeekFileRange(weeklyStart)}_Activity_Logs.pdf`
                 );
               }}
               variant="contained"
@@ -1003,7 +1029,57 @@ const Logs = () => {
                   monthlyStart,
                   addMonths(monthlyStart, 1),
                   `MONTHLY ACTIVITY LOG REPORT - ${formatMonth(monthlyStart)}`,
-                  `Monthly_Activity_Logs_${toInputMonth(monthlyStart)}.pdf`
+                  `Monthly_Activity_Logs_${formatMonth(monthlyStart).replace(' ', '_')}.pdf`
+                );
+              }}
+              variant="contained"
+              sx={{ bgcolor: '#213C51', color: '#ffffff', fontWeight: 700 }}
+            >
+              Export PDF
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={yearlyReportOpen} onClose={() => setYearlyReportOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle sx={{ fontWeight: 800 }}>Export Yearly Logs</DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ mb: 2 }}>
+              Choose a year. Future years can't be selected.
+            </DialogContentText>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <IconButton onClick={() => shiftYear(-1)} disabled={!canGoPrevYear}><ChevronLeftIcon /></IconButton>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography fontWeight={800}>{reportYear}</Typography>
+                {reportYear === currentYear && (
+                  <Typography variant="caption" color="text.secondary">Current year</Typography>
+                )}
+              </Box>
+              <IconButton onClick={() => shiftYear(1)} disabled={!canGoNextYear}><ChevronRightIcon /></IconButton>
+            </Stack>
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="Jump to year"
+              value={reportYear}
+              onChange={(event) => setReportYear(Number(event.target.value))}
+            >
+              {Array.from({ length: currentYear - firstLogYear + 1 }, (_, index) => currentYear - index).map((year) => (
+                <MenuItem key={year} value={year}>{year}</MenuItem>
+              ))}
+            </TextField>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setYearlyReportOpen(false)} color="inherit">Cancel</Button>
+            <Button
+              onClick={() => {
+                setYearlyReportOpen(false);
+                const yearStart = new Date(reportYear, 0, 1);
+                exportLogsForRange(
+                  yearStart,
+                  new Date(reportYear + 1, 0, 1),
+                  `YEARLY ACTIVITY LOG REPORT - ${reportYear}`,
+                  `Yearly_Activity_Logs_${reportYear}.pdf`
                 );
               }}
               variant="contained"
