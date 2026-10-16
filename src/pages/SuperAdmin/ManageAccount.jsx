@@ -9,7 +9,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, PrimaryButton, DeleteButton, ActionModal, FormInput } from '../../shared';
 import BulkCreateAccountDialog from '../../shared/BulkCreateAccountDialog';
-import { exportAccountsToExcel } from '../../utils/exportAccounts';
 import { supabase } from '../../supabaseClient';
 
 // Icons
@@ -18,7 +17,6 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import EditIcon from '@mui/icons-material/Edit';
 import BadgeIcon from '@mui/icons-material/Badge';
 import EmailIcon from '@mui/icons-material/Email';
@@ -690,23 +688,6 @@ const ManageAccount = () => {
     }
   };
 
-  const EXPORT_OPTS = { includeRole: true, filename: 'accounts' };
-
-  const handleExportAccounts = () => {
-    setCreateMenuAnchor(null);
-    if (!users.length) {
-      setNotify({ open: true, message: 'No accounts to export.', severity: 'error' });
-      return;
-    }
-    try {
-      exportAccountsToExcel(users, EXPORT_OPTS);
-      setNotify({ open: true, message: `Exported ${users.length} account(s).`, severity: 'success' });
-    } catch (err) {
-      console.error('Export failed:', err);
-      setNotify({ open: true, message: 'Export failed.', severity: 'error' });
-    }
-  };
-
   const StyledAvatar = ({ user, size = 30 }) => {
     const colors = getAvatarColors(user?.role);
     return (
@@ -1015,9 +996,6 @@ const ManageAccount = () => {
               </MenuItem>
               <MenuItem onClick={() => { setCreateMenuAnchor(null); setIsBulkCreateOpen(true); }} sx={{ fontWeight: 600 }}>
                 <GroupAddIcon fontSize="small" sx={{ mr: 1.5 }} /> Add Bulk Accounts
-              </MenuItem>
-              <MenuItem onClick={handleExportAccounts} sx={{ fontWeight: 600 }}>
-                <FileDownloadIcon fontSize="small" sx={{ mr: 1.5 }} /> Export Accounts
               </MenuItem>
             </Menu>
           </Stack>   
