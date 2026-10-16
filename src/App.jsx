@@ -224,6 +224,48 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!role) return undefined;
+
+    let userId;
+    let isUpdating = false;
+
+    const updateLastActive = async () => {
+      if (!userId || document.visibilityState !== 'visible' || isUpdating) return;
+
+      isUpdating = true;
+      const { error } = await supabase
+        .from('profiles')
+        .update({ last_active_at: new Date().toISOString() })
+        .eq('id', userId);
+      if (error) console.error('Error updating last active time:', error);
+      isUpdating = false;
+    };
+
+    const initializePresence = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error('Error checking session for presence:', error);
+        return;
+      }
+
+      userId = session?.user?.id;
+      updateLastActive();
+    };
+
+    initializePresence();
+    const interval = setInterval(updateLastActive, 60000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') updateLastActive();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [role]);
+
   if (loading) return (
     <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: 'background.default', gap: 2 }}>
       <Box 

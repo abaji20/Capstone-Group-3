@@ -8,6 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { PrimaryButton, ActionModal, FormInput } from '../../shared';
 import BulkCreateAccountDialog from '../../shared/BulkCreateAccountDialog';
+import AccountPresence from '../../shared/AccountPresence';
 import { supabase } from '../../supabaseClient';
 
 // Icons
@@ -118,6 +119,30 @@ const AdminManageAccount = () => {
     };
     checkUser();
   }, [navigate]);
+
+  useEffect(() => {
+    const refreshActivity = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, last_active_at')
+        .eq('role', 'client');
+
+      if (error) {
+        console.error('Error refreshing account activity:', error);
+        return;
+      }
+
+      const activityById = new Map(data.map((profile) => [profile.id, profile.last_active_at]));
+      setUsers((currentUsers) => currentUsers.map((user) => (
+        activityById.has(user.id)
+          ? { ...user, last_active_at: activityById.get(user.id) }
+          : user
+      )));
+    };
+
+    const interval = setInterval(refreshActivity, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // --- ACTIVE/DEACTIVE STATUS HELPER ---
   // The UI trusts the stored is_active value, so an admin can still
@@ -670,6 +695,7 @@ const AdminManageAccount = () => {
               <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}> <Avatar sx={{ width: 45, height: 45, bgcolor: '#fbc02d', color: '#000000', fontWeight: 700 }}>{user.full_name?.charAt(0)}</Avatar> </Box>
               <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
               <Typography variant="body2" color="text.secondary">{user.email}</Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'center' }}><AccountPresence lastActiveAt={user.last_active_at} isConfirmed={user.is_confirm} /></Box>
               <Box sx={{ my: 1, display: 'flex', justifyContent: 'center' }}><StatusControlDropdown user={user} /></Box>
               <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 700 }}>ID: {user.id_number}</Typography>
               <Box sx={{ mb: 2 }}>
@@ -703,7 +729,11 @@ const AdminManageAccount = () => {
                   <TableCell>
                     <Stack direction="row" spacing={2} alignItems="center">
                       <Avatar sx={{ width: 35, height: 35, bgcolor: '#fbc02d', color: '#000000', fontWeight: 700 }}>{user.full_name?.charAt(0)}</Avatar>
-                      <Box> <Typography fontWeight={700}>{user.full_name}</Typography> <Typography variant="caption" color="text.secondary">{user.email}</Typography> </Box>
+                      <Box>
+                        <Typography fontWeight={700}>{user.full_name}</Typography>
+                        <Typography variant="caption" color="text.secondary">{user.email}</Typography>
+                        <AccountPresence lastActiveAt={user.last_active_at} isConfirmed={user.is_confirm} />
+                      </Box>
                     </Stack>
                   </TableCell>
                   <TableCell align="center"> <Typography variant="body2" sx={{ fontWeight: 600 }}>{user.id_number || '---'}</Typography> </TableCell>
