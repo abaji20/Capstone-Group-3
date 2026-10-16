@@ -67,6 +67,7 @@ const ManageAccount = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [requestSearch, setRequestSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [monthFilter, setMonthFilter] = useState('');
   const [dayFilter, setDayFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
@@ -793,19 +794,20 @@ const ManageAccount = () => {
 
   const filteredUsers = users.filter((u) => {
     const term = searchTerm.toLowerCase().trim();
-    const statusText = u.computed_is_active ? 'active' : 'deactive';
     const matchesSearch = (u.full_name?.toLowerCase() || "").includes(term) || 
                           (u.email?.toLowerCase() || "").includes(term) ||
-                          (u.id_number?.toLowerCase() || "").includes(term) ||
-                          (term.length > 0 && u.is_confirm === false && 'pending'.startsWith(term)) ||
-                          (term.length > 0 && statusText.startsWith(term));
+                          (u.id_number?.toLowerCase() || "").includes(term);
     const matchesRole = roleFilter === 'All Roles' || u.role?.toLowerCase() === roleFilter.toLowerCase();
+    const matchesStatus = statusFilter === 'all' ||
+                          (statusFilter === 'pending' && u.is_confirm === false) ||
+                          (statusFilter === 'active' && u.is_confirm !== false && u.computed_is_active) ||
+                          (statusFilter === 'deactive' && u.is_confirm !== false && !u.computed_is_active);
     const userDate = u.created_at ? new Date(u.created_at) : null;
     const matchesMonth = !monthFilter || userDate?.getMonth() + 1 === Number(monthFilter);
     const matchesDay = !dayFilter || userDate?.getDate() === Number(dayFilter);
     const matchesYear = !yearFilter || userDate?.getFullYear() === Number(yearFilter);
     const matchesDate = matchesMonth && matchesDay && matchesYear;
-    return matchesSearch && matchesRole && matchesDate;
+    return matchesSearch && matchesRole && matchesStatus && matchesDate;
   });
 
   // --- USER LIST SELECTION (Select All + individual checkboxes) ---
@@ -867,7 +869,7 @@ const ManageAccount = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, roleFilter, monthFilter, dayFilter, yearFilter]);
+  }, [searchTerm, roleFilter, statusFilter, monthFilter, dayFilter, yearFilter]);
 
   useEffect(() => {
     if (totalPages > 0 && currentPage > totalPages) {
@@ -958,7 +960,7 @@ const ManageAccount = () => {
       {activeTab === 0 ? (
         <>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 4 }}>
-            <TextField placeholder="Search accounts, ID, or status..." size="medium" fullWidth={isMobile} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
+            <TextField placeholder="Search accounts or ID..." size="medium" fullWidth={isMobile} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }} InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon color="primary" /></InputAdornment>) }} />
             <TextField select size="medium" label="Month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
               <MenuItem value="">All Months</MenuItem>
               {monthOptions.map((month) => <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>)}
@@ -976,6 +978,12 @@ const ManageAccount = () => {
               <MenuItem value="superadmin">Superadmin</MenuItem>
               <MenuItem value="admin">Admin</MenuItem>
               <MenuItem value="client">User</MenuItem>
+            </TextField>
+            <TextField select size="medium" label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} sx={{ minWidth: 145, bgcolor: isDarkMode ? '#28334e' : '#ffffff', borderRadius: 0.5 }}>
+              <MenuItem value="all">All Status</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="deactive">Deactive</MenuItem>
+              <MenuItem value="pending">Pending</MenuItem>
             </TextField>
             <PrimaryButton
               fullWidth={isMobile}

@@ -67,6 +67,7 @@ const AdminManageAccount = () => {
   const [dayFilter, setDayFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All Departments');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // Pagination State (matches Superadmin ManageAccount: 12 per page)
   const [currentPage, setCurrentPage] = useState(1);
@@ -421,15 +422,13 @@ const AdminManageAccount = () => {
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       const term = searchTerm.toLowerCase().trim();
-      const statusText = u.computed_is_active ? 'active' : 'deactive';
       const matchesSearch = 
         (u.full_name || "").toLowerCase().includes(term) || 
         (u.email || "").toLowerCase().includes(term) ||
         (u.id_number || "").toLowerCase().includes(term) ||
         (u.department || "").toLowerCase().includes(term) ||
         (u.year_level || "").toLowerCase().includes(term) ||
-        (term.length > 0 && u.is_confirm === false && 'pending'.startsWith(term)) ||
-        (term.length > 0 && statusText.startsWith(term));
+        (term.length > 0 && u.is_confirm === false && 'pending'.startsWith(term));
 
       const createdDate = u.created_at ? new Date(u.created_at) : null;
       const matchesMonth = !monthFilter || (createdDate && createdDate.getMonth() + 1 === Number(monthFilter));
@@ -437,10 +436,14 @@ const AdminManageAccount = () => {
       const matchesYear = !yearFilter || (createdDate && createdDate.getFullYear() === Number(yearFilter));
 
       const matchesDepartment = departmentFilter === 'All Departments' || u.department === departmentFilter;
+      const matchesStatus = statusFilter === 'all' ||
+        (statusFilter === 'pending' && u.is_confirm === false) ||
+        (statusFilter === 'active' && u.is_confirm !== false && u.computed_is_active) ||
+        (statusFilter === 'deactive' && u.is_confirm !== false && !u.computed_is_active);
 
-      return matchesSearch && matchesMonth && matchesDay && matchesYear && matchesDepartment;
+      return matchesSearch && matchesMonth && matchesDay && matchesYear && matchesDepartment && matchesStatus;
     });
-  }, [users, searchTerm, monthFilter, dayFilter, yearFilter, departmentFilter]);
+  }, [users, searchTerm, monthFilter, dayFilter, yearFilter, departmentFilter, statusFilter]);
 
   // --- PAGINATION CALCULATIONS (matches Superadmin ManageAccount.jsx exactly, 12 per page) ---
   const totalPages = Math.ceil(filteredUsers.length / accountsPerPage);
@@ -451,7 +454,7 @@ const AdminManageAccount = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, monthFilter, dayFilter, yearFilter, departmentFilter]);
+  }, [searchTerm, monthFilter, dayFilter, yearFilter, departmentFilter, statusFilter]);
 
   useEffect(() => {
     if (totalPages > 0 && currentPage > totalPages) {
@@ -559,7 +562,7 @@ const AdminManageAccount = () => {
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 4 }}>
         <TextField 
           fullWidth 
-          placeholder="Search by name, email, ID, dept, year, or status..."
+          placeholder="Search by name, email, ID, dept, or year..."
           value={searchTerm} 
           onChange={(e) => setSearchTerm(e.target.value)} 
           sx={{ bgcolor: inputBg, borderRadius: 0.5, ...removeAutofillBg }} 
@@ -607,6 +610,19 @@ const AdminManageAccount = () => {
           sx={{ minWidth: { md: 220 }, bgcolor: inputBg, borderRadius: 0.5 }}
         >
           {uniqueDepartments.map(dept => <MenuItem key={dept} value={dept}>{dept}</MenuItem>)}
+        </TextField>
+
+        <TextField
+          select
+          label="Status"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          sx={{ minWidth: 145, bgcolor: inputBg, borderRadius: 0.5 }}
+        >
+          <MenuItem value="all">All Status</MenuItem>
+          <MenuItem value="active">Active</MenuItem>
+          <MenuItem value="deactive">Deactive</MenuItem>
+          <MenuItem value="pending">Pending</MenuItem>
         </TextField>
 
         <PrimaryButton 
