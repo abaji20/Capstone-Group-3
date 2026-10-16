@@ -114,9 +114,8 @@ const timeAgo = (iso) => {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-// Pending items show when they were submitted. Approved / rejected items show
-// when the admin reviewed them (reviewed_at, stamped by the database trigger in
-// reviewed_at.sql), falling back to older timestamps if that isn't set.
+// Pending items show when they were submitted. Reviewed items use their review
+// timestamp when available, falling back to the request's last update time.
 const whenOf = (row) => {
   if (row.status === 'pending') return row.created_at;
   return row.reviewed_at || row.updated_at || row.created_at;
@@ -129,7 +128,7 @@ const rowsOf = (result) =>
 const buildNotifications = async (uid) => {
   const since = new Date(Date.now() - NEW_LIBRARY_DAYS * 86400000).toISOString();
 
-  const [uploadRes, deletedUploadRes, legacyDeletedUploadRes, restoredUploadRes, deleteRes, roleRes, libraryRes] = await Promise.allSettled([
+  const [uploadRes, deletedUploadRes, legacyDeletedUploadRes, restoredUploadRes, uploadEventRes, deleteRes, roleRes, libraryRes] = await Promise.allSettled([
     supabase.from('upload_requests').select('*').eq('client_id', uid)
       .order('created_at', { ascending: false }).limit(20),
     supabase.from('upload_requests').select('*').eq('client_id', uid)
@@ -138,6 +137,8 @@ const buildNotifications = async (uid) => {
       .like('remarks', `${LEGACY_UPLOAD_REQUEST_DELETION_PREFIX}%`),
     supabase.from('upload_requests').select('*').eq('client_id', uid)
       .like('remarks', `${UPLOAD_REQUEST_RESTORATION_PREFIX}%`),
+    supabase.from('upload_request_notifications').select('*').eq('user_id', uid)
+      .order('created_at', { ascending: false }),
     supabase.from('delete_requests').select('*, pdfs ( title )').eq('requested_by', uid).limit(30),
     supabase.from('role_requests').select('*').eq('requested_by', uid)
       .order('created_at', { ascending: false }).limit(5),
@@ -147,6 +148,8 @@ const buildNotifications = async (uid) => {
   ]);
 
   const list = [];
+  const uploadEvents = rowsOf(uploadEventRes);
+  const uploadEventRequestIds = new Set(uploadEvents.map((event) => String(event.upload_request_id)));
 
   // Upload requests: submitted / approved / rejected / deleted / restored
   const uploadRequests = new Map();
@@ -159,39 +162,59 @@ const buildNotifications = async (uid) => {
     uploadRequests.set(req.id, req);
   });
   [...uploadRequests.values()].forEach((req) => {
-    const base = { time: whenOf(req), path: '/request-upload', category: 'request' };
-    if (req.status === 'approved' && req.remarks?.startsWith(UPLOAD_REQUEST_RESTORATION_PREFIX)) {
+    const base = { path: '/request-upload', category: 'request' };
+    if (req.status === 'approved') {
       list.push({
-        ...base, id: `upload-${req.id}-restored`, tone: 'success',
-        title: `"${req.title}" restored`,
-        message: req.remarks,
-      });
-    } else if (req.status === 'approved' && isUploadRequestDeleted(req.remarks)) {
-      list.push({
-        ...base, id: `upload-${req.id}-deleted`, tone: 'error',
-        title: `"${req.title}" deleted`,
-        message: displayUploadRequestRemarks(req.remarks),
-      });
-    } else if (req.status === 'approved') {
-      list.push({
-        ...base, id: `upload-${req.id}-approved`, tone: 'success',
+        ...base, time: req.reviewed_at || req.created_at,
+        id: `upload-${req.id}-approved`, tone: 'success',
         title: 'Upload approved',
         message: `"${req.title}" was approved and is now in the library.`,
         path: '/browse',
       });
+
+      if (!uploadEventRequestIds.has(String(req.id))) {
+        if (req.remarks?.startsWith(UPLOAD_REQUEST_RESTORATION_PREFIX)) {
+          list.push({
+            ...base, time: req.updated_at || req.reviewed_at || req.created_at,
+            id: `upload-${req.id}-restored`, tone: 'success',
+            title: `"${req.title}" restored`,
+            message: req.remarks,
+          });
+        } else if (isUploadRequestDeleted(req.remarks)) {
+          list.push({
+            ...base, time: req.updated_at || req.reviewed_at || req.created_at,
+            id: `upload-${req.id}-deleted`, tone: 'error',
+            title: `"${req.title}" deleted`,
+            message: displayUploadRequestRemarks(req.remarks),
+          });
+        }
+      }
     } else if (req.status === 'rejected') {
       list.push({
-        ...base, id: `upload-${req.id}-rejected`, tone: 'error',
+        ...base, time: whenOf(req), id: `upload-${req.id}-rejected`, tone: 'error',
         title: 'Upload rejected',
         message: req.remarks ? `"${req.title}": ${req.remarks}` : `"${req.title}" was rejected by the admin.`,
       });
     } else if (req.status === 'pending') {
       list.push({
-        ...base, id: `upload-${req.id}-pending`, tone: 'info',
+        ...base, time: whenOf(req), id: `upload-${req.id}-pending`, tone: 'info',
         title: 'Awaiting review',
         message: `"${req.title}" is waiting for admin review.`,
       });
     }
+  });
+
+  uploadEvents.forEach((event) => {
+    const restored = event.event_type === 'restored';
+    list.push({
+      id: `upload-event-${event.id}`,
+      tone: restored ? 'success' : 'error',
+      category: 'request',
+      time: event.created_at,
+      path: '/request-upload',
+      title: `"${event.title}" ${event.event_type}`,
+      message: event.message,
+    });
   });
 
   // Deletion requests: pending / approved / rejected
@@ -335,6 +358,7 @@ const NotificationBell = () => {
       channel = supabase
         .channel(`client-notifications-${userId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'upload_requests', filter: `client_id=eq.${userId}` }, load)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'upload_request_notifications', filter: `user_id=eq.${userId}` }, load)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'delete_requests', filter: `requested_by=eq.${userId}` }, load)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'role_requests', filter: `requested_by=eq.${userId}` }, load)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pdfs' }, load)

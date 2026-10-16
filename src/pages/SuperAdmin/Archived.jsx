@@ -293,6 +293,7 @@ const Archived = () => {
     const ids = [...selectedIds];
     if (!ids.length) { handleCloseConfirm(); return; }
     const count = ids.length;
+    const filesToRestore = archivedFiles.filter((file) => ids.includes(file.id));
 
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase
@@ -303,6 +304,12 @@ const Archived = () => {
     if (error) {
       alert("Error restoring selected files: " + error.message);
     } else {
+      try {
+        await setUploadRequestsRestored(filesToRestore, user);
+      } catch (restoreRequestError) {
+        console.error("Error restoring upload request status:", restoreRequestError);
+        alert("Files restored, but their upload request status could not be restored: " + restoreRequestError.message);
+      }
       if (user) {
         await supabase.from('audit_logs').insert({
           user_id: user.id,

@@ -103,25 +103,37 @@ export const setUploadRequestsDeleted = async (pdfs, user, deleted = true) => {
 
   const { data: requests, error: requestsError } = await supabase
     .from('upload_requests')
-    .select('id, title, author, edition, isbn, remarks')
+    .select('id, client_id, title, author, edition, isbn, remarks')
     .eq('status', 'approved');
   if (requestsError) throw requestsError;
 
-  const matchingIds = (requests || [])
+  const matchingRequests = (requests || [])
     .filter((request) => {
       const isRelatedPdf = keys.has(docKey(request));
       const hasDeletionMarker = request.remarks?.startsWith(UPLOAD_REQUEST_DELETION_PREFIX);
       return isRelatedPdf && (deleted ? !hasDeletionMarker : hasDeletionMarker);
-    })
-    .map((request) => request.id);
+    });
 
-  if (matchingIds.length === 0) return;
+  if (matchingRequests.length === 0) return;
 
   const { error: updateError } = await supabase
     .from('upload_requests')
     .update({ remarks })
-    .in('id', matchingIds);
+    .in('id', matchingRequests.map((request) => request.id));
   if (updateError) throw updateError;
+
+  if (deleted) {
+    const { error: notificationError } = await supabase
+      .from('upload_request_notifications')
+      .insert(matchingRequests.map((request) => ({
+        user_id: request.client_id,
+        upload_request_id: String(request.id),
+        event_type: 'deleted',
+        title: request.title,
+        message: remarks,
+      })));
+    if (notificationError) throw notificationError;
+  }
 };
 
 export const setUploadRequestsRestored = async (pdfs, user) => {
@@ -141,20 +153,30 @@ export const setUploadRequestsRestored = async (pdfs, user) => {
 
   const { data: requests, error: requestsError } = await supabase
     .from('upload_requests')
-    .select('id, title, author, edition, isbn')
+    .select('id, client_id, title, author, edition, isbn')
     .eq('status', 'approved');
   if (requestsError) throw requestsError;
 
-  const matchingIds = (requests || [])
+  const matchingRequests = (requests || [])
     .filter((request) => keys.has(docKey(request)))
-    .map((request) => request.id);
-  if (matchingIds.length === 0) return;
+  if (matchingRequests.length === 0) return;
 
   const { error: updateError } = await supabase
     .from('upload_requests')
     .update({ remarks: `${UPLOAD_REQUEST_RESTORATION_PREFIX}${restoredBy}` })
-    .in('id', matchingIds);
+    .in('id', matchingRequests.map((request) => request.id));
   if (updateError) throw updateError;
+
+  const { error: notificationError } = await supabase
+    .from('upload_request_notifications')
+    .insert(matchingRequests.map((request) => ({
+      user_id: request.client_id,
+      upload_request_id: String(request.id),
+      event_type: 'restored',
+      title: request.title,
+      message: `${UPLOAD_REQUEST_RESTORATION_PREFIX}${restoredBy}`,
+    })));
+  if (notificationError) throw notificationError;
 };
 
 export const checkDuplicate = async (title, author, edition = '', isbn = '') => {
@@ -214,6 +236,7 @@ export const submitDeleteRequest = async (pdfId, reason, userId) => {
     .select('id')
     .eq('pdf_id', pdfId)
     .eq('requested_by', userId)
+    .eq('status', 'pending')
     .limit(1)
     .maybeSingle();
   if (checkError) throw checkError;

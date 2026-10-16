@@ -3,7 +3,7 @@ import {
   Box, Paper, TextField, Button, Typography, Stack, 
   Container, MenuItem, Alert, useTheme, Dialog, DialogTitle,
   DialogContent, DialogActions, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Chip, IconButton, 
+  TableContainer, TableHead, TableRow, Chip, IconButton, InputAdornment,
   LinearProgress, useMediaQuery, Card, CardContent, Divider,
   Snackbar, Avatar
 } from '@mui/material';
@@ -12,7 +12,8 @@ import {
   Close as CloseIcon, ErrorOutline, Send as SendIcon, 
   CalendarMonth, Description, Comment,
   Info, Title, Person, Class, Category, InsertDriveFile, WarningAmber,
-  Bookmark, School, Business, ConfirmationNumber, Layers, Language
+  Bookmark, School, Business, ConfirmationNumber, Layers, Language,
+  Search as SearchIcon
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
 import {
@@ -108,7 +109,7 @@ const isSameFile = async (file, path) => {
       const blob = await res.blob();
       const [storedHash, newHash] = await Promise.all([hashBlob(blob), hashBlob(file)]);
       return storedHash === newHash;
-    } catch (e) {
+    } catch {
       return true;
     }
   } catch (e) {
@@ -210,6 +211,47 @@ const RequestUpload = () => {
   const [requests, setRequests] = useState([]);
   const [deletionStatuses, setDeletionStatuses] = useState({}); 
   const [loadingRequests, setLoadingRequests] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [dayFilter, setDayFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const requestsPerPage = 10;
+  const filteredRequests = requests.filter((req) => {
+    const query = searchTerm.trim().toLowerCase();
+    const matchesSearch = !query || [
+      req.title,
+      req.author,
+      req.upload_reason,
+      req.displayedRemarks,
+    ].some((value) => value?.toLowerCase().includes(query));
+    const requestStatus = req.isPdfDeleted ? 'deleted' : req.status;
+    const matchesStatus = statusFilter === 'all' || requestStatus === statusFilter;
+    const matchesCategory = categoryFilter === 'all' || req.category === categoryFilter;
+    const requestDate = req.created_at ? new Date(req.created_at) : null;
+    const matchesMonth = !monthFilter || requestDate?.getMonth() + 1 === Number(monthFilter);
+    const matchesDay = !dayFilter || requestDate?.getDate() === Number(dayFilter);
+    const matchesYear = !yearFilter || requestDate?.getFullYear() === Number(yearFilter);
+    return matchesSearch && matchesStatus && matchesCategory && matchesMonth && matchesDay && matchesYear;
+  });
+  const requestCategories = [...new Set(requests.map((req) => req.category).filter(Boolean))];
+  const monthOptions = [
+    { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+    { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+    { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+    { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' },
+  ];
+  const dayOptions = Array.from({ length: 31 }, (_, index) => index + 1);
+  const requestYears = [...new Set(requests
+    .filter((req) => req.created_at)
+    .map((req) => new Date(req.created_at).getFullYear()))].sort((a, b) => b - a);
+  const totalPages = Math.ceil(filteredRequests.length / requestsPerPage);
+  const paginatedRequests = filteredRequests.slice(
+    (currentPage - 1) * requestsPerPage,
+    currentPage * requestsPerPage
+  );
   const [pdfFile, setPdfFile] = useState(null);
   const [coverFile, setCoverFile] = useState(null); 
   const [coverPreview, setCoverPreview] = useState(null);
@@ -258,7 +300,7 @@ const RequestUpload = () => {
 
       const { data: deleteData } = await supabase
         .from('delete_requests')
-        .select(`status, pdfs ( title, author, edition, isbn )`)
+        .select(`status, pdfs ( title, author, edition, isbn, is_archived )`)
         .eq('requested_by', user.id);
 
       const processedRequests = uploadData.map(req => ({
@@ -274,7 +316,7 @@ const RequestUpload = () => {
       
       const statusMap = {};
       deleteData?.forEach(d => {
-        if (d.pdfs) {
+        if (d.pdfs && !(d.status === 'approved' && d.pdfs.is_archived === false)) {
           statusMap[docKey(d.pdfs)] = d.status;
         }
       });
@@ -288,6 +330,16 @@ const RequestUpload = () => {
   };
 
   useEffect(() => { fetchRequests(); }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, categoryFilter, monthFilter, dayFilter, yearFilter]);
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   useEffect(() => {
     if (coverFile) {
@@ -747,6 +799,92 @@ const RequestUpload = () => {
           </Button>
         </Stack>
 
+        {!loadingRequests && (
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={2}
+            sx={{ mb: 4, position: 'relative', zIndex: 2 }}
+          >
+            <TextField
+              fullWidth
+              placeholder="Search by title, author, reason, or remarks..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              sx={{ flexGrow: 1, bgcolor: isDarkMode ? '#28334e' : '#f1f5f9', borderRadius: 0.5 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="primary" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              select
+              label="Month"
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              sx={{ minWidth: { xs: '100%', md: 115 }, bgcolor: isDarkMode ? '#28334e' : '#f1f5f9', borderRadius: 0.5 }}
+            >
+              <MenuItem value="">All Months</MenuItem>
+              {monthOptions.map((month) => (
+                <MenuItem key={month.value} value={month.value}>{month.label}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Date"
+              value={dayFilter}
+              onChange={(e) => setDayFilter(e.target.value)}
+              sx={{ minWidth: { xs: '100%', md: 100 }, bgcolor: isDarkMode ? '#28334e' : '#f1f5f9', borderRadius: 0.5 }}
+            >
+              <MenuItem value="">All Dates</MenuItem>
+              {dayOptions.map((day) => (
+                <MenuItem key={day} value={day}>{day}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Year"
+              value={yearFilter}
+              onChange={(e) => setYearFilter(e.target.value)}
+              sx={{ minWidth: { xs: '100%', md: 100 }, bgcolor: isDarkMode ? '#28334e' : '#f1f5f9', borderRadius: 0.5 }}
+            >
+              <MenuItem value="">All Years</MenuItem>
+              {requestYears.map((year) => (
+                <MenuItem key={year} value={year}>{year}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              sx={{ minWidth: { xs: '100%', md: 130 }, bgcolor: isDarkMode ? '#28334e' : '#f1f5f9', borderRadius: 0.5 }}
+            >
+              <MenuItem value="all">All Statuses</MenuItem>
+              <MenuItem value="pending">Pending</MenuItem>
+              <MenuItem value="approved">Approved</MenuItem>
+              <MenuItem value="rejected">Rejected</MenuItem>
+              <MenuItem value="deleted">Deleted</MenuItem>
+            </TextField>
+            <TextField
+              select
+              label="Category"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              sx={{ minWidth: { xs: '100%', md: 155 }, bgcolor: isDarkMode ? '#28334e' : '#f1f5f9', borderRadius: 0.5 }}
+            >
+              <MenuItem value="all">All Categories</MenuItem>
+              {requestCategories.map((category) => (
+                <MenuItem key={category} value={category}>
+                  {category}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        )}
+
         {loadingRequests ? <LinearProgress /> : (
           <>
             {!isMobile ? (
@@ -764,7 +902,7 @@ const RequestUpload = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {requests.map((req) => (
+                      {paginatedRequests.map((req) => (
                         <TableRow key={req.id} hover>
                           <TableCell sx={{ ...cellStyle, fontWeight: 700, color: isDarkMode ? '#60a5fa' : '#1e3a5f' }}>
                             {req.title}
@@ -785,7 +923,7 @@ const RequestUpload = () => {
               </Paper>
             ) : (
               <Stack spacing={2}>
-                {requests.map((req) => (
+                {paginatedRequests.map((req) => (
                   <Card key={req.id} elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
                     <CardContent sx={{ p: 2 }}>
                       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={2}>
@@ -836,6 +974,44 @@ const RequestUpload = () => {
               <Box sx={{ py: 10, textAlign: 'center' }}>
                 <Typography sx={{ color: 'text.secondary', fontWeight: 700 }}>No requests found.</Typography>
               </Box>
+            )}
+            {requests.length > 0 && filteredRequests.length === 0 && (
+              <Box sx={{ py: 6, textAlign: 'center' }}>
+                <Typography sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                  No requests match your search or filters.
+                </Typography>
+              </Box>
+            )}
+            {totalPages > 1 && (
+              <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center" sx={{ mt: 3, flexWrap: 'wrap' }}>
+                <Button
+                  size="small"
+                  onClick={() => setCurrentPage((page) => page - 1)}
+                  disabled={currentPage === 1}
+                  sx={{ minWidth: 72, fontWeight: 700, textTransform: 'none' }}
+                >
+                  Previous
+                </Button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                  <Button
+                    key={page}
+                    size="small"
+                    onClick={() => setCurrentPage(page)}
+                    variant={currentPage === page ? 'contained' : 'text'}
+                    sx={{ minWidth: 32, fontWeight: 700 }}
+                  >
+                    {page}
+                  </Button>
+                ))}
+                <Button
+                  size="small"
+                  onClick={() => setCurrentPage((page) => page + 1)}
+                  disabled={currentPage === totalPages}
+                  sx={{ minWidth: 55, fontWeight: 700, textTransform: 'none' }}
+                >
+                  Next
+                </Button>
+              </Stack>
             )}
           </>
         )}
