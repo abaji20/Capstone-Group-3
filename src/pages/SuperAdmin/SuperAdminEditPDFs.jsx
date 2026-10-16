@@ -16,6 +16,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 
 import EditPdfModal from '../../shared/EditPdfModal';
 import { supabase } from '../../supabaseClient'; 
+import { setUploadRequestsDeleted } from '../../services/pdfService';
 import glclogo from '../../assets/glclogo.png';
 
 const SuperAdminEditPDFs = () => {
@@ -164,6 +165,8 @@ const SuperAdminEditPDFs = () => {
 
       if (archiveError) throw archiveError;
 
+      await setUploadRequestsDeleted([selectedPdf], user);
+
       await supabase
         .from('delete_requests')
         .delete()
@@ -183,7 +186,7 @@ const SuperAdminEditPDFs = () => {
       loadPdfs(); 
     } catch (error) {
       console.error(error);
-      showStatus('error', "Failed to archive document.");
+      showStatus('error', error.message || "Failed to archive document.");
     }
   };
 

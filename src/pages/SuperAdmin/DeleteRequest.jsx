@@ -6,6 +6,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Tooltip 
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
+import { setUploadRequestsDeleted } from '../../services/pdfService';
 import glclogo from '../../assets/glclogo.png';
 // Shared date formatter (year / month / day -> "March 15, 2020"), same one
 // used by the Admin Dashboard's report and Document Info modal.
@@ -170,6 +171,9 @@ const DeleteRequests = () => {
     setApproving(true);
     try {
       await handleApprove(requestId, pdfId);
+    } catch (error) {
+      console.error('Failed to approve delete request:', error);
+      alert('Failed to approve delete request: ' + error.message);
     } finally {
       setApproving(false);
       setApproveModal({ open: false, requestId: null, pdfId: null, title: '' });
@@ -181,24 +185,36 @@ const DeleteRequests = () => {
     const requestData = requests.find(r => r.id === requestId);
     const pdfTitle = requestData?.pdfs?.title || 'Unknown File';
 
-    await supabase.from('pdfs').update({ is_archived: true }).eq('id', pdfId);
-    await supabase.from('delete_requests').update({ status: 'approved' }).eq('id', requestId);
-    
-    if (pdfTitle) {
-        await supabase
-          .from('upload_requests')
-          .update({ remarks: 'Document successfully removed from library.' })
-          .eq('title', pdfTitle);
-    }
-
     const { data: { user } } = await supabase.auth.getUser();
+    const { error: archiveError } = await supabase
+      .from('pdfs')
+      .update({ is_archived: true })
+      .eq('id', pdfId);
+    if (archiveError) throw archiveError;
+
+    await setUploadRequestsDeleted(requestData?.pdfs ? [requestData.pdfs] : [], user);
+
+    const { error: requestError } = await supabase
+      .from('delete_requests')
+      .update({ status: 'approved' })
+      .eq('id', requestId);
+    if (requestError) throw requestError;
+
+    const { error: otherRequestsError } = await supabase
+      .from('delete_requests')
+      .delete()
+      .eq('pdf_id', pdfId)
+      .neq('id', requestId);
+    if (otherRequestsError) throw otherRequestsError;
+
     if (user) {
-      await supabase.from('audit_logs').insert({
+      const { error: auditError } = await supabase.from('audit_logs').insert({
         user_id: user.id,
         action_type: 'APPROVED DELETE REQUEST',
         pdf_id: pdfId,
         description: `Approved delete request for: ${pdfTitle}`
       });
+      if (auditError) throw auditError;
     }
 
     fetchRequests();

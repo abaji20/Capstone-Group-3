@@ -135,21 +135,8 @@ const EditPDFs = () => {
   const handleDeleteSubmit = async () => {
     if (selectedPdf) {
       try {
-        const { data: existingRequest, error: checkError } = await supabase
-          .from('delete_requests')
-          .select('id')
-          .eq('pdf_id', selectedPdf.id)
-          .eq('status', 'pending')
-          .maybeSingle();
-
-        if (existingRequest) {
-          showStatus('error', "This document already has a pending delete request.");
-          setDeleteOpen(false);
-          setDeleteReason("");
-          return;
-        }
-
         const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('You must be signed in to request a deletion.');
         
         await submitDeleteRequest(selectedPdf.id, deleteReason, user.id);
 
@@ -168,7 +155,7 @@ const EditPDFs = () => {
         loadPdfs(); 
       } catch (error) {
         console.error("Error during deletion request:", error);
-        showStatus('error', "Failed to submit request.");
+        showStatus('error', error.message || "Failed to submit request.");
       }
     }
   };

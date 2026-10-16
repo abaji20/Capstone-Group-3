@@ -66,6 +66,97 @@ const normIsbn = (v) => (v ?? '').toString().replace(/[\s-]/g, '').toLowerCase()
 export const docKey = (d) =>
   [norm(d?.title), norm(d?.author), norm(d?.edition), normIsbn(d?.isbn)].join('|');
 
+export const UPLOAD_REQUEST_DELETION_PREFIX = 'Your uploaded file has been deleted by: ';
+export const LEGACY_UPLOAD_REQUEST_DELETION_PREFIX = 'Your request upload has been deleted by: ';
+export const UPLOAD_REQUEST_RESTORATION_PREFIX = 'Your uploaded file has been restored by: ';
+
+export const isUploadRequestDeleted = (remarks) =>
+  remarks?.startsWith(UPLOAD_REQUEST_DELETION_PREFIX) ||
+  remarks?.startsWith(LEGACY_UPLOAD_REQUEST_DELETION_PREFIX);
+
+export const displayUploadRequestRemarks = (remarks) => {
+  if (remarks?.startsWith(LEGACY_UPLOAD_REQUEST_DELETION_PREFIX)) {
+    return `${UPLOAD_REQUEST_DELETION_PREFIX}Admin`;
+  }
+  return remarks;
+};
+
+export const setUploadRequestsDeleted = async (pdfs, user, deleted = true) => {
+  const keys = new Set((pdfs || []).map(docKey).filter((key) => key !== '|||'));
+  if (keys.size === 0) return;
+
+  let remarks = null;
+  if (deleted) {
+    let deletedBy = 'Admin';
+    if (user?.id) {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (profile?.role === 'admin') deletedBy = 'Admin';
+      if (profile?.role === 'superadmin') deletedBy = 'Superadmin';
+    }
+    remarks = `${UPLOAD_REQUEST_DELETION_PREFIX}${deletedBy}`;
+  }
+
+  const { data: requests, error: requestsError } = await supabase
+    .from('upload_requests')
+    .select('id, title, author, edition, isbn, remarks')
+    .eq('status', 'approved');
+  if (requestsError) throw requestsError;
+
+  const matchingIds = (requests || [])
+    .filter((request) => {
+      const isRelatedPdf = keys.has(docKey(request));
+      const hasDeletionMarker = request.remarks?.startsWith(UPLOAD_REQUEST_DELETION_PREFIX);
+      return isRelatedPdf && (deleted ? !hasDeletionMarker : hasDeletionMarker);
+    })
+    .map((request) => request.id);
+
+  if (matchingIds.length === 0) return;
+
+  const { error: updateError } = await supabase
+    .from('upload_requests')
+    .update({ remarks })
+    .in('id', matchingIds);
+  if (updateError) throw updateError;
+};
+
+export const setUploadRequestsRestored = async (pdfs, user) => {
+  const keys = new Set((pdfs || []).map(docKey).filter((key) => key !== '|||'));
+  if (keys.size === 0) return;
+
+  let restoredBy = 'Admin';
+  if (user?.id) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (profile?.role === 'superadmin') restoredBy = 'Superadmin';
+  }
+
+  const { data: requests, error: requestsError } = await supabase
+    .from('upload_requests')
+    .select('id, title, author, edition, isbn')
+    .eq('status', 'approved');
+  if (requestsError) throw requestsError;
+
+  const matchingIds = (requests || [])
+    .filter((request) => keys.has(docKey(request)))
+    .map((request) => request.id);
+  if (matchingIds.length === 0) return;
+
+  const { error: updateError } = await supabase
+    .from('upload_requests')
+    .update({ remarks: `${UPLOAD_REQUEST_RESTORATION_PREFIX}${restoredBy}` })
+    .in('id', matchingIds);
+  if (updateError) throw updateError;
+};
+
 export const checkDuplicate = async (title, author, edition = '', isbn = '') => {
   // Narrow down by title + author in the database, then compare edition and
   // ISBN here so blanks/NULLs and dashes are handled properly.
@@ -86,17 +177,20 @@ export const checkDuplicate = async (title, author, edition = '', isbn = '') => 
 export const deletePdf = async (id) => {
   const { data: record, error: fetchError } = await supabase
     .from('pdfs')
-    .select('file_url, image_url')
+    .select('*')
     .eq('id', id)
     .single();
 
   if (fetchError) throw fetchError;
 
+  const { data: { user } } = await supabase.auth.getUser();
   if (record.file_url) await supabase.storage.from('pdfs').remove([record.file_url]);
   if (record.image_url) await supabase.storage.from('pdfs').remove([record.image_url]);
 
   const { error: deleteError } = await supabase.from('pdfs').delete().eq('id', id);
   if (deleteError) throw deleteError;
+
+  await setUploadRequestsDeleted([record], user);
 
   return { success: true };
 };
@@ -113,15 +207,26 @@ export const fetchPdfs = async () => {
 };
 
 export const submitDeleteRequest = async (pdfId, reason, userId) => {
-  const { error } = await supabase
+  if (!userId) throw new Error('You must be signed in to request a deletion.');
+
+  const { data: existingRequest, error: checkError } = await supabase
     .from('delete_requests')
-    .insert([{ 
-      pdf_id: pdfId, 
-      reason: reason, 
-      status: 'pending',
-      requested_by: userId 
-    }]);
-  
+    .select('id')
+    .eq('pdf_id', pdfId)
+    .eq('requested_by', userId)
+    .limit(1)
+    .maybeSingle();
+  if (checkError) throw checkError;
+  if (existingRequest) {
+    throw new Error('You have already submitted a delete request for this document.');
+  }
+
+  const { error } = await supabase.from('delete_requests').insert([{
+    pdf_id: pdfId,
+    reason,
+    status: 'pending',
+    requested_by: userId
+  }]);
   if (error) throw error;
   return { success: true };
 };

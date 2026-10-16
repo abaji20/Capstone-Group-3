@@ -15,6 +15,13 @@ import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import CloseIcon from '@mui/icons-material/Close';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import { supabase } from '../supabaseClient';
+import {
+  UPLOAD_REQUEST_DELETION_PREFIX,
+  LEGACY_UPLOAD_REQUEST_DELETION_PREFIX,
+  UPLOAD_REQUEST_RESTORATION_PREFIX,
+  isUploadRequestDeleted,
+  displayUploadRequestRemarks,
+} from '../services/pdfService';
 
 // ── Settings ───────────────────────────────────────────────────────────────
 const POLL_INTERVAL_MS = 60000;   // safety-net refresh if realtime is off
@@ -122,9 +129,15 @@ const rowsOf = (result) =>
 const buildNotifications = async (uid) => {
   const since = new Date(Date.now() - NEW_LIBRARY_DAYS * 86400000).toISOString();
 
-  const [uploadRes, deleteRes, roleRes, libraryRes] = await Promise.allSettled([
+  const [uploadRes, deletedUploadRes, legacyDeletedUploadRes, restoredUploadRes, deleteRes, roleRes, libraryRes] = await Promise.allSettled([
     supabase.from('upload_requests').select('*').eq('client_id', uid)
       .order('created_at', { ascending: false }).limit(20),
+    supabase.from('upload_requests').select('*').eq('client_id', uid)
+      .like('remarks', `${UPLOAD_REQUEST_DELETION_PREFIX}%`),
+    supabase.from('upload_requests').select('*').eq('client_id', uid)
+      .like('remarks', `${LEGACY_UPLOAD_REQUEST_DELETION_PREFIX}%`),
+    supabase.from('upload_requests').select('*').eq('client_id', uid)
+      .like('remarks', `${UPLOAD_REQUEST_RESTORATION_PREFIX}%`),
     supabase.from('delete_requests').select('*, pdfs ( title )').eq('requested_by', uid).limit(30),
     supabase.from('role_requests').select('*').eq('requested_by', uid)
       .order('created_at', { ascending: false }).limit(5),
@@ -135,10 +148,31 @@ const buildNotifications = async (uid) => {
 
   const list = [];
 
-  // Upload requests: submitted / approved / rejected
-  rowsOf(uploadRes).forEach((req) => {
+  // Upload requests: submitted / approved / rejected / deleted / restored
+  const uploadRequests = new Map();
+  [
+    ...rowsOf(uploadRes),
+    ...rowsOf(deletedUploadRes),
+    ...rowsOf(legacyDeletedUploadRes),
+    ...rowsOf(restoredUploadRes),
+  ].forEach((req) => {
+    uploadRequests.set(req.id, req);
+  });
+  [...uploadRequests.values()].forEach((req) => {
     const base = { time: whenOf(req), path: '/request-upload', category: 'request' };
-    if (req.status === 'approved') {
+    if (req.status === 'approved' && req.remarks?.startsWith(UPLOAD_REQUEST_RESTORATION_PREFIX)) {
+      list.push({
+        ...base, id: `upload-${req.id}-restored`, tone: 'success',
+        title: `"${req.title}" restored`,
+        message: req.remarks,
+      });
+    } else if (req.status === 'approved' && isUploadRequestDeleted(req.remarks)) {
+      list.push({
+        ...base, id: `upload-${req.id}-deleted`, tone: 'error',
+        title: `"${req.title}" deleted`,
+        message: displayUploadRequestRemarks(req.remarks),
+      });
+    } else if (req.status === 'approved') {
       list.push({
         ...base, id: `upload-${req.id}-approved`, tone: 'success',
         title: 'Upload approved',

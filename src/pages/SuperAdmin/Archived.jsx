@@ -8,6 +8,7 @@ import {
   Checkbox, FormControlLabel
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
+import { setUploadRequestsDeleted, setUploadRequestsRestored } from '../../services/pdfService';
 import glclogo from '../../assets/glclogo.png';
 // Shared date formatter (year / month / day -> "March 15, 2020"), same one
 // used by the Admin Dashboard's report and Document Info modal.
@@ -238,6 +239,12 @@ const Archived = () => {
     if (error) {
       alert("Error restoring file: " + error.message);
     } else {
+      try {
+        await setUploadRequestsRestored([fileToRestore], user);
+      } catch (restoreRequestError) {
+        console.error("Error restoring upload request status:", restoreRequestError);
+        alert("File restored, but its upload request status could not be restored: " + restoreRequestError.message);
+      }
       if (user) {
         await supabase.from('audit_logs').insert({
           user_id: user.id,
@@ -263,6 +270,8 @@ const Archived = () => {
       
       const { error: dbError } = await supabase.from('pdfs').delete().eq('id', file.id);
       if (dbError) throw dbError;
+
+      await setUploadRequestsDeleted([file], user);
 
       if (user) {
         await supabase.from('audit_logs').insert({
@@ -326,6 +335,8 @@ const Archived = () => {
 
       const { error } = await supabase.from('pdfs').delete().in('id', ids);
       if (error) throw error;
+
+      await setUploadRequestsDeleted(filesToPurge, user);
 
       if (user) {
         await supabase.from('audit_logs').insert({

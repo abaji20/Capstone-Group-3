@@ -15,7 +15,12 @@ import {
   Bookmark, School, Business, ConfirmationNumber, Layers, Language
 } from '@mui/icons-material';
 import { supabase } from '../../supabaseClient';
-import { docKey } from '../../services/pdfService'; 
+import {
+  docKey,
+  isUploadRequestDeleted,
+  displayUploadRequestRemarks,
+  submitDeleteRequest,
+} from '../../services/pdfService';
 // NEW: shared publication-date helpers (year / month / day)
 import { 
   formatPublishedDate, MONTH_NAMES, getDaysInMonth, isFutureDate, normalizePubDate 
@@ -258,7 +263,11 @@ const RequestUpload = () => {
 
       const processedRequests = uploadData.map(req => ({
         ...req,
-        isMissingInLibrary: req.status === 'approved' && !livePdfKeys.has(docKey(req))
+        displayedRemarks: displayUploadRequestRemarks(req.remarks),
+        isPdfDeleted: isUploadRequestDeleted(req.remarks),
+        isMissingInLibrary: req.status === 'approved' && (
+          isUploadRequestDeleted(req.remarks) || !livePdfKeys.has(docKey(req))
+        )
       }));
 
       setRequests(processedRequests);
@@ -469,17 +478,13 @@ const RequestUpload = () => {
       const { data: candidates } = await supabase.from('pdfs')
         .select('id, title, author, edition, isbn')
         .eq('title', rec.title)
-        .eq('author', rec.author);
+        .eq('author', rec.author)
+        .eq('is_archived', false);
       const pdfRecord = (candidates || []).find(p => docKey(p) === docKey(rec));
 
       if (!pdfRecord) throw new Error("PDF not found in the library. It may have already been deleted.");
 
-      const { error } = await supabase.from('delete_requests').insert([{
-        pdf_id: pdfRecord.id, requested_by: user.id,
-        reason: deleteRequestDialog.reason, status: 'pending'
-      }]);
-
-      if (error) throw error;
+      await submitDeleteRequest(pdfRecord.id, deleteRequestDialog.reason, user.id);
 
       showStatus('success', 'Deletion request sent.');
       setDeleteRequestDialog({ open: false, record: null, reason: '', processing: false });
@@ -607,7 +612,7 @@ const RequestUpload = () => {
   const cellStyle = { padding: isMobile ? '12px 16px' : '20px 24px', fontSize: '0.95rem' };
   const chipStyle = (status) => ({
     width: isMobile ? '90px' : '110px', fontWeight: 900, borderRadius: '6px', color: 'white',
-    bgcolor: status === 'approved' ? '#2e7d32' : status === 'rejected' ? '#d32f2f' : '#ed6c02'
+    bgcolor: status === 'deleted' ? '#d32f2f' : status === 'approved' ? '#2e7d32' : status === 'rejected' ? '#d32f2f' : '#ed6c02'
   });
 
   // Reusable component para sa metadata list rows gaya ng nasa image
@@ -693,7 +698,6 @@ const RequestUpload = () => {
         return (
             <Stack direction="column" alignItems={isMobile ? "flex-start" : "center"}>
                 <Typography sx={{ fontWeight: 800, color: '#d32f2f', fontSize: '0.7rem' }}>DELETE REJECTED</Typography>
-                <Button size="small" onClick={() => setDeleteRequestDialog({ open: true, record: req, reason: '', processing: false })} sx={{ fontSize: '0.6rem', fontWeight: 900 }}>RETRY?</Button>
             </Stack>
         );
       }
@@ -767,10 +771,10 @@ const RequestUpload = () => {
                             <Typography variant="caption" display="block" sx={{ color: 'text.secondary', fontWeight: 500 }}>{req.author}</Typography>
                           </TableCell>
                           <TableCell sx={cellStyle}>{req.upload_reason}</TableCell>
-                          <TableCell sx={{ ...cellStyle, color: req.remarks ? 'text.primary' : 'text.disabled', fontStyle: req.remarks ? 'normal' : 'italic' }}>
-                            {req.remarks || 'No remarks yet'}
+                          <TableCell sx={{ ...cellStyle, color: req.displayedRemarks ? 'text.primary' : 'text.disabled', fontStyle: req.displayedRemarks ? 'normal' : 'italic' }}>
+                            {req.displayedRemarks || 'No remarks yet'}
                           </TableCell>
-                          <TableCell align="center" sx={cellStyle}><Chip label={req.status.toUpperCase()} sx={chipStyle(req.status)} /></TableCell>
+                          <TableCell align="center" sx={cellStyle}><Chip label={req.isPdfDeleted ? 'DELETED' : req.status.toUpperCase()} sx={chipStyle(req.isPdfDeleted ? 'deleted' : req.status)} /></TableCell>
                           <TableCell align="center" sx={cellStyle}>{new Date(req.created_at).toLocaleDateString()}</TableCell>
                           <TableCell align="center" sx={cellStyle}>{renderActionButtons(req)}</TableCell>
                         </TableRow>
@@ -793,7 +797,7 @@ const RequestUpload = () => {
                             By {req.author}
                           </Typography>
                         </Box>
-                        <Chip size="small" label={req.status.toUpperCase()} sx={{ ...chipStyle(req.status), width: 'auto', px: 1, height: 24, fontSize: '0.65rem' }} />
+                        <Chip size="small" label={req.isPdfDeleted ? 'DELETED' : req.status.toUpperCase()} sx={{ ...chipStyle(req.isPdfDeleted ? 'deleted' : req.status), width: 'auto', px: 1, height: 24, fontSize: '0.65rem' }} />
                       </Stack>
                       
                       <Divider sx={{ my: 1.5, borderStyle: 'dashed' }} />
@@ -807,8 +811,8 @@ const RequestUpload = () => {
                         </Box>
                         <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                           <Comment sx={{ fontSize: 16, color: 'text.disabled', mt: 0.3 }} />
-                          <Typography variant="body2" sx={{ fontSize: '0.8rem', color: req.remarks ? 'text.primary' : 'text.disabled', fontStyle: req.remarks ? 'normal' : 'italic' }}>
-                            {req.remarks || 'No admin remarks'}
+                          <Typography variant="body2" sx={{ fontSize: '0.8rem', color: req.displayedRemarks ? 'text.primary' : 'text.disabled', fontStyle: req.displayedRemarks ? 'normal' : 'italic' }}>
+                            {req.displayedRemarks || 'No admin remarks'}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
