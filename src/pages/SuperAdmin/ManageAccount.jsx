@@ -9,6 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, PrimaryButton, DeleteButton, ActionModal, FormInput } from '../../shared';
 import BulkCreateAccountDialog from '../../shared/BulkCreateAccountDialog';
+import AccountPresence from '../../shared/AccountPresence';
 import { supabase } from '../../supabaseClient';
 
 // Icons
@@ -145,6 +146,30 @@ const ManageAccount = () => {
     };
     checkUser();
   }, [navigate]);
+
+  useEffect(() => {
+    const refreshActivity = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, last_active_at')
+        .eq('is_archived', false);
+
+      if (error) {
+        console.error('Error refreshing account activity:', error);
+        return;
+      }
+
+      const activityById = new Map(data.map((profile) => [profile.id, profile.last_active_at]));
+      setUsers((currentUsers) => currentUsers.map((user) => (
+        activityById.has(user.id)
+          ? { ...user, last_active_at: activityById.get(user.id) }
+          : user
+      )));
+    };
+
+    const interval = setInterval(refreshActivity, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const processInactivityAndStatus = (fetchedProfiles) => {
     // The UI trusts the stored is_active value, so an admin can still
@@ -1063,6 +1088,7 @@ const ManageAccount = () => {
                   <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><StyledAvatar user={user} size={40} /></Box>
                   <Typography variant="h6" fontWeight={800}>{user.full_name}</Typography>
                   <Typography variant="body2" color="text.secondary">{user.email}</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'center' }}><AccountPresence lastActiveAt={user.last_active_at} isConfirmed={user.is_confirm} /></Box>
                   <Box sx={{ my: 1 }}><StatusControlDropdown user={user} /></Box>
                   <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 600 }}>ID: {user.id_number || 'N/A'} | {user.department || 'N/A'} | {user.year_level || 'N/A'}</Typography>
                   <Box sx={{ mb: 2 }}><RoleChip role={user.role} /></Box>
@@ -1122,6 +1148,7 @@ const ManageAccount = () => {
                           <Box>
                             <Typography fontWeight={700}>{user.full_name}</Typography>
                             <Typography variant="caption" color="text.secondary">{user.email}</Typography>
+                            <AccountPresence lastActiveAt={user.last_active_at} isConfirmed={user.is_confirm} />
                           </Box>
                         </Stack>
                       </TableCell>
