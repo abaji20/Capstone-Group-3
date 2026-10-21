@@ -4,7 +4,7 @@ import {
   TableRow, Typography, CircularProgress, Stack, MenuItem, TextField, 
   InputAdornment, useTheme, useMediaQuery, Container, Card, CardContent,
   Button, IconButton, Dialog, DialogActions, DialogContent, Menu,
-  DialogContentText, DialogTitle, Tabs, Tab, Chip, Checkbox, FormControlLabel,
+  DialogContentText, DialogTitle, Tabs, Tab, Chip,
   Autocomplete, Alert
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
@@ -14,9 +14,6 @@ import autoTable from 'jspdf-autotable';
 // Icons
 import HistoryIcon from '@mui/icons-material/History';
 import SearchIcon from '@mui/icons-material/Search';
-import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import AssignmentLateIcon from '@mui/icons-material/AssignmentLate';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -129,11 +126,6 @@ const Logs = () => {
   // --- PAGINATION STATE ---
   const [currentPage, setCurrentPage] = useState(1);
 
-  // --- SELECTION STATE (Select All + individual checkboxes -> bulk delete) ---
-  const [selectedLogIds, setSelectedLogIds] = useState([]);
-
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [deleteConfig, setDeleteConfig] = useState({ type: null, id: null }); // type: 'single' | 'bulk'
   const [studentReportOpen, setStudentReportOpen] = useState(false);
   const [verifiedAccounts, setVerifiedAccounts] = useState([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
@@ -244,34 +236,6 @@ const Logs = () => {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
-
-  // --- SELECTION LOGIC ---
-  // Drop selections for logs that no longer exist (deleted, refreshed, etc.).
-  useEffect(() => {
-    setSelectedLogIds((prev) => {
-      const next = prev.filter((id) => logs.some((l) => l.id === id));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [logs]);
-
-  // Start fresh whenever the filters/category change, so nothing that is
-  // currently hidden from view can be deleted by accident.
-  useEffect(() => {
-    setSelectedLogIds([]);
-  }, [searchTerm, roleFilter, monthFilter, dayFilter, yearFilter, activeCategory]);
-
-  const selectedLogCount = selectedLogIds.length;
-  const allLogsSelected = filteredLogs.length > 0 && filteredLogs.every((l) => selectedLogIds.includes(l.id));
-  const someLogsSelected = selectedLogCount > 0 && !allLogsSelected;
-
-  // "Select All" selects everything matching the current search/filters/tab (all pages).
-  const toggleLogSelectAll = () => {
-    setSelectedLogIds(allLogsSelected ? [] : filteredLogs.map((l) => l.id));
-  };
-
-  const toggleLogSelected = (id) => {
-    setSelectedLogIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
 
   const getTargetName = (log) => {
     if (log.pdfs?.title) return log.pdfs.title;
@@ -459,33 +423,6 @@ const Logs = () => {
     setExportAnchor(null);
     setReportYear(currentYear);
     setYearlyReportOpen(true);
-  };
-
-  const openConfirm = (type, id = null) => {
-    setDeleteConfig({ type, id });
-    setConfirmOpen(true);
-  };
-
-  const handleConfirmDelete = async () => {
-    setConfirmOpen(false);
-    if (deleteConfig.type === 'single') {
-      const { error } = await supabase.from('audit_logs').delete().eq('id', deleteConfig.id);
-      if (!error) {
-        setSelectedLogIds((prev) => prev.filter((id) => id !== deleteConfig.id));
-        fetchLogs();
-      }
-    } else if (deleteConfig.type === 'bulk') {
-      // Bulk delete operates ONLY on the checked logs.
-      const ids = [...selectedLogIds];
-      if (!ids.length) return;
-      const { error } = await supabase.from('audit_logs').delete().in('id', ids);
-      if (error) {
-        console.error('Bulk delete failed:', error.message);
-      } else {
-        setSelectedLogIds([]);
-        fetchLogs();
-      }
-    }
   };
 
  const getActionStyles = (action, darkMode) => { 
@@ -759,85 +696,22 @@ const Logs = () => {
           </Box>
         ) : (
           <>
-            {/* Bulk-selection bar — only appears once something is selected
-                (on mobile it stays so the "Select All" checkbox is reachable) */}
-            {(isMobile || selectedLogCount > 0) && (
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1.5}
-                justifyContent="space-between"
-                alignItems={{ xs: 'flex-start', sm: 'center' }}
-                sx={{ mb: 2 }}
-              >
-                {isMobile ? (
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={allLogsSelected}
-                        indeterminate={someLogsSelected}
-                        onChange={toggleLogSelectAll}
-                      />
-                    }
-                    label={<Typography variant="body2" fontWeight={700}>Select All ({selectedLogCount} of {filteredLogs.length} selected)</Typography>}
-                  />
-                ) : (
-                  <Typography variant="body2" fontWeight={700} color="text.secondary">
-                    {selectedLogCount} of {filteredLogs.length} selected
-                  </Typography>
-                )}
-                {selectedLogCount > 0 && (
-                  <Button
-                    size="small"
-                    variant="contained"
-                    color="error"
-                    startIcon={<DeleteSweepIcon />}
-                    onClick={() => openConfirm('bulk')}
-                    sx={{ borderRadius: '8px', fontWeight: 700, boxShadow: 'none' }}
-                  >
-                    Delete Selected ({selectedLogCount})
-                  </Button>
-                )}
-              </Stack>
-            )}
-
             {!isMobile ? (
               <TableContainer component={Paper} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                 <Table>
                   <TableHead sx={{ bgcolor: headerBg }}>
                     <TableRow>
-                      <TableCell padding="checkbox" sx={{ width: 48 }}>
-                        <Checkbox
-                          checked={allLogsSelected}
-                          indeterminate={someLogsSelected}
-                          onChange={toggleLogSelectAll}
-                          disabled={filteredLogs.length === 0}
-                          inputProps={{ 'aria-label': 'Select all logs' }}
-                          sx={{
-                            color: 'white',
-                            '&.Mui-checked, &.MuiCheckbox-indeterminate': { color: 'white' },
-                            '&.Mui-disabled': { color: 'rgba(255,255,255,0.3)' }
-                          }}
-                        />
-                      </TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800, width: '250px' }}>PERFORMED BY</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800, width: '150px' }} align="center">ROLE</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">ACTION</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>TARGET</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>DETAILS</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 800 }}>DATE</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 800 }} align="center">MANAGE</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {paginatedLogs.map((log) => (
-                      <TableRow key={log.id} hover selected={selectedLogIds.includes(log.id)}>
-                        <TableCell padding="checkbox">
-                          <Checkbox
-                            checked={selectedLogIds.includes(log.id)}
-                            onChange={() => toggleLogSelected(log.id)}
-                            inputProps={{ 'aria-label': 'Select log entry' }}
-                          />
-                        </TableCell>
+                      <TableRow key={log.id} hover>
                         <TableCell sx={{ width: '250px' }}>
                             <Stack spacing={0}>
                                 <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.85rem'}}>
@@ -862,9 +736,6 @@ const Logs = () => {
                           {log.description ? log.description.replace(/client/gi, 'user') : ''}
                         </TableCell>
                         <TableCell sx={{ fontSize: '0.85rem' }}>{new Date(log.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell align="center">
-                          <IconButton onClick={() => openConfirm('single', log.id)} color="error" size="medium"><DeleteOutlineIcon fontSize="medium" /></IconButton>
-                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -876,22 +747,13 @@ const Logs = () => {
                   <Card key={log.id} sx={{ bgcolor: cardBg, borderRadius: 1, border: `1px solid ${borderCol}`, boxShadow: 'none' }}>
                     <CardContent>
                       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
-                        <Stack direction="row" spacing={0.5} alignItems="flex-start">
-                          <Checkbox
-                            checked={selectedLogIds.includes(log.id)}
-                            onChange={() => toggleLogSelected(log.id)}
-                            inputProps={{ 'aria-label': 'Select log entry' }}
-                            sx={{ ml: -1.5, mt: -1 }}
-                          />
-                          <Stack direction="column" spacing={0.5}>
+                        <Stack direction="column" spacing={0.5}>
                             <Typography sx={{ fontWeight: 700 }}>{log.profiles?.full_name}</Typography>
                             <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.80rem', lineHeight: 1 }}>
                                 {log.profiles?.email}
                             </Typography> 
                             <RoleChip role={log.profiles?.role} />  
-                          </Stack>
                         </Stack>
-                        <IconButton onClick={() => openConfirm('single', log.id)} color="error" size="small"><DeleteOutlineIcon fontSize="small" /></IconButton>
                       </Stack>
                       <Stack spacing={2}>
                         <Box><Typography variant="caption" color="text.secondary" fontWeight={700}>ACTION</Typography><br/><ActionButton action={log.action_type} /></Box>
@@ -1140,20 +1002,6 @@ const Logs = () => {
           </DialogActions>
         </Dialog>
 
-        <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} PaperProps={{ sx: { bgcolor: cardBg, borderRadius: 1, width: '400px' } }}>
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><WarningAmberIcon color="error" /> Confirm Deletion</DialogTitle>
-          <DialogContent>
-            <DialogContentText sx={{ color: 'text.primary', fontWeight: 600 }}>
-              {deleteConfig.type === 'bulk'
-                ? <>Permanently delete <b>{selectedLogCount}</b> selected log entr{selectedLogCount === 1 ? 'y' : 'ies'}? This action is irreversible.</>
-                : "Delete this log entry?"}
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions sx={{ pb: 2, px: 3 }}>
-            <Button onClick={() => setConfirmOpen(false)} sx={{ color: 'text.secondary', fontWeight: 700 }}>Cancel</Button>
-            <Button onClick={handleConfirmDelete} variant="contained" color="error" sx={{ fontWeight: 700, borderRadius: 1 }}>Delete Permanently</Button>
-          </DialogActions>
-        </Dialog>
       </Container>
     </Box>
   );

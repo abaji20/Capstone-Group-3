@@ -30,6 +30,8 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState(null); 
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -181,26 +183,36 @@ const Login = () => {
 
   const handleForgotPassword = async () => {
     if (!email) {
+      setResetConfirmOpen(false);
       setError("Please enter your email address first.");
       return;
     }
     
     if (!email.toLowerCase().endsWith('@goldenlink.ph')) {
+      setResetConfirmOpen(false);
       setError("Only Authorized accounts can request a password reset.");
       return;
     }
 
     setError(null);
     setMessage(null);
+    setResetLoading(true);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://capstone-group-3-swart.vercel.app/forgot-password',
+      });
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://capstone-group-3-swart.vercel.app/forgot-password',
-    });
-
-    if (error) {
-      setError(error.message);
-    } else {
-      setMessage("Password reset link sent! Please check your Gmail inbox.");
+      if (resetError) {
+        setError(resetError.message);
+      } else {
+        setMessage("Password reset link sent! Please check your Gmail inbox.");
+      }
+    } catch (resetError) {
+      console.error('Password reset request failed:', resetError);
+      setError('Unable to send a password reset link. Please try again.');
+    } finally {
+      setResetConfirmOpen(false);
+      setResetLoading(false);
     }
   };
 
@@ -400,7 +412,7 @@ const Login = () => {
                     component="button"
                     type="button"
                     variant="body2"
-                    onClick={handleForgotPassword}
+                    onClick={() => setResetConfirmOpen(true)}
                     sx={{ 
                       fontWeight: 700, 
                       textDecoration: 'none', 
@@ -470,6 +482,39 @@ const Login = () => {
           </Box>
         </Paper>
       </Container>
+
+      <Dialog
+        open={resetConfirmOpen}
+        onClose={() => !resetLoading && setResetConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Send password reset link?</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            We'll send a password reset link to {email || 'the email address you enter'}.
+            Do you want to continue?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setResetConfirmOpen(false)} disabled={resetLoading} color="inherit">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleForgotPassword}
+            disabled={resetLoading}
+            variant="contained"
+            sx={{
+              bgcolor: '#213C51',
+              color: '#ffffff',
+              fontWeight: 700,
+              '&:hover': { bgcolor: '#182d3e' },
+            }}
+          >
+            {resetLoading ? 'Sending...' : 'Send reset link'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* POLICY & TERMS MODAL */}
       <Dialog 

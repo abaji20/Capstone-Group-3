@@ -205,7 +205,10 @@ export const deletePdf = async (id) => {
 
   if (fetchError) throw fetchError;
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  await archiveDeletedPdfs([record], user?.id);
+
   if (record.file_url) await supabase.storage.from('pdfs').remove([record.file_url]);
   if (record.image_url) await supabase.storage.from('pdfs').remove([record.image_url]);
 
@@ -215,6 +218,19 @@ export const deletePdf = async (id) => {
   await setUploadRequestsDeleted([record], user);
 
   return { success: true };
+};
+
+export const archiveDeletedPdfs = async (records, userId) => {
+  if (!records.length) return;
+
+  const { error } = await supabase.from('deleted_pdf_archive').insert(
+    records.map((record) => ({
+      source_pdf_id: String(record.id),
+      pdf_data: record,
+      deleted_by: userId || null,
+    }))
+  );
+  if (error) throw error;
 };
 
 export const fetchPdfs = async () => {

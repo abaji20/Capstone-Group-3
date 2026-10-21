@@ -3,7 +3,7 @@ import {
   Box, Paper, Typography, Stack, CircularProgress, 
   MenuItem, TextField, useTheme, Button,
   Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert,
-  Avatar, Card, CardContent, Grid, Divider,
+  Avatar, Card, CardContent, Grid, Divider, Tooltip,
   IconButton,
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -20,6 +20,9 @@ import BusinessIcon from '@mui/icons-material/Business';
 import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import LayersIcon from '@mui/icons-material/Layers';
 import LanguageIcon from '@mui/icons-material/Language';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { 
   faFilePdf, faImage, faCloudUploadAlt, faCheckCircle, 
@@ -40,6 +43,7 @@ import {
 // NEW: tidy sectioned layout + autofill colour fix
 import FormSection, { span, autofillFix } from '../../shared/FormLayout';
 import SECTION_OPTIONS from '../../shared/sectionOptions';
+import { addSection, fetchSections, removeSection } from '../../services/sectionService';
 
 const EMPTY_FORM = { 
   title: '', author: '', genre: '', category: 'book', published_date: '', description: '',
@@ -108,6 +112,10 @@ const PdfUploads = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [recentUploads, setRecentUploads] = useState([]); 
+  const [sectionOptions, setSectionOptions] = useState(SECTION_OPTIONS);
+  const [sectionsDialogOpen, setSectionsDialogOpen] = useState(false);
+  const [addSectionConfirmOpen, setAddSectionConfirmOpen] = useState(false);
+  const [newSection, setNewSection] = useState('');
   
   const [formData, setFormData] = useState(() => {
     const saved = localStorage.getItem('pdf_upload_form');
@@ -116,7 +124,7 @@ const PdfUploads = () => {
         // Merge with EMPTY_FORM so older saved drafts (from before the new
         // fields existed) don't come back missing keys.
         return { ...EMPTY_FORM, ...JSON.parse(saved) }; 
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
     }
     return EMPTY_FORM;
   });
@@ -241,6 +249,59 @@ const PdfUploads = () => {
 
   const showStatus = (type, message) => setStatus({ open: true, type, message });
 
+  useEffect(() => {
+    const loadSections = async () => {
+      try {
+        const sections = await fetchSections();
+        setSectionOptions(sections);
+        setFormData((current) => (
+          current.section && !sections.includes(current.section)
+            ? { ...current, section: '' }
+            : current
+        ));
+      } catch (error) {
+        console.error('Error fetching library sections:', error);
+        showStatus('error', `Could not load sections: ${error.message}`);
+      }
+    };
+
+    loadSections();
+    const channel = supabase
+      .channel('library-sections-pdf-uploads')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'library_sections' }, loadSections)
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  const handleAddSection = async () => {
+    const sectionName = newSection.trim();
+    if (!sectionName) return;
+
+    try {
+      await addSection(sectionName);
+      setNewSection('');
+      setSectionOptions(await fetchSections());
+      setAddSectionConfirmOpen(false);
+      showStatus('success', 'Section added to the dropdown choices.');
+    } catch (error) {
+      console.error('Error adding library section:', error);
+      showStatus('error', `Could not add section: ${error.message}`);
+    }
+  };
+
+  const handleRemoveSection = async (section) => {
+    try {
+      await removeSection(section);
+      setSectionOptions(await fetchSections());
+      setFormData((current) => current.section === section ? { ...current, section: '' } : current);
+      showStatus('success', 'Section removed from the dropdown choices.');
+    } catch (error) {
+      console.error('Error removing library section:', error);
+      showStatus('error', `Could not remove section: ${error.message}`);
+    }
+  };
+
   const resetForm = () => {
     setSelectedFile(null); 
     setSelectedImage(null);
@@ -315,7 +376,7 @@ const PdfUploads = () => {
         const blob = await res.blob();
         const [storedHash, newHash] = await Promise.all([hashBlob(blob), hashBlob(selectedFile)]);
         return storedHash === newHash;
-      } catch (e) {
+      } catch {
         return true;
       }
     } catch (e) {
@@ -566,10 +627,17 @@ const PdfUploads = () => {
                   <MenuItem value="book">Book</MenuItem>
                 </TextField>
 
-                <TextField select fullWidth label="Section" name="section" value={formData.section} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }}>
-                  <MenuItem value=""><em>None</em></MenuItem>
-                  {SECTION_OPTIONS.map((opt) => (<MenuItem key={opt} value={opt}>{opt}</MenuItem>))}
-                </TextField>
+                <Box sx={{ gridColumn: span(3), display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <TextField select fullWidth label="Section" name="section" value={formData.section} onChange={handleInputChange} sx={inputStyle}>
+                    <MenuItem value=""><em>None</em></MenuItem>
+                    {sectionOptions.map((opt) => (<MenuItem key={opt} value={opt}>{opt}</MenuItem>))}
+                  </TextField>
+                  <Tooltip title="Manage section choices">
+                    <IconButton aria-label="Manage section choices" onClick={() => setSectionsDialogOpen(true)}>
+                      <SettingsIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
                 <TextField fullWidth label="Program / Course" name="program_course" value={formData.program_course} onChange={handleInputChange} sx={{ ...inputStyle, gridColumn: span(3) }} placeholder="e.g., BS Computer Science" />
               </FormSection>
 
@@ -1020,6 +1088,87 @@ const PdfUploads = () => {
           {status.message}
         </Alert>
       </Snackbar>
+
+      <Dialog open={sectionsDialogOpen} onClose={() => setSectionsDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800 }}>Manage Section Choices</DialogTitle>
+        <DialogContent dividers>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              label="New section"
+              value={newSection}
+              onChange={(event) => setNewSection(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  if (newSection.trim()) setAddSectionConfirmOpen(true);
+                }
+              }}
+            />
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setAddSectionConfirmOpen(true)}
+              disabled={!newSection.trim()}
+            >
+              Add
+            </Button>
+          </Stack>
+          <Stack spacing={0.5}>
+            {sectionOptions.map((section) => (
+              <Stack key={section} direction="row" alignItems="center" justifyContent="space-between">
+                <Typography>{section}</Typography>
+                <IconButton
+                  aria-label={`Remove ${section}`}
+                  color="error"
+                  onClick={() => handleRemoveSection(section)}
+                  size="small"
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </Stack>
+            ))}
+            {sectionOptions.length === 0 && (
+              <Typography color="text.secondary">No section choices have been added.</Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSectionsDialogOpen(false)}>Done</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={addSectionConfirmOpen}
+        onClose={() => setAddSectionConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Add this section?</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            Do you want to add "{newSection.trim()}" to the section choices? It will be available in the upload and request forms.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setAddSectionConfirmOpen(false)} color="inherit">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAddSection}
+            variant="contained"
+            sx={{
+              bgcolor: '#213C51',
+              color: '#ffffff',
+              fontWeight: 700,
+              '&:hover': { bgcolor: '#182d3e' },
+            }}
+          >
+            Confirm Add
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* DUPLICATE DIALOG — same layout as the "Document Info" dialog */}
 <Dialog 

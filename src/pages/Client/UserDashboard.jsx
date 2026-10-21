@@ -5,8 +5,6 @@ import {
   CircularProgress, useTheme, Stack, Divider, Button, Tooltip
 } from '@mui/material';
 import { PieChart } from '@mui/x-charts/PieChart';
-import DownloadIcon from '@mui/icons-material/Download';
-import PublishIcon from '@mui/icons-material/Publish';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
@@ -74,8 +72,6 @@ const UserDashboard = () => {
   const [userId, setUserId] = useState(null);
   const [fullName, setFullName] = useState('');
   const [stats, setStats] = useState({
-    totalDownloads: 0,
-    totalRequests: 0,
     recentPendingRequests: [],
   });
 
@@ -221,8 +217,6 @@ const UserDashboard = () => {
       try {
         const [
           profileRes,
-          downloadsCountRes,
-          requestsCountRes,
           recentPendingRes,
           userDownloadRecordsRes,
         ] = await Promise.all([
@@ -231,16 +225,6 @@ const UserDashboard = () => {
             .select('full_name')
             .eq('id', user.id)
             .single(),
-
-          supabase
-            .from('downloads')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id),
-
-          supabase
-            .from('upload_requests')
-            .select('*', { count: 'exact', head: true })
-            .eq('client_id', user.id),
 
           // Pending requests — includes the reason and admin remarks
           supabase
@@ -261,8 +245,6 @@ const UserDashboard = () => {
 
         setFullName(profileRes.data?.full_name || '');
         setStats({
-          totalDownloads: downloadsCountRes.count || 0,
-          totalRequests: requestsCountRes.count || 0,
           recentPendingRequests: recentPendingRes.data || [],
         });
         setUserDownloadRecords(userDownloadRecordsRes.data || []);
@@ -362,33 +344,6 @@ const UserDashboard = () => {
       </Stack>
       <Divider sx={{ mb: 2 }} />
     </>
-  );
-
-  // A single ring in the "Your Goals" card. The ring is a full, solid circle
-  // (there is no target to measure progress against) — it's a stat badge,
-  // not a percentage claim, so the value shown is always the real count.
-  const GoalRing = ({ value, label, color, icon }) => (
-    <Stack alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
-      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-        <CircularProgress
-          variant="determinate"
-          value={100}
-          size={92}
-          thickness={4}
-          sx={{ color, '& .MuiCircularProgress-circle': { strokeLinecap: 'round' } }}
-        />
-        <Box
-          sx={{
-            position: 'absolute', top: 0, left: 0, bottom: 0, right: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          {icon}
-          <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.1 }}>{value}</Typography>
-        </Box>
-      </Box>
-      <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'center' }}>{label}</Typography>
-    </Stack>
   );
 
   // ── Pending request row pieces ─────────────────────────────────────────
@@ -504,24 +459,21 @@ const UserDashboard = () => {
           {/* ── LEFT COLUMN ────────────────────────────────────────────── */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 3 }, minWidth: 0 }}>
 
-            {/* Your Goals */}
+            {/* Library shortcut */}
             <Card sx={cardSx}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                {sectionHeader('Your Goals')}
-                <Stack direction="row" spacing={2} sx={{ py: 1 }}>
-                  <GoalRing
-                    value={stats.totalDownloads}
-                    label="Total Downloads"
-                    color="#3b82f6"
-                    icon={<DownloadIcon sx={{ fontSize: 18, color: '#3b82f6' }} />}
-                  />
-                  <GoalRing
-                    value={stats.totalRequests}
-                    label="Total Material Requests"
-                    color="#f59e0b"
-                    icon={<PublishIcon sx={{ fontSize: 18, color: '#f59e0b' }} />}
-                  />
-                </Stack>
+                {sectionHeader('Explore the Library')}
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Browse books, research, and other materials available in the collection.
+                </Typography>
+                <Button
+                  variant="contained"
+                  endIcon={<ArrowForwardIcon />}
+                  onClick={() => navigate('/browse')}
+                  sx={{ textTransform: 'none', fontWeight: 700 }}
+                >
+                  Browse materials
+                </Button>
               </CardContent>
             </Card>
 

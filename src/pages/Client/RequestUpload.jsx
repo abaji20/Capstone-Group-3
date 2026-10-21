@@ -29,6 +29,7 @@ import {
 // NEW: tidy sectioned layout + autofill colour fix
 import FormSection, { span } from '../../shared/FormLayout';
 import SECTION_OPTIONS from '../../shared/sectionOptions';
+import { fetchSections } from '../../services/sectionService';
 
 const EMPTY_FORM = { 
   title: '', author: '', description: '', genre: '', 
@@ -263,6 +264,7 @@ const RequestUpload = () => {
   const [draftRestored, setDraftRestored] = useState(false);
   const draftUserId = useRef(null);
   const [status, setStatus] = useState({ open: false, type: 'success', message: '' });
+  const [sectionOptions, setSectionOptions] = useState(SECTION_OPTIONS);
   // source: 'library' (already a live PDF) or 'request' (already a pending request)
   // type:   which duplicate rule matched (see getDuplicateMessage)
   const [confirmData, setConfirmData] = useState({ open: false, record: null, source: 'library', type: null });
@@ -276,6 +278,31 @@ const RequestUpload = () => {
   const [submitConfirmDialog, setSubmitConfirmDialog] = useState(false);
 
   const [formData, setFormData] = useState(EMPTY_FORM);
+
+  useEffect(() => {
+    const loadSections = async () => {
+      try {
+        const sections = await fetchSections();
+        setSectionOptions(sections);
+        setFormData((current) => (
+          current.section && !sections.includes(current.section)
+            ? { ...current, section: '' }
+            : current
+        ));
+      } catch (error) {
+        console.error('Error fetching library sections:', error);
+        setStatus({ open: true, type: 'error', message: `Could not load sections: ${error.message}` });
+      }
+    };
+
+    loadSections();
+    const channel = supabase
+      .channel('library-sections-request-upload')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'library_sections' }, loadSections)
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
 
   // --- FETCH USER REQUESTS ---
   const fetchRequests = async () => {
@@ -1068,7 +1095,7 @@ const RequestUpload = () => {
 
                   <TextField select fullWidth label="Section" name="section" value={formData.section} onChange={handleInputChange} sx={{ gridColumn: span(3) }}>
                     <MenuItem value=""><em>None</em></MenuItem>
-                    {SECTION_OPTIONS.map((opt) => (<MenuItem key={opt} value={opt}>{opt}</MenuItem>))}
+                    {sectionOptions.map((opt) => (<MenuItem key={opt} value={opt}>{opt}</MenuItem>))}
                   </TextField>
                   <TextField fullWidth label="Program / Course" name="program_course" value={formData.program_course} onChange={handleInputChange} placeholder="e.g., BS Computer Science" sx={{ gridColumn: span(3) }} />
                 </FormSection>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog, Box, TextField, InputAdornment, IconButton, Typography,
   Chip, Stack, MenuItem, Divider, CircularProgress, useTheme, useMediaQuery
@@ -9,6 +9,8 @@ import TuneIcon from '@mui/icons-material/Tune';
 import PdfCard from './PdfCard';
 import SECTION_OPTIONS from './sectionOptions';
 import { fetchPdfs } from '../services/pdfService';
+import { fetchSections } from '../services/sectionService';
+import { supabase } from '../supabaseClient';
 
 const CATEGORY_TABS = [
   { label: 'All', value: 'All' },
@@ -107,7 +109,11 @@ const TopbarSearch = ({ open, onClose }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [documents, setDocuments] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [documentsLoaded, setDocumentsLoaded] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [sectionChoices, setSectionChoices] = useState(SECTION_OPTIONS);
+  const searchTimer = useRef(null);
+  const loading = open && !documentsLoaded;
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
@@ -121,13 +127,42 @@ const TopbarSearch = ({ open, onClose }) => {
 
   // Lazy-load once on first open; cached for the rest of the session.
   useEffect(() => {
-    if (open && documents.length === 0 && !loading) {
-      setLoading(true);
-      fetchPdfs()
-        .then((data) => setDocuments(data || []))
-        .finally(() => setLoading(false));
-    }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!open || documentsLoaded) return undefined;
+
+    let active = true;
+    fetchPdfs()
+      .then((data) => {
+        if (active) setDocuments(data || []);
+      })
+      .catch((error) => console.error('Error loading library search data:', error))
+      .finally(() => {
+        if (active) setDocumentsLoaded(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [open, documentsLoaded]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const loadSections = async () => {
+      try {
+        setSectionChoices(await fetchSections());
+      } catch (error) {
+        console.error('Error fetching library sections for search:', error);
+      }
+    };
+
+    loadSections();
+    const channel = supabase
+      .channel('library-sections-topbar-search')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'library_sections' }, loadSections)
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, [open]);
 
   // Genre: real data only (comma-separated field).
   const genres = useMemo(() => {
@@ -139,8 +174,8 @@ const TopbarSearch = ({ open, onClose }) => {
 
   // Section & Program: defaults + real data.
   const sectionsList = useMemo(
-    () => buildMergedOptionList(documents, 'section', SECTION_OPTIONS),
-    [documents]
+    () => buildMergedOptionList(documents, 'section', sectionChoices),
+    [documents, sectionChoices]
   );
   const programsList = useMemo(
     () => buildMergedOptionList(documents, 'program_course', DEFAULT_PROGRAMS),
@@ -157,6 +192,19 @@ const TopbarSearch = ({ open, onClose }) => {
     category !== 'All' || selectedGenre !== 'All' || selectedSection !== 'All' ||
     selectedProgram !== 'All' || selectedYear !== 'All' || selectedMonth !== 'All' || selectedDay !== 'All';
   const hasQuery = query.trim().length > 0;
+
+  const triggerSearchLoading = () => {
+    setSearchLoading(true);
+    window.clearTimeout(searchTimer.current);
+    searchTimer.current = window.setTimeout(() => setSearchLoading(false), 500);
+  };
+
+  const handleFilterChange = (setter) => (event) => {
+    triggerSearchLoading();
+    setter(event.target.value);
+  };
+
+  useEffect(() => () => window.clearTimeout(searchTimer.current), []);
 
   const results = useMemo(() => {
     if (!hasQuery && !hasActiveFilter) return [];
@@ -238,7 +286,10 @@ const TopbarSearch = ({ open, onClose }) => {
           autoFocus
           placeholder="Search titles, authors, ISBN..."
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(event) => {
+            triggerSearchLoading();
+            setQuery(event.target.value);
+          }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -274,24 +325,24 @@ const TopbarSearch = ({ open, onClose }) => {
               },
             }}
           >
-            <TextField select fullWidth size="small" label="Genre" value={selectedGenre} onChange={(e) => setSelectedGenre(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
+            <TextField select fullWidth size="small" label="Genre" value={selectedGenre} onChange={handleFilterChange(setSelectedGenre)} sx={filterSelectSx} {...selectMenuProps}>
               {genres.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
             </TextField>
 
-            <TextField select fullWidth size="small" label="Section" value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
+            <TextField select fullWidth size="small" label="Section" value={selectedSection} onChange={handleFilterChange(setSelectedSection)} sx={filterSelectSx} {...selectMenuProps}>
               {sectionsList.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
             </TextField>
 
-            <TextField select fullWidth size="small" label="Program" value={selectedProgram} onChange={(e) => setSelectedProgram(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
+            <TextField select fullWidth size="small" label="Program" value={selectedProgram} onChange={handleFilterChange(setSelectedProgram)} sx={filterSelectSx} {...selectMenuProps}>
               {programsList.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
             </TextField>
 
-            <TextField select fullWidth size="small" label="Year" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
+            <TextField select fullWidth size="small" label="Year" value={selectedYear} onChange={handleFilterChange(setSelectedYear)} sx={filterSelectSx} {...selectMenuProps}>
               {yearsList.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
             </TextField>
 
             {/* Month: always January - December */}
-            <TextField select fullWidth size="small" label="Month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
+            <TextField select fullWidth size="small" label="Month" value={selectedMonth} onChange={handleFilterChange(setSelectedMonth)} sx={filterSelectSx} {...selectMenuProps}>
               <MenuItem value="All">All</MenuItem>
               {MONTH_OPTIONS.map((m) => (
                 <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
@@ -299,7 +350,7 @@ const TopbarSearch = ({ open, onClose }) => {
             </TextField>
 
             {/* Day: always 1 - 31 */}
-            <TextField select fullWidth size="small" label="Day" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} sx={filterSelectSx} {...selectMenuProps}>
+            <TextField select fullWidth size="small" label="Day" value={selectedDay} onChange={handleFilterChange(setSelectedDay)} sx={filterSelectSx} {...selectMenuProps}>
               <MenuItem value="All">All</MenuItem>
               {DAY_OPTIONS.map((d) => (
                 <MenuItem key={d} value={d}>{d}</MenuItem>
@@ -315,7 +366,10 @@ const TopbarSearch = ({ open, onClose }) => {
               key={tab.value}
               label={tab.label}
               size="small"
-              onClick={() => setCategory(tab.value)}
+              onClick={() => {
+                triggerSearchLoading();
+                setCategory(tab.value);
+              }}
               color={category === tab.value ? 'primary' : 'default'}
               variant={category === tab.value ? 'filled' : 'outlined'}
               sx={{ fontWeight: 700 }}
@@ -328,7 +382,7 @@ const TopbarSearch = ({ open, onClose }) => {
 
       {/* Results — the only part that scrolls */}
       <Box sx={{ p: { xs: 2, sm: 2.5 }, overflowY: 'auto', flex: 1, minHeight: 0 }}>
-        {loading ? (
+        {loading || searchLoading ? (
           <Stack alignItems="center" sx={{ py: 6 }}>
             <CircularProgress size={28} />
           </Stack>

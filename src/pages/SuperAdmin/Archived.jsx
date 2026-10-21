@@ -8,7 +8,11 @@ import {
   Checkbox, FormControlLabel
 } from '@mui/material';
 import { supabase } from '../../supabaseClient';
-import { setUploadRequestsDeleted, setUploadRequestsRestored } from '../../services/pdfService';
+import {
+  archiveDeletedPdfs,
+  setUploadRequestsDeleted,
+  setUploadRequestsRestored,
+} from '../../services/pdfService';
 import glclogo from '../../assets/glclogo.png';
 // Shared date formatter (year / month / day -> "March 15, 2020"), same one
 // used by the Admin Dashboard's report and Document Info modal.
@@ -261,6 +265,7 @@ const Archived = () => {
   const handlePurge = async (file) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      await archiveDeletedPdfs([file], user?.id);
       await supabase.from('audit_logs').delete().eq('pdf_id', String(file.id));
       await supabase.from('delete_requests').delete().eq('pdf_id', file.id);
       
@@ -333,6 +338,7 @@ const Archived = () => {
       const filePaths = filesToPurge.map((f) => f.file_url).filter(Boolean);
       const count = filesToPurge.length;
 
+      await archiveDeletedPdfs(filesToPurge, user?.id);
       await supabase.from('audit_logs').delete().in('pdf_id', ids.map(String));
       await supabase.from('delete_requests').delete().in('pdf_id', ids);
       
