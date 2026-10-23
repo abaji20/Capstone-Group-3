@@ -30,6 +30,7 @@ import {
 import FormSection, { span } from '../../shared/FormLayout';
 import SECTION_OPTIONS from '../../shared/sectionOptions';
 import { fetchSections } from '../../services/sectionService';
+import PdfOnlyDialog from '../../shared/PdfOnlyDialog';
 
 const EMPTY_FORM = { 
   title: '', author: '', description: '', genre: '', 
@@ -264,6 +265,7 @@ const RequestUpload = () => {
   const [draftRestored, setDraftRestored] = useState(false);
   const draftUserId = useRef(null);
   const [status, setStatus] = useState({ open: false, type: 'success', message: '' });
+  const [pdfOnlyDialogOpen, setPdfOnlyDialogOpen] = useState(false);
   const [sectionOptions, setSectionOptions] = useState(SECTION_OPTIONS);
   // source: 'library' (already a live PDF) or 'request' (already a pending request)
   // type:   which duplicate rule matched (see getDuplicateMessage)
@@ -516,7 +518,7 @@ const RequestUpload = () => {
     const file = e.target.files[0];
     if (file) {
       if (file.type !== 'application/pdf') {
-        showStatus('error', 'PDF files only!');
+        setPdfOnlyDialogOpen(true);
         setPdfFile(null);
         e.target.value = null;
         return;
@@ -659,7 +661,7 @@ const RequestUpload = () => {
     
     if (!isEditing && !pdfFile) { showStatus('error', 'PDF required.'); return; }
     if (pdfFile && pdfFile.type !== 'application/pdf') { 
-        showStatus('error', 'Only PDF files are allowed!'); 
+        setPdfOnlyDialogOpen(true);
         return; 
     }
 
@@ -1408,6 +1410,7 @@ const RequestUpload = () => {
         >
           <Alert severity={status.type} variant="filled" sx={{ fontWeight: 700 }}>{status.message}</Alert>
         </Snackbar>
+        <PdfOnlyDialog open={pdfOnlyDialogOpen} onClose={() => setPdfOnlyDialogOpen(false)} />
       </Container>
     </Box>
   );

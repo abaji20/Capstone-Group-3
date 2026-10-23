@@ -44,6 +44,7 @@ import {
 import FormSection, { span, autofillFix } from '../../shared/FormLayout';
 import SECTION_OPTIONS from '../../shared/sectionOptions';
 import { addSection, fetchSections, removeSection } from '../../services/sectionService';
+import PdfOnlyDialog from '../../shared/PdfOnlyDialog';
 
 const EMPTY_FORM = { 
   title: '', author: '', genre: '', category: 'book', published_date: '', description: '',
@@ -115,6 +116,9 @@ const PdfUploads = () => {
   const [sectionOptions, setSectionOptions] = useState(SECTION_OPTIONS);
   const [sectionsDialogOpen, setSectionsDialogOpen] = useState(false);
   const [addSectionConfirmOpen, setAddSectionConfirmOpen] = useState(false);
+  const [sectionToRemove, setSectionToRemove] = useState(null);
+  const [removingSection, setRemovingSection] = useState(false);
+  const [pdfOnlyDialogOpen, setPdfOnlyDialogOpen] = useState(false);
   const [newSection, setNewSection] = useState('');
   
   const [formData, setFormData] = useState(() => {
@@ -296,9 +300,11 @@ const PdfUploads = () => {
       setSectionOptions(await fetchSections());
       setFormData((current) => current.section === section ? { ...current, section: '' } : current);
       showStatus('success', 'Section removed from the dropdown choices.');
+      return true;
     } catch (error) {
       console.error('Error removing library section:', error);
       showStatus('error', `Could not remove section: ${error.message}`);
+      return false;
     }
   };
 
@@ -558,7 +564,7 @@ const PdfUploads = () => {
                     onChange={(e) => {
                       const file = e.target.files[0];
                       if (file && file.type !== 'application/pdf') {
-                        showStatus('error', 'Only PDF files can be uploaded!');
+                        setPdfOnlyDialogOpen(true);
                         e.target.value = null; 
                         setSelectedFile(null);
                         return;
@@ -1089,6 +1095,8 @@ const PdfUploads = () => {
         </Alert>
       </Snackbar>
 
+      <PdfOnlyDialog open={pdfOnlyDialogOpen} onClose={() => setPdfOnlyDialogOpen(false)} />
+
       <Dialog open={sectionsDialogOpen} onClose={() => setSectionsDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 800 }}>Manage Section Choices</DialogTitle>
         <DialogContent dividers>
@@ -1122,8 +1130,9 @@ const PdfUploads = () => {
                 <IconButton
                   aria-label={`Remove ${section}`}
                   color="error"
-                  onClick={() => handleRemoveSection(section)}
+                  onClick={() => setSectionToRemove(section)}
                   size="small"
+                  disabled={removingSection}
                 >
                   <DeleteOutlineIcon fontSize="small" />
                 </IconButton>
@@ -1136,6 +1145,43 @@ const PdfUploads = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSectionsDialogOpen(false)}>Done</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(sectionToRemove)}
+        onClose={() => !removingSection && setSectionToRemove(null)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 0.5 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Delete this section?</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            Remove "{sectionToRemove}" from the section choices? This will remove it from the upload and request forms.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setSectionToRemove(null)} color="inherit" disabled={removingSection}>
+            Cancel
+          </Button>
+          <Button
+            onClick={async () => {
+              if (!sectionToRemove) return;
+              setRemovingSection(true);
+              try {
+                const removed = await handleRemoveSection(sectionToRemove);
+                if (removed) setSectionToRemove(null);
+              } finally {
+                setRemovingSection(false);
+              }
+            }}
+            variant="contained"
+            color="error"
+            disabled={removingSection}
+          >
+            {removingSection ? 'Deleting...' : 'Delete'}
+          </Button>
         </DialogActions>
       </Dialog>
 

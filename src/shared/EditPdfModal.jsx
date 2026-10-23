@@ -8,6 +8,7 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { supabase } from '../supabaseClient'; 
 // Same helpers PdfUploads.jsx uses to keep month/day valid and in sync with year
 import { MONTH_NAMES, getDaysInMonth, isFutureDate, normalizePubDate } from '../utils/formatPublishedDate';
+import PdfOnlyDialog from './PdfOnlyDialog';
 // NEW: same sectioned, responsive grid layout used on the Upload form
 // (PdfUploads.jsx) instead of the old ad-hoc Stack rows.
 import FormSection, { span, autofillFix } from '../shared/FormLayout';
@@ -26,6 +27,7 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const [newPdfFile, setNewPdfFile] = useState(null);
   const [error, setError] = useState(''); // Error messages
+  const [pdfOnlyDialogOpen, setPdfOnlyDialogOpen] = useState(false);
 
   const categories = [
     { value: 'book', label: 'Book' },
@@ -39,6 +41,7 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
       setNewImageFile(null);
       setNewPdfFile(null);
       setError(''); // Clear error on open
+      setPdfOnlyDialogOpen(false);
     }
   }, [pdf]);
 
@@ -102,7 +105,7 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
     if (file) {
       // PDF Type validation - using internal error state instead of alert
       if (file.type !== 'application/pdf') {
-        setError("Only PDF files are allowed!");
+        setPdfOnlyDialogOpen(true);
         e.target.value = null; 
         return;
       }
@@ -369,6 +372,7 @@ const EditPdfModal = ({ open, onClose, pdf, onUpdate }) => {
           {loading ? "Saving..." : "Save Changes"}
         </Button>
       </DialogActions>
+      <PdfOnlyDialog open={pdfOnlyDialogOpen} onClose={() => setPdfOnlyDialogOpen(false)} />
     </Dialog>
   );
 };
